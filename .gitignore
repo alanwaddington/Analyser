@@ -24,3 +24,6 @@ vite.config.ts.timestamp-*
 
 # Superpowers tool artefacts
 .superpowers/
+
+# Claude Code local settings (machine-specific permissions, not project config)
+.claude/settings.local.json
