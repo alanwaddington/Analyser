@@ -15,23 +15,21 @@
 		warning = '';
 		error = '';
 
-		const fitFiles = Array.from(files).filter(f => f.name.endsWith('.fit'));
+		const fitFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.fit'));
 		if (fitFiles.length === 0) return;
 
-		const current = get(activities);
-		const slots = MAX_FILES - current.length;
-		if (slots <= 0) {
+		if (get(activities).length >= MAX_FILES) {
 			warning = `Maximum ${MAX_FILES} files — remove one before adding another`;
 			return;
 		}
 
-		const toLoad = fitFiles.slice(0, slots);
-		if (fitFiles.length > slots) {
-			warning = `Maximum ${MAX_FILES} files — ${fitFiles.length - slots} file(s) not loaded`;
-		}
-
 		const errors: string[] = [];
-		for (const file of toLoad) {
+		let skipped = 0;
+		for (const file of fitFiles) {
+			if (get(activities).length >= MAX_FILES) {
+				skipped++;
+				continue;
+			}
 			try {
 				const buffer = await file.arrayBuffer();
 				const activity = await parseFitFile(buffer, file.name);
@@ -39,6 +37,9 @@
 			} catch (e) {
 				errors.push(`${file.name}: ${e instanceof Error ? e.message : 'parse failed'}`);
 			}
+		}
+		if (skipped > 0) {
+			warning = `Maximum ${MAX_FILES} files — ${skipped} file(s) not loaded`;
 		}
 		if (errors.length > 0) {
 			error = errors.join('; ');
