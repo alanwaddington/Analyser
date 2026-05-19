@@ -1,3 +1,11 @@
+## Project Configuration
+
+- **Language**: TypeScript
+- **Package Manager**: npm
+- **Add-ons**: tailwindcss, sveltekit-adapter
+
+---
+
 # Analyser
 
 A FIT file analysis application with two primary capabilities:
@@ -89,25 +97,56 @@ Graphs are a core output of the application, not an optional extra. Both use cas
 - Allow users to label known ANT+ device IDs (e.g. "Assioma Duo", "Polar H10") so they are recognised by name across future uploads
 - Persist these labels locally (no account required as a baseline)
 
-## Technical Notes
+## Tech Stack
+
+| Layer | Choice | Reason |
+|-------|--------|--------|
+| Framework | **SvelteKit** | Less boilerplate than React, reactive by default, excellent for data-heavy UIs |
+| Language | **TypeScript** | Type safety across the full codebase |
+| Styling | **TailwindCSS** | Utility-first, pairs cleanly with Svelte components |
+| FIT parsing | **fit-file-parser** | Runs entirely in the browser — no backend needed for core features |
+| Charting | **ECharts** | Handles large datasets well; built-in zoom, pan, and multi-chart sync |
+| Maps | **Leaflet + OpenStreetMap** | Free GPS trace rendering, no API key required |
+| Deployment | **Vercel** (`@sveltejs/adapter-vercel`) | Auto-deploys from GitHub, free tier, no custom domain required |
+| Persistence | **None (v1)** | Session-only; files loaded fresh each time |
+
+### Key Technical Notes
 
 - FIT file spec: Flexible and Interoperable Data Transfer (FIT) Protocol, maintained by Garmin/ANT+
-- Recommended parsing libraries (evaluate at implementation time):
-  - Python: `fitparse` or `garmin-fit-sdk`
-  - TypeScript/JS: `fit-file-parser` or `@garmin/fitsdk`
-- Distance-aligned comparison requires interpolation (linear) of record data to a common distance axis
+- `fit-file-parser` runs in the browser via a Web Worker to avoid blocking the UI thread on large files
 - Multi-device streams within a single file are identified via `device_index` on record messages
-- Mean/max curve computation is O(n²) naively; use a sliding-window or sparse approach for large files
+- Distance-aligned comparison requires linear interpolation of record data to a common distance axis
+- Mean/max curve computation is O(n²) naively — use a sparse/sliding-window approach for large files
+- ECharts `connect()` API links multiple chart instances for synchronised crosshair and zoom
 
-## Architecture Considerations (to be designed)
+## Architecture
 
-- File ingestion layer: parse raw FIT → normalised data model
-- Data model: activity, laps, records, devices (see domain above)
-- Alignment engine: GPS timestamp sync + manual offset + distance interpolation
-- Comparison engine: align two or more activities on a shared axis, compute deltas
-- Analytics engine: smoothing, mean/max curves, summary statistics
-- Visualisation layer: interactive graphs meeting the requirements above (candidate libs: Plotly, ECharts, Recharts, D3)
-- UI: TBD — web app, desktop app, or CLI
+```
+src/
+├── lib/
+│   ├── fit/          # FIT parsing and normalisation (fit-file-parser wrapper)
+│   ├── align/        # Activity alignment (GPS timestamp sync, distance interpolation)
+│   ├── analytics/    # Smoothing, mean/max curves, summary statistics
+│   ├── compare/      # Comparison engine (delta computation, segment analysis)
+│   └── types.ts      # Shared domain types (Activity, Record, Device, Lap, etc.)
+├── components/
+│   ├── charts/       # ECharts wrappers (TimeSeries, DeltaPlot, MeanMax, SegmentBar)
+│   ├── map/          # Leaflet map component
+│   └── ui/           # Layout, file loader, channel selector, controls
+└── routes/
+    ├── /             # Landing / file upload
+    ├── /compare      # Device data comparison view
+    └── /event        # Event/course comparison view
+```
+
+### Data Flow
+
+1. User drops `.fit` files onto the page
+2. `fit/` layer parses each file in a Web Worker → normalised `Activity` objects
+3. `align/` layer synchronises activities to a shared axis
+4. `analytics/` layer computes smoothed series, mean/max curves, summaries
+5. `compare/` layer computes deltas between activities
+6. Components render ECharts instances (linked via `connect()`) and Leaflet map
 
 ## Out of Scope (for now)
 
