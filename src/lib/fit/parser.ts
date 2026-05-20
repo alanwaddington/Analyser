@@ -3,7 +3,7 @@ import type { Activity, Device, Lap, Record } from '../types';
 
 export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Activity> {
 	return new Promise((resolve, reject) => {
-		const parser = new FitParser({ force: true, speedUnit: 'm/s', lengthUnit: 'm', temperatureUnit: 'celsius', elapsedRecordField: true });
+		const parser = new FitParser({ force: true, speedUnit: 'km/h', lengthUnit: 'm', temperatureUnit: 'celsius', elapsedRecordField: true });
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		parser.parse(buffer, (error: any, data: any) => {
@@ -77,6 +77,7 @@ function normalise(data: FitData, filename: string): Activity {
 		elapsedSeconds: r.elapsed_time ?? 0,
 		distance: r.distance ?? 0,
 		speed: r.speed,
+			pace: r.speed && r.speed > 0 ? 60 / r.speed : undefined,
 		heartRate: r.heart_rate,
 		power: r.power,
 		cadence: r.cadence,
