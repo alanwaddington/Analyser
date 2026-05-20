@@ -72,7 +72,8 @@
 		const altData = showAltBackdrop ? buildAltitudeData(seriesInputs[0].activity) : [];
 		const hasAlt = altData.some(([, v]) => v != null);
 
-		const altFill = isDark ? 'rgba(148,163,184,0.12)' : 'rgba(100,116,139,0.1)';
+		const altFill = isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.2)';
+		const altLine = isDark ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.35)';
 
 		return {
 			grid: { top: 20, right: 16, bottom: 30, left: 55 },
@@ -145,7 +146,7 @@
 					yAxisIndex: 1,
 					data: altData,
 					areaStyle: { color: altFill, origin: 'start' as const },
-					lineStyle: { width: 0, color: 'transparent' },
+					lineStyle: { width: 0.5, color: altLine },
 					symbol: 'none',
 					showSymbol: false,
 					silent: true,
