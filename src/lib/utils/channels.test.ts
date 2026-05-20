@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { deriveAvailableChannels } from './channels.ts';
-import type { Activity, Record } from '$lib/types';
+import type { Activity, ActivityRecord } from '$lib/types';
 
-function makeRecord(overrides: Partial<Record> = {}): Record {
+function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
 	return {
 		timestamp: new Date(),
 		elapsedSeconds: 0,
@@ -11,7 +11,7 @@ function makeRecord(overrides: Partial<Record> = {}): Record {
 	};
 }
 
-function makeActivity(records: Record[]): Activity {
+function makeActivity(records: ActivityRecord[]): Activity {
 	return {
 		id: 'test',
 		filename: 'test.fit',

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { getClipDistance, buildZeroLine, buildDeltaData } from './DeltaChart.utils.ts';
-import type { Activity, Record } from '$lib/types';
+import type { Activity, ActivityRecord } from '$lib/types';
 
-function makeRecord(distance: number, elapsedSeconds: number): Record {
+function makeRecord(distance: number, elapsedSeconds: number): ActivityRecord {
 	return {
 		timestamp: new Date(),
 		elapsedSeconds,
@@ -10,7 +10,7 @@ function makeRecord(distance: number, elapsedSeconds: number): Record {
 	};
 }
 
-function makeActivity(totalDistance: number, records: Record[]): Activity {
+function makeActivity(totalDistance: number, records: ActivityRecord[]): Activity {
 	return {
 		id: 'test',
 		filename: 'test.fit',
@@ -82,7 +82,7 @@ describe('buildZeroLine', () => {
 // ---------------------------------------------------------------------------
 describe('buildDeltaData', () => {
 	function makeEvenActivity(totalDistance: number, secondsPerMetre: number): Activity {
-		const records: Record[] = [];
+		const records: ActivityRecord[] = [];
 		for (let d = 0; d <= totalDistance; d += 10) {
 			records.push(makeRecord(d, d * secondsPerMetre));
 		}

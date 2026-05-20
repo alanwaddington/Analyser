@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { positionAtDistance, positionFromPoints, extractGpsPoints } from './ActivityMap.utils.ts';
 import type { GpsPointWithDistance } from './ActivityMap.utils.ts';
-import type { Activity, Record } from '$lib/types';
+import type { Activity, ActivityRecord } from '$lib/types';
 
-function makeRecord(distance: number, elapsedSeconds: number, lat?: number, lon?: number): Record {
+function makeRecord(distance: number, elapsedSeconds: number, lat?: number, lon?: number): ActivityRecord {
 	return {
 		timestamp: new Date(),
 		elapsedSeconds,
@@ -12,7 +12,7 @@ function makeRecord(distance: number, elapsedSeconds: number, lat?: number, lon?
 	};
 }
 
-function makeActivity(records: Record[]): Activity {
+function makeActivity(records: ActivityRecord[]): Activity {
 	return {
 		id: 'test',
 		filename: 'test.fit',

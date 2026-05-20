@@ -1,6 +1,6 @@
-import type { Activity, Record } from '../types';
+import type { Activity, ActivityRecord } from '../types';
 
-export type ChannelKey = keyof Omit<Record, 'timestamp' | 'distance' | 'elapsedSeconds' | 'position'>;
+export type ChannelKey = keyof Omit<ActivityRecord, 'timestamp' | 'distance' | 'elapsedSeconds' | 'position'>;
 
 export interface DistanceAligned {
 	axis: number[]; // distance in metres, evenly spaced
@@ -33,7 +33,7 @@ export function interpolateToDistanceAxis(
 	return { axis, channels };
 }
 
-function lerp(records: Record[], targetDist: number, key: ChannelKey): number | null {
+function lerp(records: ActivityRecord[], targetDist: number, key: ChannelKey): number | null {
 	let lo = 0;
 	let hi = records.length - 1;
 

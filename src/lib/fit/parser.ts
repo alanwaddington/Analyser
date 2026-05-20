@@ -1,5 +1,5 @@
 import FitParser from 'fit-file-parser';
-import type { Activity, Device, Lap, Record } from '../types';
+import type { Activity, ActivityRecord, Device, Lap } from '../types';
 
 export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Activity> {
 	return new Promise((resolve, reject) => {
@@ -70,7 +70,7 @@ interface FitDeviceInfo {
 
 // ---- normalisation ----
 
-function normaliseRecord(r: FitRecord): Record {
+function normaliseRecord(r: FitRecord): ActivityRecord {
 	const speed = r.enhanced_speed ?? r.speed;
 	return {
 		timestamp: r.timestamp ?? new Date(0),
@@ -98,7 +98,7 @@ function normalise(data: FitData, filename: string): Activity {
 	const session = data.sessions?.[0] ?? {};
 	const rawRecords = data.records ?? [];
 
-	const records: Record[] = rawRecords.map(normaliseRecord);
+	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
 	const devices: Device[] = (data.device_infos ?? []).map((d) => ({
@@ -122,7 +122,7 @@ function normalise(data: FitData, filename: string): Activity {
 	};
 }
 
-function buildLaps(fitLaps: FitLap[], records: Record[]): Lap[] {
+function buildLaps(fitLaps: FitLap[], records: ActivityRecord[]): Lap[] {
 	let cursor = 0;
 	return fitLaps.map((l) => {
 		const startDist = l.start_distance ?? 0;

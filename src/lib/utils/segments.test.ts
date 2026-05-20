@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildSegments } from './segments.ts';
-import type { Activity, Lap, Record } from '$lib/types';
+import type { Activity, Lap, ActivityRecord } from '$lib/types';
 
-function makeRecord(distance: number, elapsedSeconds: number): Record {
+function makeRecord(distance: number, elapsedSeconds: number): ActivityRecord {
 	return { timestamp: new Date(), elapsedSeconds, distance };
 }
 
@@ -10,7 +10,7 @@ function makeLap(startDistance: number, endDistance: number, startIndex: number,
 	return { startDistance, endDistance, elapsedSeconds: 0, startIndex, endIndex };
 }
 
-function makeActivity(records: Record[], laps: Lap[]): Activity {
+function makeActivity(records: ActivityRecord[], laps: Lap[]): Activity {
 	return {
 		id: 'test',
 		filename: 'test.fit',

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildMeanMaxData, formatDuration } from './MeanMaxChart.utils.ts';
-import type { Record } from '$lib/types';
+import type { ActivityRecord } from '$lib/types';
 
-function makeRecord(overrides: Partial<Record> = {}): Record {
+function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
 	return {
 		timestamp: new Date(),
 		elapsedSeconds: 0,
