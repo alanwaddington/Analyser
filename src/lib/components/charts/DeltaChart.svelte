@@ -63,8 +63,8 @@
 			type: 'line' as const,
 			name: '__zero__',
 			data: maxDist > 0 ? buildZeroLine(maxDist, $xAxisMode) : [],
-			lineStyle: { color: '#22c55e', type: 'dashed' as const, width: 1 },
-			itemStyle: { color: '#22c55e' },
+			lineStyle: { color: gc, type: 'dashed' as const, width: 1 },
+			itemStyle: { color: gc },
 			symbol: 'none',
 			showSymbol: false,
 			silent: true,
@@ -97,6 +97,7 @@
 				borderColor: gc,
 				textStyle: { color: tooltipText(), fontSize: 12 },
 				formatter: (params: unknown) => {
+					const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 					const items = params as { seriesName: string; value: [number, number] }[];
 					const visible = items.filter(p => p.seriesName !== '__zero__');
 					if (visible.length === 0) return '';
@@ -105,7 +106,7 @@
 					const lines = visible.map(p => {
 						const delta = p.value[1];
 						const sign = delta >= 0 ? '+' : '';
-						return `<div>${p.seriesName}: <b>${sign}${delta.toFixed(1)}s</b></div>`;
+						return `<div>${esc(p.seriesName)}: <b>${sign}${delta.toFixed(1)}s</b></div>`;
 					});
 					return `<div style="font-size:12px"><div style="margin-bottom:4px">${xLabel}</div>${lines.join('')}</div>`;
 				},
