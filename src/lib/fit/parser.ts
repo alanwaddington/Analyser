@@ -77,7 +77,7 @@ function normalise(data: FitData, filename: string): Activity {
 		elapsedSeconds: r.elapsed_time ?? 0,
 		distance: r.distance ?? 0,
 		speed: r.speed,
-			pace: r.speed && r.speed > 0 ? 60 / r.speed : undefined,
+		pace: r.speed && r.speed > 0 ? 60 / r.speed : undefined,
 		heartRate: r.heart_rate,
 		power: r.power,
 		cadence: r.cadence,
