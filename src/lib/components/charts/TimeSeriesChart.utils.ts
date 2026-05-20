@@ -1,15 +1,15 @@
-import type { Activity, Record, ChannelKey } from '$lib/types';
+import type { Activity, ActivityRecord, ChannelKey } from '$lib/types';
 
 export interface SeriesInput {
 	activity: Activity;
 	colourIndex: number;
 }
 
-export function extractChannel(records: Record[], channel: ChannelKey): (number | null)[] {
+export function extractChannel(records: ActivityRecord[], channel: ChannelKey): (number | null)[] {
 	return records.map(r => (r[channel] as number | undefined) ?? null);
 }
 
-export function buildXValues(records: Record[], mode: 'time' | 'distance'): number[] {
+export function buildXValues(records: ActivityRecord[], mode: 'time' | 'distance'): number[] {
 	if (mode === 'time') return records.map(r => r.elapsedSeconds);
 	return records.map(r => r.distance / 1000);
 }

@@ -3,7 +3,7 @@ export interface GpsPoint {
 	lon: number;
 }
 
-export interface Record {
+export interface ActivityRecord {
 	timestamp: Date;
 	elapsedSeconds: number;
 	distance: number; // metres
@@ -48,7 +48,7 @@ export interface Activity {
 	startTime: Date;
 	totalDistance: number; // metres
 	totalElapsedTime: number; // seconds
-	records: Record[];
+	records: ActivityRecord[];
 	laps: Lap[];
 	devices: Device[];
 }
@@ -82,7 +82,7 @@ export type ChannelKey =
 	| 'groundContactTime'
 	| 'strideLength';
 
-export const CHANNEL_META: { [K in ChannelKey]: { label: string; unit: string } } = {
+export const CHANNEL_META: Record<ChannelKey, { label: string; unit: string }> = {
 	heartRate:           { label: 'Heart Rate',        unit: 'bpm' },
 	power:               { label: 'Power',             unit: 'W'   },
 	powerLeft:           { label: 'Power Left',        unit: 'W'   },

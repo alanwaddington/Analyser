@@ -1,4 +1,4 @@
-import type { Activity, Record } from '$lib/types';
+import type { Activity, ActivityRecord } from '$lib/types';
 import { meanMaxCurve } from '$lib/analytics/meanmax';
 
 export interface MeanMaxSeriesInput {
@@ -6,7 +6,7 @@ export interface MeanMaxSeriesInput {
 	colourIndex: number;
 }
 
-export function buildMeanMaxData(records: Record[]): [number, number][] {
+export function buildMeanMaxData(records: ActivityRecord[]): [number, number][] {
 	const values = records.map(r => r.power ?? null);
 	const curve = meanMaxCurve(values);
 	return curve.map(p => [p.duration, p.mean]);
