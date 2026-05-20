@@ -128,25 +128,36 @@ src/
 │   ├── align/        # Activity alignment (GPS timestamp sync, distance interpolation)
 │   ├── analytics/    # Smoothing, mean/max curves, summary statistics
 │   ├── compare/      # Comparison engine (delta computation, segment analysis)
-│   └── types.ts      # Shared domain types (Activity, Record, Device, Lap, etc.)
-├── components/
-│   ├── charts/       # ECharts wrappers (TimeSeries, DeltaPlot, MeanMax, SegmentBar)
-│   ├── map/          # Leaflet map component
-│   └── ui/           # Layout, file loader, channel selector, controls
+│   ├── components/
+│   │   ├── charts/   # ECharts wrappers (TimeSeries, DeltaPlot, MeanMax, SegmentBar)
+│   │   │             # Each includes .svelte component, .utils.ts (pure functions), .test.ts (unit tests)
+│   │   ├── map/      # Leaflet map component (ActivityMap.svelte, ActivityMap.utils.ts, ActivityMap.test.ts)
+│   │   └── ui/       # Layout, file loader, channel selector, controls
+│   ├── stores/       # Svelte stores (activities, smoothing, xAxisMode, referenceIndex, etc.)
+│   ├── utils/        # Shared pure utility functions
+│   │   ├── channels.ts       # deriveAvailableChannels(activities) → ChannelKey[]
+│   │   ├── lapMarkers.ts     # buildLapMarkers(activity, xAxisMode) → LapMarker[]
+│   │   ├── segments.ts       # buildSegments(activity) → Segment[]
+│   │   └── ...
+│   └── types.ts      # Shared domain types (Activity, Record, Device, Lap, ChannelKey, etc.)
 └── routes/
-    ├── /             # Landing / file upload
-    ├── /compare      # Device data comparison view
-    └── /event        # Event/course comparison view
+    ├── +layout.svelte              # App shell (sidebar + main)
+    ├── +page.svelte                # Landing / drop zone
+    ├── compare/
+    │   └── +page.svelte            # Device data comparison view
+    └── event/
+        └── +page.svelte            # Event/course comparison view
 ```
 
 ### Data Flow
 
 1. User drops `.fit` files onto the page
 2. `fit/` layer parses each file in a Web Worker → normalised `Activity` objects
-3. `align/` layer synchronises activities to a shared axis
-4. `analytics/` layer computes smoothed series, mean/max curves, summaries
-5. `compare/` layer computes deltas between activities
-6. Components render ECharts instances (linked via `connect()`) and Leaflet map
+3. Activities stored in `activities` session store
+4. Page imports utilities (`deriveAvailableChannels`, `buildLapMarkers`, `buildSegments`) to derive chart input data
+5. Page derives `activeChannels` from store; initialises empty channels list on first load
+6. Components read from store, receive derived data as props, render ECharts instances (linked via `connect()`) and Leaflet map
+7. Store updates (smoothing, xAxisMode, activeChannels, referenceIndex) trigger reactive re-renders
 
 ## Out of Scope (for now)
 
