@@ -6,7 +6,7 @@
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { smooth } from '$lib/analytics/smooth';
-	import { extractChannel, buildXValues, isDashed } from './TimeSeriesChart.utils.ts';
+	import { extractChannel, buildXValues, isDashed, paceFormat } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput } from './TimeSeriesChart.utils.ts';
 
 	let {
@@ -62,9 +62,14 @@
 			},
 			yAxis: {
 				type: 'value',
+				inverse: channel === 'pace',
 				name: meta.unit,
 				nameTextStyle: { color: tc },
-				axisLabel: { color: tc, fontSize: 11 },
+				axisLabel: {
+					color: tc,
+					fontSize: 11,
+					...(channel === 'pace' ? { formatter: (v: number) => paceFormat(v) } : {}),
+				},
 				splitLine: { lineStyle: { color: gc } },
 			},
 			tooltip: {
@@ -73,6 +78,7 @@
 				backgroundColor: tooltipBg(),
 				borderColor: gc,
 				textStyle: { color: tooltipText(), fontSize: 12 },
+				...(channel === 'pace' ? { valueFormatter: (v: unknown) => typeof v === 'number' ? paceFormat(v) + ' /km' : '—' } : {}),
 			},
 			dataZoom: [{ type: 'inside' }],
 			series: seriesInputs.map((s, i) => {

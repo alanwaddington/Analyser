@@ -7,7 +7,8 @@ export interface Record {
 	timestamp: Date;
 	elapsedSeconds: number;
 	distance: number; // metres
-	speed?: number; // m/s
+	speed?: number; // km/h
+	pace?: number;  // min/km
 	heartRate?: number; // bpm
 	power?: number; // watts
 	powerLeft?: number;
@@ -72,6 +73,7 @@ export type ChannelKey =
 	| 'powerRight'
 	| 'cadence'
 	| 'speed'
+	| 'pace'
 	| 'altitude'
 	| 'temperature'
 	| 'coreTemperature'
@@ -85,9 +87,10 @@ export const CHANNEL_META: { [K in ChannelKey]: { label: string; unit: string } 
 	power:               { label: 'Power',             unit: 'W'   },
 	powerLeft:           { label: 'Power Left',        unit: 'W'   },
 	powerRight:          { label: 'Power Right',       unit: 'W'   },
-	cadence:             { label: 'Cadence',           unit: 'rpm' },
-	speed:               { label: 'Speed',             unit: 'm/s' },
-	altitude:            { label: 'Altitude',          unit: 'm'   },
+	cadence:             { label: 'Cadence',           unit: 'rpm'     },
+	speed:               { label: 'Speed',             unit: 'km/h'    },
+	pace:                { label: 'Pace',              unit: 'min/km'  },
+	altitude:            { label: 'Altitude',          unit: 'm'       },
 	temperature:         { label: 'Temperature',       unit: '°C'  },
 	coreTemperature:     { label: 'Core Temp',         unit: '°C'  },
 	skinTemperature:     { label: 'Skin Temp',         unit: '°C'  },

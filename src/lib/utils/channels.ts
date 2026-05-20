@@ -7,6 +7,7 @@ const ALL_CHANNELS: ChannelKey[] = [
 	'powerRight',
 	'cadence',
 	'speed',
+	'pace',
 	'altitude',
 	'temperature',
 	'coreTemperature',
