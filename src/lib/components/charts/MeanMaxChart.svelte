@@ -13,7 +13,7 @@
 	} = $props();
 
 	let container: HTMLDivElement;
-	let chart: ECharts | undefined;
+	let chart = $state<ECharts | undefined>(undefined);
 	let isDark = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 
