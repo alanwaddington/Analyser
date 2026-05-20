@@ -84,7 +84,7 @@
 			},
 			yAxis: {
 				type: 'value',
-				name: 's',
+				name: 'Δ (s)',
 				nameTextStyle: { color: tc },
 				axisLabel: { color: tc, fontSize: 11 },
 				splitLine: { lineStyle: { color: gc } },
