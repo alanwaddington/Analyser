@@ -84,6 +84,20 @@
 		{#if activeTab === 'charts'}
 			<div class="toolbar">
 				<ChannelToggleBar channels={availableChannels} />
+				<div class="axis-toggle" role="group" aria-label="X-axis mode">
+					<button
+						class="axis-btn"
+						class:axis-active={$xAxisMode === 'time'}
+						onclick={() => xAxisMode.set('time')}
+						aria-pressed={$xAxisMode === 'time'}
+					>Time</button>
+					<button
+						class="axis-btn"
+						class:axis-active={$xAxisMode === 'distance'}
+						onclick={() => xAxisMode.set('distance')}
+						aria-pressed={$xAxisMode === 'distance'}
+					>Distance</button>
+				</div>
 			</div>
 			<div class="charts-scroll">
 				{#if $activeChannels.length === 0}
@@ -202,6 +216,42 @@
 		padding: 12px 16px 8px;
 		flex-shrink: 0;
 		border-bottom: 1px solid var(--color-border);
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.axis-toggle {
+		display: flex;
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+		overflow: hidden;
+		flex-shrink: 0;
+	}
+
+	.axis-btn {
+		padding: 4px 12px;
+		background: none;
+		border: none;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--color-muted);
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.axis-btn + .axis-btn {
+		border-left: 1px solid var(--color-border);
+	}
+
+	.axis-btn:hover {
+		color: var(--color-text);
+	}
+
+	.axis-btn.axis-active {
+		background: #3b82f6;
+		color: #fff;
 	}
 
 	.charts-scroll {

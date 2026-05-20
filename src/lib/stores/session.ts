@@ -3,7 +3,7 @@ import type { Activity, ChannelKey } from '$lib/types';
 
 export const activities = writable<Activity[]>([]);
 export const smoothing = writable<number>(10);
-export const xAxisMode = writable<'time' | 'distance'>('time');
+export const xAxisMode = writable<'time' | 'distance'>('distance');
 export const referenceIndex = writable<number>(0);
 export const clearing = writable<boolean>(false);
 export const lastMode = writable<'compare' | 'event'>('compare');
