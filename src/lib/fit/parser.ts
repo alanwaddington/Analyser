@@ -44,6 +44,7 @@ interface FitRecord {
 	left_right_balance?: number;
 	cadence?: number;
 	altitude?: number;
+	enhanced_altitude?: number;
 	temperature?: number;
 	core_temperature?: number;
 	skin_temperature?: number;
@@ -80,7 +81,7 @@ function normaliseRecord(r: FitRecord): Record {
 		heartRate: r.heart_rate,
 		power: r.power,
 		cadence: r.cadence,
-		altitude: r.altitude,
+		altitude: r.enhanced_altitude ?? r.altitude,
 		temperature: r.temperature,
 		coreTemperature: r.core_temperature,
 		skinTemperature: r.skin_temperature,
