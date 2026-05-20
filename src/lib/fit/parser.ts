@@ -9,6 +9,9 @@ export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Act
 		parser.parse(buffer, (error: any, data: any) => {
 			if (error) return reject(new Error(String(error)));
 			try {
+				const first = (data?.records ?? [])[0];
+				console.debug('[parser] first raw record keys:', first ? Object.keys(first) : 'NO RECORDS');
+				console.debug('[parser] first raw record speed fields:', { speed: first?.speed, enhanced_speed: first?.enhanced_speed });
 				resolve(normalise(data as FitData, filename));
 			} catch (e) {
 				reject(e);
