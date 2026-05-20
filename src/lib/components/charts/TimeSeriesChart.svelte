@@ -7,11 +7,7 @@
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { smooth } from '$lib/analytics/smooth';
 	import { extractChannel, buildXValues, isDashed } from './TimeSeriesChart.utils.ts';
-
-	interface SeriesInput {
-		activity: Activity;
-		colourIndex: number;
-	}
+	import type { SeriesInput } from './TimeSeriesChart.utils.ts';
 
 	let {
 		channel,
@@ -94,7 +90,6 @@
 					itemStyle: { color: colour },
 					symbol: 'none',
 					showSymbol: false,
-					// Lap markers on first series only
 					...(i === 0 && lapMarkers.length > 0 ? {
 						markLine: {
 							silent: true,
@@ -118,7 +113,7 @@
 		} else {
 			hiddenSeries.add(i);
 		}
-		chart?.setOption(buildOption());
+		chart?.setOption(buildOption(), { notMerge: true });
 	}
 
 	onMount(() => {
@@ -127,12 +122,11 @@
 		chart = echarts.init(container, undefined, { renderer: 'canvas' });
 		chart.group = groupId;
 		echarts.connect(groupId);
-		chart.setOption(buildOption());
 
 		mq = window.matchMedia('(prefers-color-scheme: dark)');
 		themeHandler = (e: MediaQueryListEvent) => {
 			isDark = e.matches;
-			chart?.setOption(buildOption());
+			chart?.setOption(buildOption(), { notMerge: true });
 		};
 		mq.addEventListener('change', themeHandler);
 
@@ -147,10 +141,11 @@
 	});
 
 	$effect(() => {
-		// Re-render when smoothing or axis mode changes
 		void $smoothing;
 		void $xAxisMode;
-		chart?.setOption(buildOption());
+		void seriesInputs;
+		void referenceIndex;
+		chart?.setOption(buildOption(), { notMerge: true });
 	});
 </script>
 

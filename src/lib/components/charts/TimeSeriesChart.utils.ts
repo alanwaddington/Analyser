@@ -1,4 +1,9 @@
-import type { Record, ChannelKey } from '$lib/types';
+import type { Activity, Record, ChannelKey } from '$lib/types';
+
+export interface SeriesInput {
+	activity: Activity;
+	colourIndex: number;
+}
 
 export function extractChannel(records: Record[], channel: ChannelKey): (number | null)[] {
 	return records.map(r => (r[channel] as number | undefined) ?? null);
