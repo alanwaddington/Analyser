@@ -17,6 +17,8 @@
 	let isDark = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 
+	let seriesData = $derived(seriesInputs.map(s => buildMeanMaxData(s.activity.records)));
+
 	let mq: MediaQueryList | undefined;
 	let themeHandler: ((e: MediaQueryListEvent) => void) | undefined;
 	let resizeObserver: ResizeObserver | undefined;
@@ -74,7 +76,7 @@
 				return {
 					type: 'line' as const,
 					name: s.activity.filename,
-					data: hiddenSeries.has(i) ? [] : buildMeanMaxData(s.activity.records),
+					data: hiddenSeries.has(i) ? [] : seriesData[i],
 					lineStyle: { color: colour, type: 'solid' as const, width: 1.5 },
 					itemStyle: { color: colour },
 					symbol: 'none',

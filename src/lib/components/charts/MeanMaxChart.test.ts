@@ -94,11 +94,11 @@ describe('formatDuration', () => {
 		expect(formatDuration(65)).toBe('1:05');
 	});
 
-	it('formatDuration_largeValue_showsHoursAsMinutes', () => {
-		expect(formatDuration(3661)).toBe('61:01');
+	it('formatDuration_exactHour_showsHoursMinutesSeconds', () => {
+		expect(formatDuration(3600)).toBe('1:00:00');
 	});
 
-	it('formatDuration_exactHour_showsHourAsMinutes', () => {
-		expect(formatDuration(3600)).toBe('60:00');
+	it('formatDuration_overOneHour_showsHoursMinutesSeconds', () => {
+		expect(formatDuration(3661)).toBe('1:01:01');
 	});
 });
