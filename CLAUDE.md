@@ -29,7 +29,7 @@ A FIT file analysis application with two primary capabilities:
 ## Core Domain Concepts
 
 ### FIT File Data
-- **Record messages** — per-second (or per-sample) data: timestamp, position (lat/lon), distance, speed, heart_rate, power, cadence, temperature, etc.
+- **Record messages** — per-second (or per-sample) data: timestamp, position (lat/lon), distance, speed (km/h), pace (min/km), heart_rate, power, cadence, temperature, etc.
 - **Device info messages** — identify which physical device contributed each data stream (manufacturer, product, serial number, ANT+ device type)
 - **Session / Lap messages** — aggregate summaries; laps can represent manual splits or auto-laps
 - **Event messages** — start/stop/timer events embedded in the file
@@ -40,8 +40,8 @@ A FIT file analysis application with two primary capabilities:
 | Heart Rate Monitor (HRM) | heart_rate |
 | Power Meter | power, left/right balance, pedal smoothness |
 | Core Body Temperature Sensor | core_temperature, skin_temperature |
-| Smart Watch (primary unit) | all record fields, GPS, altitude |
-| Speed/Cadence Sensor | speed, cadence |
+| Smart Watch (primary unit) | all record fields, GPS, altitude, speed, pace |
+| Speed/Cadence Sensor | speed, pace, cadence |
 | Running Dynamics Pod | vertical_oscillation, ground_contact_time, stride_length |
 
 ### Activity Alignment
@@ -69,20 +69,21 @@ When comparing multiple files the traces must be synchronised before any meaning
 Graphs are a core output of the application, not an optional extra. Both use cases require rich visual comparison.
 
 ### Device Data Comparison Graphs
-- **Multi-channel time-series** — overlay two or more data streams on a shared time or distance axis (e.g. HR from HRM vs HR from watch, or power vs HR on dual y-axes)
+- **Multi-channel time-series** — overlay two or more data streams on a shared time or distance axis (e.g. pace from watch vs pace from speed sensor, or power vs HR on dual y-axes)
 - **Mean/Max power curve** — plot best average power over all durations (1 s to full activity length) for each file on one chart
+- **Pace chart with inverted axis** — pace displayed with faster times (lower min/km values) at the top, with M:SS formatting
 - **Synchronised zoom/pan** — zooming one graph updates all others sharing the same axis; double-click or button to reset
-- **Channel selector** — toggle individual device/metric streams on and off without reloading data
+- **Channel selector** — toggle individual device/metric streams (speed, pace, power, HR, cadence, etc.) on and off without reloading data
 
 ### Event Comparison Graphs
 - **Time delta plot** — cumulative seconds gained/lost vs distance, with zero line as reference; positive = ahead, negative = behind
-- **Overlay time-series** — each metric (HR, power, pace) plotted for all compared runs on a shared distance axis
+- **Overlay time-series** — each metric (pace, speed, HR, power) plotted for all compared runs on a shared distance axis, with pace using inverted y-axis for intuitive comparison (faster = higher on chart)
 - **Segment bar chart** — per-km or per-lap time difference as a bar chart to highlight worst/best segments
 
 ### General Graph Requirements
-- Hover tooltips showing exact values at the cursor position across all series simultaneously
+- Hover tooltips showing exact values at the cursor position across all series simultaneously (pace formatted as M:SS)
 - Lap / split markers as vertical annotations on all charts
-- Map trace (GPS route) coloured by a chosen metric (e.g. pace, HR zone) with comparison overlay where two routes share the same course
+- Map trace (GPS route) coloured by a chosen metric (e.g. pace, speed, HR zone) with comparison overlay where two routes share the same course
 - Export graph as image (PNG) or underlying data (CSV)
 - Per-graph naming so users can label what each view represents
 
@@ -114,8 +115,10 @@ Graphs are a core output of the application, not an optional extra. Both use cas
 
 - FIT file spec: Flexible and Interoperable Data Transfer (FIT) Protocol, maintained by Garmin/ANT+
 - `fit-file-parser` runs in the browser via a Web Worker to avoid blocking the UI thread on large files
+- Speed is recorded in km/h; pace (min/km) is derived per record as 60 / speed_kmh
 - Multi-device streams within a single file are identified via `device_index` on record messages
-- Distance-aligned comparison requires linear interpolation of record data to a common distance axis
+- Distance-aligned comparison requires linear interpolation of all record channels (including speed and pace) to a common distance axis
+- Pace chart displays with inverted y-axis (faster pace = lower min/km value appears higher on chart) for intuitive interpretation
 - Mean/max curve computation is O(n²) naively — use a sparse/sliding-window approach for large files
 - ECharts `connect()` API links multiple chart instances for synchronised crosshair and zoom
 
