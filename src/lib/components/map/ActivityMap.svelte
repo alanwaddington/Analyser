@@ -17,8 +17,8 @@
 	const gpsCache = $derived(activities.map(a => extractGpsPoints(a)));
 
 	let container: HTMLDivElement;
-	let L: typeof import('leaflet') | undefined;
-	let map: import('leaflet').Map | undefined;
+	let L = $state<typeof import('leaflet') | undefined>(undefined);
+	let map = $state<import('leaflet').Map | undefined>(undefined);
 	let polylines: import('leaflet').Polyline[] = [];
 	let markers: (import('leaflet').CircleMarker | null)[] = [];
 
