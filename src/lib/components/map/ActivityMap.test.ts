@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { positionAtDistance, extractGpsPoints } from './ActivityMap.utils.ts';
+import { positionAtDistance, positionFromPoints, extractGpsPoints } from './ActivityMap.utils.ts';
+import type { GpsPointWithDistance } from './ActivityMap.utils.ts';
 import type { Activity, Record } from '$lib/types';
 
 function makeRecord(distance: number, elapsedSeconds: number, lat?: number, lon?: number): Record {
@@ -113,6 +114,44 @@ describe('positionAtDistance', () => {
 		expect(result).not.toBeNull();
 		expect(result!.lat).toBeCloseTo(11.0, 5);
 		expect(result!.lon).toBeCloseTo(21.0, 5);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// positionFromPoints
+// ---------------------------------------------------------------------------
+describe('positionFromPoints', () => {
+	it('positionFromPoints_happyPath_returnsInterpolatedPosition', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000 },
+		];
+		const result = positionFromPoints(points, 500);
+		expect(result).not.toBeNull();
+		expect(result!.lat).toBeCloseTo(51.005, 4);
+		expect(result!.lon).toBeCloseTo(-1.005, 4);
+	});
+
+	it('positionFromPoints_emptyPoints_returnsNull', () => {
+		expect(positionFromPoints([], 500)).toBeNull();
+	});
+
+	it('positionFromPoints_beyondRange_returnsNull', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000 },
+		];
+		expect(positionFromPoints(points, 5000)).toBeNull();
+	});
+
+	it('positionFromPoints_exactMatch_returnsExactPosition', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000 },
+		];
+		const result = positionFromPoints(points, 1000);
+		expect(result!.lat).toBeCloseTo(51.01, 5);
+		expect(result!.lon).toBeCloseTo(-1.01, 5);
 	});
 });
 

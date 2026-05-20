@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { Activity } from '$lib/types';
 	import { FILE_COLOURS } from '$lib/types';
-	import { positionAtDistance, extractGpsPoints } from './ActivityMap.utils.ts';
+	import { positionFromPoints, extractGpsPoints } from './ActivityMap.utils.ts';
 
 	let {
 		activities,
@@ -13,6 +13,8 @@
 		referenceIndex?: number;
 		hoveredDistance: number | null;
 	} = $props();
+
+	const gpsCache = $derived(activities.map(a => extractGpsPoints(a)));
 
 	let container: HTMLDivElement;
 	let L: typeof import('leaflet') | undefined;
@@ -50,7 +52,7 @@
 		for (let i = 0; i < activities.length; i++) {
 			const activity = activities[i];
 			const colour = FILE_COLOURS[i % FILE_COLOURS.length];
-			const gpsPoints = extractGpsPoints(activity);
+			const gpsPoints = gpsCache[i];
 			if (gpsPoints.length === 0) continue;
 
 			const latLngs = gpsPoints.map(p => L!.latLng(p.lat, p.lon));
@@ -88,7 +90,7 @@
 		}
 
 		for (let i = 0; i < activities.length; i++) {
-			const pos = positionAtDistance(activities[i], hoveredDistance);
+			const pos = positionFromPoints(gpsCache[i], hoveredDistance);
 			const colour = FILE_COLOURS[i % FILE_COLOURS.length];
 
 			if (pos === null) {

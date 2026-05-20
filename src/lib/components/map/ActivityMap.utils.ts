@@ -12,8 +12,10 @@ export function extractGpsPoints(activity: Activity): GpsPointWithDistance[] {
 		.map(r => ({ lat: r.position!.lat, lon: r.position!.lon, distance: r.distance }));
 }
 
-export function positionAtDistance(activity: Activity, targetDist: number): GpsPoint | null {
-	const points = extractGpsPoints(activity);
+export function positionFromPoints(
+	points: GpsPointWithDistance[],
+	targetDist: number,
+): GpsPoint | null {
 	if (points.length === 0) return null;
 
 	let lo = 0;
@@ -37,4 +39,8 @@ export function positionAtDistance(activity: Activity, targetDist: number): GpsP
 		lat: a.lat + t * (b.lat - a.lat),
 		lon: a.lon + t * (b.lon - a.lon),
 	};
+}
+
+export function positionAtDistance(activity: Activity, targetDist: number): GpsPoint | null {
+	return positionFromPoints(extractGpsPoints(activity), targetDist);
 }
