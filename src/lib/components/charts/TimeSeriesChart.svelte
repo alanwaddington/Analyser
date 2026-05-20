@@ -81,11 +81,34 @@
 			},
 			tooltip: {
 				trigger: 'axis',
-				axisPointer: { type: 'cross', lineStyle: { color: '#64748b' } },
+				axisPointer: { type: 'line', lineStyle: { color: '#64748b' } },
 				backgroundColor: tooltipBg(),
 				borderColor: gc,
 				textStyle: { color: tooltipText(), fontSize: 12 },
-				...(channel === 'pace' ? { valueFormatter: (v: unknown) => typeof v === 'number' ? paceFormat(v) + ' /km' : '—' } : {}),
+				formatter: (params) => {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const items = params as any as Array<{ seriesName: string; value: [number, number | null]; color: string }>;
+					const x = items[0]?.value[0];
+					const xLabel = $xAxisMode === 'time'
+						? `${Math.round(x ?? 0)}s`
+						: `${(x ?? 0).toFixed(2)} km`;
+					const rows = items
+						.filter(p => p.value[1] != null)
+						.map(p => {
+							const v = p.value[1] as number;
+							const formatted = channel === 'pace' ? paceFormat(v) + ' /km' : v.toFixed(1);
+							return `<div style="display:flex;align-items:center;gap:8px">` +
+								`<span style="display:inline-block;width:12px;height:2px;background:${p.color};flex-shrink:0"></span>` +
+								`<span style="color:${tc}">${p.seriesName}</span>` +
+								`<b style="margin-left:auto;padding-left:12px">${formatted}</b>` +
+								`</div>`;
+						})
+						.join('');
+					return `<div style="font-size:12px;min-width:140px">` +
+						`<div style="color:${tc};margin-bottom:4px;font-weight:500">${meta.label} · ${xLabel}</div>` +
+						rows +
+						`</div>`;
+				},
 			},
 			dataZoom: [{ type: 'inside' }],
 			series: seriesInputs.map((s, i) => {
