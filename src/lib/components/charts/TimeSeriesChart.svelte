@@ -8,6 +8,7 @@
 	import { smooth } from '$lib/analytics/smooth';
 	import { extractChannel, buildXValues, isDashed, paceFormat } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput } from './TimeSeriesChart.utils.ts';
+	import { interpolateToDistanceAxis } from '$lib/align/distance';
 
 	let {
 		channel,
@@ -39,6 +40,12 @@
 	const tooltipText = () => isDark ? '#e2e8f0' : '#0f172a';
 
 	function buildData(activity: Activity): [number, number | null][] {
+		if ($xAxisMode === 'distance') {
+			const aligned = interpolateToDistanceAxis(activity);
+			const channelData = aligned.channels.get(channel) ?? [];
+			const smoothed = smooth(channelData, $smoothing);
+			return aligned.axis.map((d, i) => [d / 1000, smoothed[i]]);
+		}
 		const raw = extractChannel(activity.records, channel);
 		const smoothed = smooth(raw, $smoothing);
 		const xValues = buildXValues(activity.records, $xAxisMode);
