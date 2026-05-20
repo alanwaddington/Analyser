@@ -39,6 +39,17 @@
 	const tooltipBg  = () => isDark ? '#0f172a' : '#ffffff';
 	const tooltipText = () => isDark ? '#e2e8f0' : '#0f172a';
 
+	function buildAltitudeData(activity: Activity): [number, number | null][] {
+		if ($xAxisMode === 'distance') {
+			const aligned = interpolateToDistanceAxis(activity);
+			const altData = aligned.channels.get('altitude') ?? [];
+			return aligned.axis.map((d, i) => [d / 1000, altData[i]]);
+		}
+		const raw = extractChannel(activity.records, 'altitude');
+		const xValues = buildXValues(activity.records, $xAxisMode);
+		return xValues.map((x, i) => [x, raw[i]]);
+	}
+
 	function buildData(activity: Activity): [number, number | null][] {
 		if ($xAxisMode === 'distance') {
 			const aligned = interpolateToDistanceAxis(activity);
@@ -57,6 +68,12 @@
 		const tc = textColour();
 		const gc = gridColour();
 
+		const showAltBackdrop = channel !== 'altitude' && seriesInputs.length > 0;
+		const altData = showAltBackdrop ? buildAltitudeData(seriesInputs[0].activity) : [];
+		const hasAlt = altData.some(([, v]) => v != null);
+
+		const altFill = isDark ? 'rgba(148,163,184,0.12)' : 'rgba(100,116,139,0.1)';
+
 		return {
 			grid: { top: 20, right: 16, bottom: 30, left: 55 },
 			xAxis: {
@@ -67,18 +84,27 @@
 				axisLine: { lineStyle: { color: gc } },
 				splitLine: { lineStyle: { color: gc } },
 			},
-			yAxis: {
-				type: 'value',
-				inverse: channel === 'pace',
-				name: meta.unit,
-				nameTextStyle: { color: tc },
-				axisLabel: {
-					color: tc,
-					fontSize: 11,
-					...(channel === 'pace' ? { formatter: (v: number) => paceFormat(v) } : {}),
+			yAxis: [
+				{
+					type: 'value',
+					inverse: channel === 'pace',
+					name: meta.unit,
+					nameTextStyle: { color: tc },
+					axisLabel: {
+						color: tc,
+						fontSize: 11,
+						...(channel === 'pace' ? { formatter: (v: number) => paceFormat(v) } : {}),
+					},
+					splitLine: { lineStyle: { color: gc } },
 				},
-				splitLine: { lineStyle: { color: gc } },
-			},
+				{
+					type: 'value',
+					show: false,
+					// Push altitude to bottom ~25% of chart height by inflating the max
+					min: (v: { min: number; max: number }) => Math.floor(v.min - (v.max - v.min) * 0.1),
+					max: (v: { min: number; max: number }) => Math.ceil(v.max + (v.max - v.min) * 3),
+				},
+			],
 			tooltip: {
 				trigger: 'axis',
 				axisPointer: { type: 'line', lineStyle: { color: '#64748b' } },
@@ -93,7 +119,7 @@
 						? `${Math.round(x ?? 0)}s`
 						: `${(x ?? 0).toFixed(2)} km`;
 					const rows = items
-						.filter(p => p.value[1] != null)
+						.filter(p => p.seriesName !== '__alt__' && p.value[1] != null)
 						.map(p => {
 							const v = p.value[1] as number;
 							const formatted = channel === 'pace' ? paceFormat(v) + ' /km' : v.toFixed(1);
@@ -111,34 +137,50 @@
 				},
 			},
 			dataZoom: [{ type: 'inside' }],
-			series: seriesInputs.map((s, i) => {
-				const colour = FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
-				const dashed = isDashed(i, referenceIndex);
-				return {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			series: ([
+				...(showAltBackdrop && hasAlt ? [{
 					type: 'line' as const,
-					name: s.activity.filename,
-					data: hiddenSeries.has(i) ? [] : buildData(s.activity),
-					lineStyle: {
-						color: colour,
-						type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
-						width: 1.5,
-					},
-					itemStyle: { color: colour },
+					name: '__alt__',
+					yAxisIndex: 1,
+					data: altData,
+					areaStyle: { color: altFill, origin: 'start' as const },
+					lineStyle: { width: 0, color: 'transparent' },
 					symbol: 'none',
 					showSymbol: false,
-					...(i === 0 && lapMarkers.length > 0 ? {
-						markLine: {
-							silent: true,
-							symbol: ['none', 'none'],
-							data: lapMarkers.map(m => ({
-								xAxis: m.value,
-								label: { formatter: m.label, fontSize: 10, color: tc },
-							})),
-							lineStyle: { type: 'dashed' as const, color: gc, width: 1 },
+					silent: true,
+					z: 0,
+				}] : []),
+				...seriesInputs.map((s, i) => {
+					const colour = FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
+					const dashed = isDashed(i, referenceIndex);
+					return {
+						type: 'line' as const,
+						name: s.activity.filename,
+						yAxisIndex: 0,
+						data: hiddenSeries.has(i) ? [] : buildData(s.activity),
+						lineStyle: {
+							color: colour,
+							type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
+							width: 1.5,
 						},
-					} : {}),
-				};
-			}),
+						itemStyle: { color: colour },
+						symbol: 'none',
+						showSymbol: false,
+						...(i === 0 && lapMarkers.length > 0 ? {
+							markLine: {
+								silent: true,
+								symbol: ['none', 'none'],
+								data: lapMarkers.map(m => ({
+									xAxis: m.value,
+									label: { formatter: m.label, fontSize: 10, color: tc },
+								})),
+								lineStyle: { type: 'dashed' as const, color: gc, width: 1 },
+							},
+						} : {}),
+					};
+				}),
+			]) as unknown as EChartsOption['series'],
 		};
 	}
 
