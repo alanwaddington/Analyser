@@ -18,7 +18,7 @@ export function computeTimeDelta(reference: Activity, candidate: Activity, stepM
 	return result;
 }
 
-function timeAtDistance(activity: Activity, targetDist: number): number | null {
+export function timeAtDistance(activity: Activity, targetDist: number): number | null {
 	const records = activity.records;
 	let lo = 0;
 	let hi = records.length - 1;
