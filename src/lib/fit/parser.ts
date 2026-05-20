@@ -41,6 +41,7 @@ interface FitRecord {
 	enhanced_speed?: number;
 	heart_rate?: number;
 	power?: number;
+	'Power'?: number;          // Stryd developer field (running power)
 	left_right_balance?: number;
 	cadence?: number;
 	altitude?: number;
@@ -70,7 +71,7 @@ interface FitDeviceInfo {
 
 // ---- normalisation ----
 
-function normaliseRecord(r: FitRecord): ActivityRecord {
+export function normaliseRecord(r: FitRecord): ActivityRecord {
 	const speed = r.enhanced_speed ?? r.speed;
 	return {
 		timestamp: r.timestamp ?? new Date(0),
@@ -79,7 +80,7 @@ function normaliseRecord(r: FitRecord): ActivityRecord {
 		speed,
 		pace: speed && speed > 0 ? 60 / speed : undefined,
 		heartRate: r.heart_rate,
-		power: r.power,
+		power: r.power ?? r['Power'],
 		cadence: r.cadence,
 		altitude: r.enhanced_altitude ?? r.altitude,
 		temperature: r.temperature,
