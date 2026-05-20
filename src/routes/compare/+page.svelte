@@ -63,17 +63,24 @@
 	<div class="tab-bar" role="tablist" aria-label="Compare views">
 		{#each TABS as tab}
 			<button
+				id="tab-{tab.id}"
 				role="tab"
 				class="tab"
 				class:active={activeTab === tab.id}
 				aria-selected={activeTab === tab.id}
+				aria-controls="panel-{tab.id}"
 				onclick={() => setTab(tab.id)}
 				onkeydown={(e) => handleTabKey(e, tab.id)}
 			>{tab.label}</button>
 		{/each}
 	</div>
 
-	<div class="tab-content">
+	<div
+		class="tab-content"
+		id="panel-{activeTab}"
+		role="tabpanel"
+		aria-labelledby="tab-{activeTab}"
+	>
 		{#if activeTab === 'charts'}
 			<div class="toolbar">
 				<ChannelToggleBar channels={availableChannels} />
