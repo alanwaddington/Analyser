@@ -38,6 +38,7 @@ interface FitRecord {
 	elapsed_time?: number;
 	distance?: number;
 	speed?: number;
+	enhanced_speed?: number;
 	heart_rate?: number;
 	power?: number;
 	left_right_balance?: number;
@@ -68,16 +69,14 @@ interface FitDeviceInfo {
 
 // ---- normalisation ----
 
-function normalise(data: FitData, filename: string): Activity {
-	const session = data.sessions?.[0] ?? {};
-	const rawRecords = data.records ?? [];
-
-	const records: Record[] = rawRecords.map((r) => ({
+function normaliseRecord(r: FitRecord): Record {
+	const speed = r.enhanced_speed ?? r.speed;
+	return {
 		timestamp: r.timestamp ?? new Date(0),
 		elapsedSeconds: r.elapsed_time ?? 0,
 		distance: r.distance ?? 0,
-		speed: r.speed,
-		pace: r.speed && r.speed > 0 ? 60 / r.speed : undefined,
+		speed,
+		pace: speed && speed > 0 ? 60 / speed : undefined,
 		heartRate: r.heart_rate,
 		power: r.power,
 		cadence: r.cadence,
@@ -90,8 +89,15 @@ function normalise(data: FitData, filename: string): Activity {
 		position:
 			r.position_lat != null && r.position_long != null
 				? { lat: r.position_lat, lon: r.position_long }
-				: undefined
-	}));
+				: undefined,
+	};
+}
+
+function normalise(data: FitData, filename: string): Activity {
+	const session = data.sessions?.[0] ?? {};
+	const rawRecords = data.records ?? [];
+
+	const records: Record[] = rawRecords.map(normaliseRecord);
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
 	const devices: Device[] = (data.device_infos ?? []).map((d) => ({
