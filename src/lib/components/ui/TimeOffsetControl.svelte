@@ -1,0 +1,300 @@
+<script lang="ts">
+	import type { Activity } from '$lib/types';
+	import { timeOffsets } from '$lib/stores/session';
+
+	let { activities, autoOffsets }: {
+		activities: Activity[];
+		autoOffsets: Map<string, number>;
+	} = $props();
+
+	let expanded = $state(false);
+
+	// Count of files whose current offset differs from the auto-computed value
+	const adjustedCount = $derived(
+		activities.slice(1).filter(a => {
+			const current = $timeOffsets.get(a.id) ?? 0;
+			const auto    = autoOffsets.get(a.id) ?? 0;
+			return current !== auto;
+		}).length
+	);
+
+	function toggle() { expanded = !expanded; }
+
+	function clamp(v: number, min: number, max: number): number {
+		return Math.min(max, Math.max(min, v));
+	}
+
+	function nudge(activityId: string, delta: number): void {
+		timeOffsets.update(m => {
+			const next = new Map(m);
+			const current = next.get(activityId) ?? 0;
+			next.set(activityId, clamp(current + delta, -3600, 3600));
+			return next;
+		});
+	}
+
+	function setOffset(activityId: string, value: number): void {
+		if (isNaN(value)) return;
+		timeOffsets.update(m => {
+			const next = new Map(m);
+			next.set(activityId, clamp(Math.round(value), -3600, 3600));
+			return next;
+		});
+	}
+
+	function resetOffset(activityId: string, autoValue: number): void {
+		timeOffsets.update(m => {
+			const next = new Map(m);
+			next.set(activityId, autoValue);
+			return next;
+		});
+	}
+</script>
+
+<div class="toc-root">
+	<button
+		class="toc-toggle"
+		onclick={toggle}
+		aria-expanded={expanded}
+		aria-controls="toc-panel"
+	>
+		<span class="toc-icon" aria-hidden="true">⏱</span>
+		Fine-tune timing
+		{#if adjustedCount > 0}
+			<span class="toc-badge">{adjustedCount} adjusted</span>
+		{/if}
+		<span class="toc-chevron" class:flipped={expanded} aria-hidden="true">▾</span>
+	</button>
+
+	{#if expanded}
+		<div class="toc-panel" id="toc-panel">
+			{#each activities as activity, i}
+				{@const currentOffset = $timeOffsets.get(activity.id) ?? 0}
+				{@const autoOffset    = autoOffsets.get(activity.id) ?? 0}
+				{@const isAdjusted    = currentOffset !== autoOffset}
+
+				<div class="toc-row">
+					<span class="toc-filename" title={activity.filename}>
+						{activity.filename}
+					</span>
+
+					{#if i === 0}
+						<span class="toc-reference">Reference</span>
+					{:else}
+						<div
+							class="toc-controls"
+							role="group"
+							aria-label="Time offset for {activity.filename}"
+						>
+							<button
+								class="toc-nudge"
+								onclick={() => nudge(activity.id, -10)}
+								aria-label="Subtract 10 seconds"
+							>−10</button>
+							<button
+								class="toc-nudge"
+								onclick={() => nudge(activity.id, -1)}
+								aria-label="Subtract 1 second"
+							>−1</button>
+							<input
+								class="toc-input"
+								type="number"
+								value={currentOffset}
+								aria-label="Offset in seconds for {activity.filename}"
+								onchange={(e) => setOffset(activity.id, (e.currentTarget as HTMLInputElement).valueAsNumber)}
+								onblur={(e)   => setOffset(activity.id, (e.currentTarget as HTMLInputElement).valueAsNumber)}
+								onkeydown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+							/>
+							<span class="toc-unit" aria-hidden="true">s</span>
+							<button
+								class="toc-nudge"
+								onclick={() => nudge(activity.id, +1)}
+								aria-label="Add 1 second"
+							>+1</button>
+							<button
+								class="toc-nudge"
+								onclick={() => nudge(activity.id, +10)}
+								aria-label="Add 10 seconds"
+							>+10</button>
+							{#if isAdjusted}
+								<button
+									class="toc-reset"
+									onclick={() => resetOffset(activity.id, autoOffset)}
+									title="Reset to auto-computed offset"
+									aria-label="Reset offset for {activity.filename}"
+								>↺</button>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{/if}
+</div>
+
+<style>
+	.toc-root {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		width: 100%;
+	}
+
+	/* ── Toggle button ────────────────────────────────────────────── */
+
+	.toc-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
+		background: none;
+		border: 1px dashed var(--color-border);
+		border-radius: 6px;
+		color: var(--color-muted);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: color 0.1s, border-color 0.1s;
+		align-self: flex-start;
+	}
+
+	.toc-toggle:hover {
+		color: var(--color-text);
+		border-color: var(--color-text);
+	}
+
+	.toc-toggle:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 2px;
+	}
+
+	.toc-icon { font-size: 0.8rem; }
+
+	.toc-badge {
+		padding: 1px 6px;
+		background: rgba(59, 130, 246, 0.15);
+		color: #60a5fa;
+		border-radius: 999px;
+		font-size: 0.65rem;
+		font-weight: 600;
+	}
+
+	.toc-chevron {
+		font-size: 0.65rem;
+		transition: transform 0.15s;
+		line-height: 1;
+	}
+
+	.toc-chevron.flipped { transform: rotate(180deg); }
+
+	/* ── Expanded panel ───────────────────────────────────────────── */
+
+	.toc-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 8px 10px;
+		background: color-mix(in srgb, var(--color-border) 20%, transparent);
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+	}
+
+	.toc-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-height: 24px;
+	}
+
+	.toc-filename {
+		font-size: 0.7rem;
+		color: var(--color-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		width: 110px;
+		flex-shrink: 0;
+	}
+
+	.toc-reference {
+		font-size: 0.7rem;
+		color: var(--color-muted);
+		font-style: italic;
+	}
+
+	/* ── Nudge controls ───────────────────────────────────────────── */
+
+	.toc-controls {
+		display: flex;
+		align-items: center;
+		gap: 3px;
+	}
+
+	.toc-nudge {
+		padding: 2px 6px;
+		background: none;
+		border: 1px solid var(--color-border);
+		border-radius: 4px;
+		color: var(--color-muted);
+		font-size: 0.7rem;
+		cursor: pointer;
+		transition: background 0.1s, color 0.1s;
+		white-space: nowrap;
+	}
+
+	.toc-nudge:hover {
+		background: color-mix(in srgb, var(--color-border) 40%, transparent);
+		color: var(--color-text);
+	}
+
+	.toc-nudge:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 1px;
+	}
+
+	.toc-input {
+		width: 48px;
+		padding: 2px 4px;
+		background: var(--color-card, #0f172a);
+		border: 1px solid var(--color-border);
+		border-radius: 4px;
+		color: var(--color-text);
+		font-size: 0.75rem;
+		text-align: right;
+		font-family: ui-monospace, monospace;
+	}
+
+	.toc-input:focus {
+		outline: 2px solid #3b82f6;
+		outline-offset: 0;
+		border-color: #3b82f6;
+	}
+
+	/* Hide native number spinners */
+	.toc-input::-webkit-inner-spin-button,
+	.toc-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+	.toc-input { -moz-appearance: textfield; }
+
+	.toc-unit {
+		font-size: 0.7rem;
+		color: var(--color-muted);
+	}
+
+	.toc-reset {
+		padding: 2px 5px;
+		background: none;
+		border: 1px solid var(--color-border);
+		border-radius: 4px;
+		color: var(--color-muted);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: color 0.1s;
+		line-height: 1;
+	}
+
+	.toc-reset:hover { color: var(--color-text); }
+
+	.toc-reset:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 1px;
+	}
+</style>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { activities, activeDeviceIndices, xAxisMode } from '$lib/stores/session';
+	import { activities, activeDeviceIndices, xAxisMode, timeOffsets } from '$lib/stores/session';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import type { ChannelKey, CrossFileStream } from '$lib/types';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
@@ -12,6 +12,7 @@
 	import MeanMaxChart from '$lib/components/charts/MeanMaxChart.svelte';
 	import ActivityMap from '$lib/components/map/ActivityMap.svelte';
 	import DeviceToggleBar from '$lib/components/ui/DeviceToggleBar.svelte';
+	import TimeOffsetControl from '$lib/components/ui/TimeOffsetControl.svelte';
 	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
 	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
 
@@ -62,8 +63,14 @@
 		return result;
 	});
 
-	// Time offsets per activity relative to the first (for cross-file time alignment)
-	const computedTimeOffsets = $derived(computeTimeOffsets($activities));
+	// Auto-computed time offsets (used as defaults and for reset in TimeOffsetControl)
+	const autoOffsets = $derived(computeTimeOffsets($activities));
+
+	// Initialise the timeOffsets store whenever activities change.
+	// The store may then be overridden by TimeOffsetControl for manual fine-tuning.
+	$effect(() => {
+		timeOffsets.set(computeTimeOffsets($activities));
+	});
 
 	// Lap markers from first activity (used for chart annotations)
 	const lapMarkers = $derived(buildLapMarkers($activities[0], $xAxisMode));
@@ -94,7 +101,7 @@
 				colourIndex: actIndex,
 				colour: FILE_COLOURS[actIndex % FILE_COLOURS.length],
 				label: deriveDeviceLabel(cfs.stream.device),
-				timeOffset: computedTimeOffsets.get(cfs.activity.id) ?? 0,
+				timeOffset: $timeOffsets.get(cfs.activity.id) ?? 0,
 			};
 		});
 	}
@@ -165,6 +172,11 @@
 		{#if activeTab === 'charts'}
 			<div class="toolbar">
 				<DeviceToggleBar streams={crossFileStreams} {multiFile} />
+				{#if multiFile && $xAxisMode === 'time'}
+					<div class="toc-wrap">
+						<TimeOffsetControl activities={$activities} {autoOffsets} />
+					</div>
+				{/if}
 				<div class="axis-toggle" role="group" aria-label="X-axis mode">
 					<button
 						class="axis-btn"
@@ -342,6 +354,11 @@
 		align-items: flex-start;
 		gap: 12px;
 		flex-wrap: wrap;
+	}
+
+	.toc-wrap {
+		flex: 1;
+		min-width: 0;
 	}
 
 	.axis-toggle {
