@@ -152,7 +152,15 @@ export function buildDeviceStreams(
 	devices: Device[],
 	records: ActivityRecord[]
 ): DeviceStream[] {
-	if (records.length === 0 || devices.length === 0) return [];
+	if (records.length === 0) return [];
+
+	// Files with no device_info messages get a single synthetic fallback device
+	// so the compare view always has at least one stream to display.
+	if (devices.length === 0) {
+		const present = channelsPresentInRecords(records);
+		const channels = ALL_RECORD_CHANNELS.filter(ch => present.has(ch));
+		return [{ device: { deviceIndex: 0 }, channels }];
+	}
 
 	const present = channelsPresentInRecords(records);
 	// Track which channels have been claimed by external sensors

@@ -73,9 +73,13 @@ function makeDevice(overrides: Partial<Device> = {}): Device {
 }
 
 describe('buildDeviceStreams', () => {
-	it('buildDeviceStreams_noDevices_returnsEmptyArray', () => {
-		const result = buildDeviceStreams([], [makeRecord({ heartRate: 120 })]);
-		expect(result).toHaveLength(0);
+	it('buildDeviceStreams_noDevices_createsFallbackStreamWithPresentChannels', () => {
+		const records = [makeRecord({ heartRate: 120, speed: 10 })];
+		const result = buildDeviceStreams([], records);
+		expect(result).toHaveLength(1);
+		expect(result[0].device.deviceIndex).toBe(0);
+		expect(result[0].channels).toContain('heartRate');
+		expect(result[0].channels).toContain('speed');
 	});
 
 	it('buildDeviceStreams_watchOnly_attributesAllPresentChannelsToWatch', () => {
