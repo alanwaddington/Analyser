@@ -17,7 +17,6 @@
 		referenceIndex = undefined,
 		groupId,
 		onHoverDistance = undefined,
-		onChartReady = undefined,
 		externalHoverDistance = undefined,
 	}: {
 		channel: ChannelKey;
@@ -27,8 +26,6 @@
 		groupId: string;
 		/** Emits the hovered x-axis distance in metres, or null when the cursor leaves */
 		onHoverDistance?: (distanceMetres: number | null) => void;
-		/** Called once with the chart instance after mount so callers can drive crosshairs */
-		onChartReady?: (chartInstance: ECharts) => void;
 		/** When set, drives the chart crosshair to this distance in metres (map→chart sync) */
 		externalHoverDistance?: number | null;
 	} = $props();
@@ -219,6 +216,9 @@
 		if (onHoverDistance) {
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			chart.on('updateAxisPointer', (event: any) => {
+				// Only emit in distance mode — in time mode axisInfo.value is seconds,
+				// not km, so converting it would produce meaningless distance values.
+				if ($xAxisMode !== 'distance') return;
 				const axisInfo = event?.axesInfo?.[0];
 				if (axisInfo != null) {
 					// x-axis value is in km (distance mode) — convert to metres
@@ -229,11 +229,6 @@
 			chart.getZr().on('globalout', () => {
 				onHoverDistance!(null);
 			});
-		}
-
-		// Expose chart instance to parent so it can dispatch showTip/hideTip actions
-		if (onChartReady) {
-			onChartReady(chart);
 		}
 
 		mq = window.matchMedia('(prefers-color-scheme: dark)');

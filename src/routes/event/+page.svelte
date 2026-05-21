@@ -75,9 +75,6 @@
 	/** Distance in metres from map hover → drives chart crosshairs */
 	let mapHoveredDistance = $state<number | null>(null);
 
-	/** Reference to any one chart instance for dispatchAction (propagates to all via echarts.connect) */
-	let syncChartRef: import('echarts').ECharts | undefined;
-
 	function handleChartHoverDistance(distMetres: number | null) {
 		if ($xAxisMode !== 'distance') return;
 		chartHoveredDistance = distMetres;
@@ -177,8 +174,7 @@
 								referenceIndex={$referenceIndex}
 								groupId="event-charts"
 								onHoverDistance={chartIdx === 0 ? handleChartHoverDistance : undefined}
-								onChartReady={chartIdx === 0 ? (c) => { syncChartRef = c; } : undefined}
-								externalHoverDistance={mapHoveredDistance}
+								externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
 							/>
 						</div>
 					{/each}
