@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Activity } from '$lib/types';
 	import { timeOffsets } from '$lib/stores/session';
+	import { nudgeOffset, parseOffset } from './TimeOffsetControl.utils.ts';
 
 	let { activities, autoOffsets }: {
 		activities: Activity[];
@@ -20,24 +21,21 @@
 
 	function toggle() { expanded = !expanded; }
 
-	function clamp(v: number, min: number, max: number): number {
-		return Math.min(max, Math.max(min, v));
-	}
-
 	function nudge(activityId: string, delta: number): void {
 		timeOffsets.update(m => {
 			const next = new Map(m);
 			const current = next.get(activityId) ?? 0;
-			next.set(activityId, clamp(current + delta, -3600, 3600));
+			next.set(activityId, nudgeOffset(current, delta));
 			return next;
 		});
 	}
 
 	function setOffset(activityId: string, value: number): void {
-		if (isNaN(value)) return;
+		const parsed = parseOffset(value);
+		if (parsed === null) return;
 		timeOffsets.update(m => {
 			const next = new Map(m);
-			next.set(activityId, clamp(Math.round(value), -3600, 3600));
+			next.set(activityId, parsed);
 			return next;
 		});
 	}
