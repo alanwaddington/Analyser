@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { activeDeviceIndices } from '$lib/stores/session';
-	import { CHANNEL_META } from '$lib/types';
-	import type { DeviceStream } from '$lib/types';
+	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
+	import type { CrossFileStream } from '$lib/types';
 	import {
 		deriveDeviceLabel,
 		groupStreamsByChannel,
@@ -9,54 +9,89 @@
 	} from '$lib/utils/deviceChannels';
 	import { setDeviceLabel, removeDeviceLabel } from '$lib/stores/deviceLabels';
 
-	let { deviceStreams }: { deviceStreams: DeviceStream[] } = $props();
+	let { streams, multiFile = false }: {
+		streams: CrossFileStream[];
+		multiFile?: boolean;
+	} = $props();
 
 	// Which devices measure 3+ channels — shown as a single expandable pill
 	const MULTI_METRIC_THRESHOLD = 3;
 
-	const channelGroups = $derived(groupStreamsByChannel(deviceStreams));
-
-	// Devices with 3+ channels get a single expandable pill
-	const multiMetricDeviceIndices = $derived(
+	// Keys of streams with 3+ channels
+	const multiMetricKeys = $derived(
 		new Set(
-			deviceStreams
-				.filter(s => s.channels.length >= MULTI_METRIC_THRESHOLD)
-				.map(s => s.device.deviceIndex)
+			streams
+				.filter(cfs => cfs.stream.channels.length >= MULTI_METRIC_THRESHOLD)
+				.map(cfs => cfs.key)
 		)
 	);
 
-	// Devices that are connected but contributed no data to the record stream
-	const noDataDevices = $derived(deviceStreams.filter(s => s.channels.length === 0));
+	// Streams with no channel data — connected but recorded nothing
+	const noDataStreams = $derived(streams.filter(cfs => cfs.stream.channels.length === 0));
 
-	// Devices that have at least one channel — these can be selected/deselected
-	const selectableDevices = $derived(deviceStreams.filter(s => s.channels.length > 0));
+	// Streams with at least one channel — can be toggled
+	const selectableStreams = $derived(streams.filter(cfs => cfs.stream.channels.length > 0));
 
-	// True when every selectable device is currently active
+	// True when every selectable stream is currently active
 	const allSelected = $derived(
-		selectableDevices.length > 0 &&
-		selectableDevices.every(s => $activeDeviceIndices.has(s.device.deviceIndex))
+		selectableStreams.length > 0 &&
+		selectableStreams.every(cfs => $activeDeviceIndices.has(cfs.key))
 	);
 
-	// Track which multi-metric pills are expanded
-	let expandedDevices = $state(new Set<number>());
+	// Track which multi-metric pills are expanded (keyed by CrossFileStream.key)
+	let expandedDevices = $state(new Set<string>());
 
-	// Inline rename state: deviceIndex → current edit value (null = not editing)
-	let renamingDevice = $state<number | null>(null);
+	// Inline rename state: key → current edit value (null = not editing)
+	let renamingDevice = $state<string | null>(null);
 	let renameValue = $state('');
 
-	function startRename(deviceIndex: number, currentLabel: string) {
-		renamingDevice = deviceIndex;
+	// File groups for multi-file mode: ordered list derived from stream order
+	const fileGroups = $derived.by(() => {
+		const seen = new Map<string, { filename: string; colourIndex: number; streams: CrossFileStream[] }>();
+		for (const cfs of streams) {
+			if (!seen.has(cfs.activity.id)) {
+				seen.set(cfs.activity.id, {
+					filename: cfs.activity.filename,
+					colourIndex: seen.size,
+					streams: [],
+				});
+			}
+			seen.get(cfs.activity.id)!.streams.push(cfs);
+		}
+		return [...seen.values()];
+	});
+
+	// Derive visible channel groups for a given subset of streams
+	function deriveVisibleGroups(
+		groupStreams: CrossFileStream[],
+		mmKeys: Set<string>
+	): Array<{ channelKey: string; streams: CrossFileStream[]; comparable: boolean }> {
+		const groups: Array<{ channelKey: string; streams: CrossFileStream[]; comparable: boolean }> = [];
+		const chGroups = groupStreamsByChannel(groupStreams);
+		for (const [ch, chStreams] of chGroups) {
+			const hasNonMulti = chStreams.some(cfs => !mmKeys.has(cfs.key));
+			if (!hasNonMulti && mmKeys.size > 0) continue;
+			groups.push({ channelKey: ch, streams: chStreams, comparable: isComparableGroup(chStreams) });
+		}
+		return groups;
+	}
+
+	// Visible channel groups for single-file mode
+	const visibleGroups = $derived(deriveVisibleGroups(streams, multiMetricKeys));
+
+	function startRename(key: string, currentLabel: string) {
+		renamingDevice = key;
 		renameValue = currentLabel;
 	}
 
-	function commitRename(stream: DeviceStream) {
+	function commitRename(cfs: CrossFileStream) {
 		const trimmed = renameValue.trim();
-		if (trimmed && stream.device.antDeviceNumber != null) {
-			setDeviceLabel(stream.device.antDeviceNumber, trimmed);
-			stream.device.label = trimmed; // update in-memory immediately
-		} else if (!trimmed && stream.device.antDeviceNumber != null) {
-			removeDeviceLabel(stream.device.antDeviceNumber);
-			stream.device.label = undefined;
+		if (trimmed && cfs.stream.device.antDeviceNumber != null) {
+			setDeviceLabel(cfs.stream.device.antDeviceNumber, trimmed);
+			cfs.stream.device.label = trimmed;
+		} else if (!trimmed && cfs.stream.device.antDeviceNumber != null) {
+			removeDeviceLabel(cfs.stream.device.antDeviceNumber);
+			cfs.stream.device.label = undefined;
 		}
 		renamingDevice = null;
 	}
@@ -65,24 +100,24 @@
 		renamingDevice = null;
 	}
 
-	function toggleDevice(deviceIndex: number) {
+	function toggleDevice(key: string) {
 		activeDeviceIndices.update(indices => {
 			const next = new Set(indices);
-			if (next.has(deviceIndex)) {
-				next.delete(deviceIndex);
+			if (next.has(key)) {
+				next.delete(key);
 			} else {
-				next.add(deviceIndex);
+				next.add(key);
 			}
 			return next;
 		});
 	}
 
-	function toggleExpanded(deviceIndex: number) {
+	function toggleExpanded(key: string) {
 		expandedDevices = new Set(expandedDevices);
-		if (expandedDevices.has(deviceIndex)) {
-			expandedDevices.delete(deviceIndex);
+		if (expandedDevices.has(key)) {
+			expandedDevices.delete(key);
 		} else {
-			expandedDevices.add(deviceIndex);
+			expandedDevices.add(key);
 		}
 	}
 
@@ -90,35 +125,105 @@
 		if (allSelected) {
 			activeDeviceIndices.set(new Set());
 		} else {
-			activeDeviceIndices.set(
-				new Set(selectableDevices.map(s => s.device.deviceIndex))
-			);
+			activeDeviceIndices.set(new Set(selectableStreams.map(cfs => cfs.key)));
 		}
 	}
-
-	// Build the ordered list of channel groups, skipping channels that belong
-	// only to multi-metric devices (those are shown under their expandable pill)
-	const visibleGroups = $derived.by(() => {
-		const groups: Array<{ channelKey: string; streams: DeviceStream[]; comparable: boolean }> = [];
-		for (const [ch, streams] of channelGroups) {
-			// If all streams for this channel are multi-metric devices, skip the group
-			// (they appear inside the expandable pill instead)
-			const hasNonMulti = streams.some(
-				s => !multiMetricDeviceIndices.has(s.device.deviceIndex)
-			);
-			if (!hasNonMulti && multiMetricDeviceIndices.size > 0) continue;
-			groups.push({ channelKey: ch, streams, comparable: isComparableGroup(streams) });
-		}
-		return groups;
-	});
 </script>
 
-{#if deviceStreams.length === 0}
+<!--
+  Reusable snippets for rendering device pills and channel groups.
+  Used by both single-file (flat) and multi-file (grouped) layouts.
+-->
+
+{#snippet multiMetricPill(cfs: CrossFileStream)}
+	{@const label = deriveDeviceLabel(cfs.stream.device)}
+	{@const isActive = $activeDeviceIndices.has(cfs.key)}
+	{@const isExpanded = expandedDevices.has(cfs.key)}
+	<div class="multi-device">
+		<div class="multi-row">
+			<button
+				class="pill"
+				class:active={isActive}
+				onclick={() => toggleDevice(cfs.key)}
+				aria-pressed={isActive}
+			>{label}</button>
+			<button
+				class="expand-btn"
+				class:expanded={isExpanded}
+				onclick={() => toggleExpanded(cfs.key)}
+				aria-label="{isExpanded ? 'Collapse' : 'Expand'} channels for {label}"
+			>▾</button>
+		</div>
+		{#if isExpanded}
+			<div class="sub-channels">
+				{#each cfs.stream.channels as ch}
+					<span class="sub-channel">{CHANNEL_META[ch as keyof typeof CHANNEL_META]?.label ?? ch}</span>
+				{/each}
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet channelGroup(group: { channelKey: string; streams: CrossFileStream[]; comparable: boolean })}
+	<div class="channel-group">
+		<span class="group-label">
+			{CHANNEL_META[group.channelKey as keyof typeof CHANNEL_META]?.label ?? group.channelKey}
+			{#if group.comparable}<span class="comparable-dot" title="Multiple devices — comparable">✦</span>{/if}
+		</span>
+		<div class="group-pills">
+			{#each group.streams as cfs (cfs.key)}
+				{@const label = deriveDeviceLabel(cfs.stream.device)}
+				{@const isActive = $activeDeviceIndices.has(cfs.key)}
+				{#if renamingDevice === cfs.key}
+					<input
+						class="rename-input"
+						type="text"
+						bind:value={renameValue}
+						autofocus
+						onblur={() => commitRename(cfs)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') commitRename(cfs);
+							else if (e.key === 'Escape') cancelRename();
+						}}
+						aria-label="Rename device"
+					/>
+				{:else}
+					<button
+						class="pill"
+						class:active={isActive}
+						onclick={() => toggleDevice(cfs.key)}
+						ondblclick={() => startRename(cfs.key, label)}
+						aria-pressed={isActive}
+						title="Double-click to rename"
+					>{label}</button>
+				{/if}
+			{/each}
+		</div>
+	</div>
+{/snippet}
+
+{#snippet noDataSection(noData: CrossFileStream[])}
+	{#if noData.length > 0}
+		<div class="channel-group">
+			<span class="group-label">Connected · no data</span>
+			<div class="group-pills">
+				{#each noData as cfs (cfs.key)}
+					<span
+						class="pill pill--no-data"
+						title="Connected but no data recorded"
+					>{deriveDeviceLabel(cfs.stream.device)}</span>
+				{/each}
+			</div>
+		</div>
+	{/if}
+{/snippet}
+
+{#if streams.length === 0}
 	<p class="empty">No devices detected.</p>
 {:else}
 	<div class="bar">
 		<!-- Select all / Deselect all quick toggle -->
-		{#if selectableDevices.length > 1}
+		{#if selectableStreams.length > 1}
 			<button
 				class="select-all-btn"
 				onclick={toggleAll}
@@ -126,88 +231,49 @@
 			>{allSelected ? 'Deselect all' : 'Select all'}</button>
 		{/if}
 
-		<!-- Multi-metric devices get a single expandable pill first -->
-		{#each deviceStreams.filter(s => multiMetricDeviceIndices.has(s.device.deviceIndex)) as stream (stream.device.deviceIndex)}
-			{@const label = deriveDeviceLabel(stream.device)}
-			{@const isActive = $activeDeviceIndices.has(stream.device.deviceIndex)}
-			{@const isExpanded = expandedDevices.has(stream.device.deviceIndex)}
-			<div class="multi-device">
-				<div class="multi-row">
-					<button
-						class="pill"
-						class:active={isActive}
-						onclick={() => toggleDevice(stream.device.deviceIndex)}
-						aria-pressed={isActive}
-					>{label}</button>
-					<button
-						class="expand-btn"
-						class:expanded={isExpanded}
-						onclick={() => toggleExpanded(stream.device.deviceIndex)}
-						aria-label="{isExpanded ? 'Collapse' : 'Expand'} channels for {label}"
-					>▾</button>
-				</div>
-				{#if isExpanded}
-					<div class="sub-channels">
-						{#each stream.channels as ch}
-							<span class="sub-channel">{CHANNEL_META[ch as keyof typeof CHANNEL_META]?.label ?? ch}</span>
-						{/each}
+		{#if multiFile}
+			<!-- Multi-file: group by file with colored left-border headers -->
+			{#each fileGroups as group}
+				{@const groupColour = FILE_COLOURS[group.colourIndex % FILE_COLOURS.length]}
+				{@const grpMmKeys = new Set(group.streams.filter(cfs => cfs.stream.channels.length >= MULTI_METRIC_THRESHOLD).map(cfs => cfs.key))}
+				{@const grpVisibleGroups = deriveVisibleGroups(group.streams, grpMmKeys)}
+				{@const grpNoData = group.streams.filter(cfs => cfs.stream.channels.length === 0)}
+
+				<div class="file-group">
+					<div class="file-header" style="border-left-color: {groupColour}">
+						<span class="file-name">{group.filename}</span>
 					</div>
-				{/if}
-			</div>
-		{/each}
 
-		<!-- Per-channel groups for regular (non-multi-metric) devices -->
-		{#each visibleGroups as group (group.channelKey)}
-			<div class="channel-group">
-				<span class="group-label">
-					{CHANNEL_META[group.channelKey as keyof typeof CHANNEL_META]?.label ?? group.channelKey}
-					{#if group.comparable}<span class="comparable-dot" title="Multiple devices — comparable">✦</span>{/if}
-				</span>
-				<div class="group-pills">
-					{#each group.streams as stream (stream.device.deviceIndex)}
-						{@const label = deriveDeviceLabel(stream.device)}
-						{@const isActive = $activeDeviceIndices.has(stream.device.deviceIndex)}
-						{#if renamingDevice === stream.device.deviceIndex}
-							<input
-								class="rename-input"
-								type="text"
-								bind:value={renameValue}
-								autofocus
-								onblur={() => commitRename(stream)}
-								onkeydown={(e) => {
-									if (e.key === 'Enter') commitRename(stream);
-									else if (e.key === 'Escape') cancelRename();
-								}}
-								aria-label="Rename device"
-							/>
-						{:else}
-							<button
-								class="pill"
-								class:active={isActive}
-								onclick={() => toggleDevice(stream.device.deviceIndex)}
-								ondblclick={() => startRename(stream.device.deviceIndex, label)}
-								aria-pressed={isActive}
-								title="Double-click to rename"
-							>{label}</button>
-						{/if}
+					<!-- Multi-metric devices for this file -->
+					{#each group.streams.filter(cfs => grpMmKeys.has(cfs.key)) as cfs (cfs.key)}
+						{@render multiMetricPill(cfs)}
 					{/each}
-				</div>
-			</div>
-		{/each}
 
-		<!-- Connected devices that recorded no data -->
-		{#if noDataDevices.length > 0}
-			<div class="channel-group">
-				<span class="group-label">Connected · no data</span>
-				<div class="group-pills">
-					{#each noDataDevices as stream (stream.device.deviceIndex)}
-						<span
-							class="pill pill--no-data"
-							title="Connected but no data recorded"
-						>{deriveDeviceLabel(stream.device)}</span>
+					<!-- Per-channel groups for this file -->
+					{#each grpVisibleGroups as grp (grp.channelKey + group.filename)}
+						{@render channelGroup(grp)}
 					{/each}
+
+					<!-- No-data devices for this file -->
+					{@render noDataSection(grpNoData)}
 				</div>
-			</div>
+			{/each}
+
+		{:else}
+			<!-- Single-file: flat layout (identical to previous behaviour) -->
+
+			<!-- Multi-metric devices get a single expandable pill first -->
+			{#each streams.filter(cfs => multiMetricKeys.has(cfs.key)) as cfs (cfs.key)}
+				{@render multiMetricPill(cfs)}
+			{/each}
+
+			<!-- Per-channel groups for regular (non-multi-metric) devices -->
+			{#each visibleGroups as group (group.channelKey)}
+				{@render channelGroup(group)}
+			{/each}
+
+			<!-- Connected devices that recorded no data -->
+			{@render noDataSection(noDataStreams)}
 		{/if}
 	</div>
 {/if}
@@ -243,6 +309,33 @@
 		outline-offset: 2px;
 	}
 
+	/* ── Multi-file grouping ─────────────────────────────────────── */
+
+	.file-group {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		width: 100%;
+		margin-bottom: 4px;
+	}
+
+	.file-header {
+		border-left: 3px solid; /* color set via inline style */
+		padding: 4px 0 2px 8px;
+	}
+
+	.file-name {
+		font-size: 0.7rem;
+		color: var(--color-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		display: block;
+		max-width: 160px;
+	}
+
+	/* ── Channel groups ──────────────────────────────────────────── */
+
 	.channel-group {
 		display: flex;
 		flex-direction: column;
@@ -270,6 +363,8 @@
 		flex-wrap: wrap;
 		gap: 4px;
 	}
+
+	/* ── Pills ───────────────────────────────────────────────────── */
 
 	.pill {
 		padding: 3px 10px;
@@ -309,7 +404,8 @@
 		color: var(--color-muted);
 	}
 
-	/* Multi-metric device pill layout */
+	/* ── Multi-metric expandable pill ───────────────────────────── */
+
 	.multi-device {
 		display: flex;
 		flex-direction: column;
