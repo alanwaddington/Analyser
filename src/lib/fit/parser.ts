@@ -54,6 +54,8 @@ interface FitRecord {
 	skin_temperature?: number;
 	vertical_oscillation?: number;
 	ground_contact_time?: number;
+	stance_time?: number;        // Garmin/Stryd: ground contact time (synonym for ground_contact_time)
+	step_length?: number;        // Garmin/Stryd: stride length in mm
 	position_lat?: number;
 	position_long?: number;
 }
@@ -125,7 +127,8 @@ export function normaliseRecord(r: FitRecord): ActivityRecord {
 		coreTemperature: r.core_temperature,
 		skinTemperature: r.skin_temperature,
 		verticalOscillation: r.vertical_oscillation,
-		groundContactTime: r.ground_contact_time,
+		groundContactTime: r.ground_contact_time ?? r.stance_time,
+		strideLength: r.step_length,
 		position:
 			r.position_lat != null && r.position_long != null
 				? { lat: r.position_lat, lon: r.position_long }

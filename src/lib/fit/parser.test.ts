@@ -3,6 +3,42 @@ import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams } from './pars
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
+describe('normaliseRecord — running dynamics field mapping', () => {
+	it('normaliseRecord_stanceTime_mapsToGroundContactTime', () => {
+		// Garmin and Stryd devices output stance_time rather than ground_contact_time
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, stance_time: 286 } as any);
+		expect(record.groundContactTime).toBe(286);
+	});
+
+	it('normaliseRecord_groundContactTime_mapsToGroundContactTime', () => {
+		// Standard FIT field also accepted
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, ground_contact_time: 250 } as any);
+		expect(record.groundContactTime).toBe(250);
+	});
+
+	it('normaliseRecord_groundContactTimeTakesPrecedenceOverStanceTime', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, ground_contact_time: 250, stance_time: 286 } as any);
+		expect(record.groundContactTime).toBe(250);
+	});
+
+	it('normaliseRecord_stepLength_mapsToStrideLength', () => {
+		// Garmin/Stryd output step_length (mm) which maps to strideLength
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, step_length: 961 } as any);
+		expect(record.strideLength).toBe(961);
+	});
+
+	it('normaliseRecord_noRunningDynamics_fieldsAreUndefined', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10 } as any);
+		expect(record.groundContactTime).toBeUndefined();
+		expect(record.strideLength).toBeUndefined();
+	});
+});
+
 describe('normaliseRecord — power field mapping', () => {
 	it('normaliseRecord_strydDeveloperPower_mapsToActivityRecordPower', () => {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
