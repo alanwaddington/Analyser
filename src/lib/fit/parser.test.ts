@@ -102,6 +102,25 @@ describe('buildDeviceStreams', () => {
 		const watchStream = streams.find(s => s.device === watch);
 		expect(hrmStream?.channels).toContain('heartRate');
 		expect(watchStream?.channels).not.toContain('heartRate');
+		// speed is unclaimed by the HRM and must be allocated to the watch
+		expect(watchStream?.channels).toContain('speed');
+	});
+
+	it('buildDeviceStreams_externalHRMWithNoWatchDevice_unclaimedChannelsAllocatedViaFallback', () => {
+		// Garmin FIT files often report the watch itself with device_type=0, meaning
+		// Pass 2 finds no watch devices.  When an HRM has claimed heartRate, the
+		// remaining channels (speed, pace, altitude, etc.) must still be allocated via
+		// the safety-net fallback — NOT silently dropped.
+		const watchWithType = makeDevice({ deviceIndex: 0, antDeviceType: 0 });
+		const hrm = makeDevice({ deviceIndex: 1, antDeviceType: ANT_DEVICE_TYPE.HEART_RATE });
+		const records = [makeRecord({ heartRate: 140, speed: 12 })];
+		const streams = buildDeviceStreams([watchWithType, hrm], records);
+		const hrmStream = streams.find(s => s.device === hrm);
+		// Find the stream(s) containing speed — must exist even though HRM already has heartRate
+		const speedStream = streams.find(s => s.channels.includes('speed'));
+		expect(hrmStream?.channels).toContain('heartRate');
+		expect(speedStream).toBeDefined();
+		expect(speedStream?.channels).toContain('speed');
 	});
 
 	it('buildDeviceStreams_powerMeter_attributesPowerChannelsToPowerMeter', () => {

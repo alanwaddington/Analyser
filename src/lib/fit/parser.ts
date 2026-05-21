@@ -183,21 +183,21 @@ export function buildDeviceStreams(
 	const watchDevices = devices.filter(d => d.antDeviceType == null);
 	for (const device of watchDevices) {
 		const channels = ALL_RECORD_CHANNELS.filter(ch => present.has(ch) && !claimed.has(ch));
+		channels.forEach(ch => claimed.add(ch)); // mark as claimed so safety net skips them
 		if (channels.length === 0) continue;
 		streams.push({ device, channels });
 	}
 
-	// Safety net: if no stream has any channels (e.g. all device_info entries had
-	// antDeviceType set, leaving unclaimed channels with no watch device to receive
-	// them), promote the first device to a catch-all so the UI always has data to
-	// show.
-	const hasChannels = streams.some(s => s.channels.length > 0);
-	if (!hasChannels) {
-		const unclaimed = ALL_RECORD_CHANNELS.filter(ch => present.has(ch) && !claimed.has(ch));
-		if (unclaimed.length > 0) {
-			const primary = streams[0]?.device ?? { deviceIndex: 0 };
-			streams.push({ device: primary, channels: unclaimed });
-		}
+	// Safety net: any present channels still unclaimed after both passes (e.g. all
+	// device_info entries had antDeviceType set, or only external sensors were
+	// recognised by ANT+ type) are given to the first device so the UI always has
+	// data to show.  This fires even when other streams already have channels — a
+	// typical Garmin + HRM file has heartRate claimed by the HRM but speed/pace/
+	// altitude unclaimed, and this ensures those channels are never silently dropped.
+	const unclaimed = ALL_RECORD_CHANNELS.filter(ch => present.has(ch) && !claimed.has(ch));
+	if (unclaimed.length > 0) {
+		const primary = streams[0]?.device ?? { deviceIndex: 0 };
+		streams.push({ device: primary, channels: unclaimed });
 	}
 
 	return streams;
