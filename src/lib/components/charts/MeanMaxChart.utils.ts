@@ -4,6 +4,8 @@ import { meanMaxCurve } from '$lib/analytics/meanmax';
 export interface MeanMaxSeriesInput {
 	activity: Activity;
 	colourIndex: number;
+	colour?: string;   // explicit colour override; if set, takes precedence over colourIndex lookup
+	label?: string;    // optional override for series name in chart legend
 }
 
 export function buildMeanMaxData(records: ActivityRecord[]): [number, number][] {

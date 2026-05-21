@@ -39,7 +39,7 @@
 	const tooltipBg  = () => isDark ? '#0f172a' : '#ffffff';
 	const tooltipText = () => isDark ? '#e2e8f0' : '#0f172a';
 
-	function buildAltitudeData(activity: Activity): [number, number | null][] {
+	function buildAltitudeData(activity: Activity, timeOffset = 0): [number, number | null][] {
 		if ($xAxisMode === 'distance') {
 			const aligned = interpolateToDistanceAxis(activity);
 			const altData = aligned.channels.get('altitude') ?? [];
@@ -47,10 +47,10 @@
 		}
 		const raw = extractChannel(activity.records, 'altitude');
 		const xValues = buildXValues(activity.records, $xAxisMode);
-		return xValues.map((x, i) => [x, raw[i]]);
+		return xValues.map((x, i) => [x + timeOffset, raw[i]]);
 	}
 
-	function buildData(activity: Activity): [number, number | null][] {
+	function buildData(activity: Activity, timeOffset = 0): [number, number | null][] {
 		if ($xAxisMode === 'distance') {
 			const aligned = interpolateToDistanceAxis(activity);
 			const channelData = aligned.channels.get(channel) ?? [];
@@ -60,7 +60,7 @@
 		const raw = extractChannel(activity.records, channel);
 		const smoothed = smooth(raw, $smoothing);
 		const xValues = buildXValues(activity.records, $xAxisMode);
-		return xValues.map((x, i) => [x, smoothed[i]]);
+		return xValues.map((x, i) => [x + timeOffset, smoothed[i]]);
 	}
 
 	function buildOption(): EChartsOption {
@@ -69,7 +69,9 @@
 		const gc = gridColour();
 
 		const showAltBackdrop = channel !== 'altitude' && seriesInputs.length > 0;
-		const altData = showAltBackdrop ? buildAltitudeData(seriesInputs[0].activity) : [];
+		const altData = showAltBackdrop
+			? buildAltitudeData(seriesInputs[0].activity, seriesInputs[0].timeOffset ?? 0)
+			: [];
 		const hasAlt = altData.some(([, v]) => v != null);
 
 		const altFill = isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.2)';
@@ -159,7 +161,7 @@
 						type: 'line' as const,
 						name: s.label ?? s.activity.filename,
 						yAxisIndex: 0,
-						data: hiddenSeries.has(i) ? [] : buildData(s.activity),
+						data: hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0),
 						lineStyle: {
 							color: colour,
 							type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
