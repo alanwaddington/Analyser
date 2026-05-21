@@ -3,6 +3,7 @@ import type { Activity, ActivityRecord, ChannelKey } from '$lib/types';
 export interface SeriesInput {
 	activity: Activity;
 	colourIndex: number;
+	label?: string; // optional override for the series name in chart legend
 }
 
 export function extractChannel(records: ActivityRecord[], channel: ChannelKey): (number | null)[] {

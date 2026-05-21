@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { activities, activeChannels, xAxisMode } from '$lib/stores/session';
-	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
-	import { deriveAvailableChannels } from '$lib/utils/channels';
+	import { activities, activeDeviceIndices, xAxisMode } from '$lib/stores/session';
+	import { CHANNEL_META, DEVICE_COLOURS } from '$lib/types';
+	import type { ChannelKey } from '$lib/types';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
 	import { summarise } from '$lib/analytics/summary';
 	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils';
@@ -11,7 +11,9 @@
 	import TimeSeriesChart from '$lib/components/charts/TimeSeriesChart.svelte';
 	import MeanMaxChart from '$lib/components/charts/MeanMaxChart.svelte';
 	import ActivityMap from '$lib/components/map/ActivityMap.svelte';
-	import ChannelToggleBar from '$lib/components/ui/ChannelToggleBar.svelte';
+	import DeviceToggleBar from '$lib/components/ui/DeviceToggleBar.svelte';
+	import { getActiveStreamsForChannel } from '$lib/utils/deviceChannels';
+	import { deriveDeviceLabel } from '$lib/utils/deviceChannels';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -42,17 +44,47 @@
 		}
 	}
 
-	const availableChannels = $derived(deriveAvailableChannels($activities));
-	const seriesInputs: SeriesInput[] = $derived(
-		$activities.map((a, i) => ({ activity: a, colourIndex: i })),
-	);
-	const lapMarkers = $derived(buildLapMarkers($activities[0], $xAxisMode));
+	// The single loaded activity (device comparison is single-file)
+	const activity = $derived($activities[0]);
+	const deviceStreams = $derived(activity?.deviceStreams ?? []);
+	const lapMarkers = $derived(buildLapMarkers(activity, $xAxisMode));
 
-	$effect(() => {
-		if (availableChannels.length > 0 && $activeChannels.length === 0) {
-			activeChannels.set(availableChannels);
+	// Derive which channels have at least one active device
+	const activeChannels = $derived<ChannelKey[]>(() => {
+		if (!activity || $activeDeviceIndices.size === 0) return [];
+		const channels = new Set<ChannelKey>();
+		for (const stream of deviceStreams) {
+			if ($activeDeviceIndices.has(stream.device.deviceIndex)) {
+				stream.channels.forEach(ch => channels.add(ch));
+			}
 		}
+		return Array.from(channels);
 	});
+
+	// Build series inputs for a given channel: one per active device that claims it
+	function buildSeriesForChannel(channel: ChannelKey): SeriesInput[] {
+		if (!activity) return [];
+		const activeStreams = getActiveStreamsForChannel(
+			deviceStreams,
+			channel,
+			$activeDeviceIndices
+		);
+		return activeStreams.map((stream, i) => ({
+			activity,
+			colourIndex: i,
+			label: deriveDeviceLabel(stream.device),
+		}));
+	}
+
+	// Series inputs for mean/max (all active device streams, de-duped to the activity)
+	const meanMaxSeriesInputs: SeriesInput[] = $derived(
+		activity ? [{ activity, colourIndex: 0 }] : []
+	);
+
+	// Summary: devices that have at least one active channel
+	const summaryDevices = $derived(
+		deviceStreams.filter(s => $activeDeviceIndices.has(s.device.deviceIndex))
+	);
 
 	$effect(() => {
 		if ($activities.length === 0) goto('/');
@@ -83,7 +115,7 @@
 	>
 		{#if activeTab === 'charts'}
 			<div class="toolbar">
-				<ChannelToggleBar channels={availableChannels} />
+				<DeviceToggleBar {deviceStreams} />
 				<div class="axis-toggle" role="group" aria-label="X-axis mode">
 					<button
 						class="axis-btn"
@@ -100,18 +132,23 @@
 				</div>
 			</div>
 			<div class="charts-scroll">
-				{#if $activeChannels.length === 0}
-					<p class="empty">No channels selected.</p>
+				{#if $activeDeviceIndices.size === 0}
+					<p class="empty">Toggle a device above to see its data.</p>
+				{:else if activeChannels().length === 0}
+					<p class="empty">No data available for the selected devices.</p>
 				{:else}
-					{#each $activeChannels as channel (channel)}
-						<div class="card">
-							<TimeSeriesChart
-								{channel}
-								{seriesInputs}
-								{lapMarkers}
-								groupId="compare-charts"
-							/>
-						</div>
+					{#each activeChannels() as channel (channel)}
+						{@const seriesInputs = buildSeriesForChannel(channel)}
+						{#if seriesInputs.length > 0}
+							<div class="card">
+								<TimeSeriesChart
+									{channel}
+									{seriesInputs}
+									{lapMarkers}
+									groupId="compare-charts"
+								/>
+							</div>
+						{/if}
 					{/each}
 				{/if}
 			</div>
@@ -122,40 +159,45 @@
 		{:else if activeTab === 'meanmax'}
 			<div class="cards-scroll">
 				<div class="card card--meanmax">
-					<MeanMaxChart {seriesInputs} />
+					<MeanMaxChart seriesInputs={meanMaxSeriesInputs} />
 				</div>
 			</div>
 		{:else if activeTab === 'summary'}
 			<div class="summary-scroll">
-				<table class="summary-table">
-					<thead>
-						<tr>
-							<th class="col-channel"></th>
-							{#each $activities as activity, i}
-								<th class="col-file" style="color: {FILE_COLOURS[i % FILE_COLOURS.length]}">
-									{activity.filename}
-								</th>
-							{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each availableChannels as ch, rowIdx}
-							<tr class:row-alt={rowIdx % 2 === 1}>
-								<td class="cell-label">{CHANNEL_META[ch].label}</td>
-								{#each $activities as activity}
-									{@const s = summarise(extractChannel(activity.records, ch))}
-									<td class="cell-stat">
-										{#if s}
-											{s.avg.toFixed(1)} / {s.max.toFixed(1)} / {s.min.toFixed(1)}
-										{:else}
-											—
-										{/if}
-									</td>
+				{#if summaryDevices.length === 0}
+					<p class="empty">Toggle devices above to see their statistics.</p>
+				{:else}
+					<table class="summary-table">
+						<thead>
+							<tr>
+								<th class="col-channel"></th>
+								{#each summaryDevices as stream, i}
+									<th class="col-device">
+										<span class="device-dot" style="background:{DEVICE_COLOURS[i % DEVICE_COLOURS.length]}"></span>
+										{deriveDeviceLabel(stream.device)}
+									</th>
 								{/each}
 							</tr>
-						{/each}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{#each activeChannels() as ch, rowIdx}
+								<tr class:row-alt={rowIdx % 2 === 1}>
+									<td class="cell-label">{CHANNEL_META[ch].label}</td>
+									{#each summaryDevices as stream}
+										{@const s = summarise(extractChannel(activity.records, ch))}
+										<td class="cell-stat">
+											{#if s}
+												{s.avg.toFixed(1)} / {s.max.toFixed(1)} / {s.min.toFixed(1)}
+											{:else}
+												—
+											{/if}
+										</td>
+									{/each}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -335,13 +377,24 @@
 		width: 140px;
 	}
 
-	.col-file {
+	.col-device {
 		font-weight: 600;
 		font-size: 0.75rem;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 160px;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.device-dot {
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
 	}
 
 	.cell-label {

@@ -126,4 +126,16 @@ export const FILE_COLOURS = [
 	'#84cc16', // Lime
 ] as const;
 
+// Distinct colour palette for device comparison series
+export const DEVICE_COLOURS = [
+	'#f97316', // Orange
+	'#38bdf8', // Sky
+	'#f43f5e', // Rose
+	'#8b5cf6', // Violet
+	'#14b8a6', // Teal
+	'#84cc16', // Lime
+	'#ec4899', // Pink
+	'#06b6d4', // Cyan
+] as const;
+
 export const MAX_FILES = 6;
