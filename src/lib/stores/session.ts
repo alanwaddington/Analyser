@@ -8,6 +8,8 @@ export const referenceIndex = writable<number>(0);
 export const clearing = writable<boolean>(false);
 export const lastMode = writable<'compare' | 'event'>('compare');
 export const activeChannels = writable<ChannelKey[]>([]);
+// Tracks which device indices are toggled on in device comparison mode
+export const activeDeviceIndices = writable<Set<number>>(new Set());
 
 export function addActivity(activity: Activity): void {
 	activities.update(list => [...list, activity]);
@@ -32,4 +34,5 @@ export function clearActivities(): void {
 	activities.set([]);
 	referenceIndex.set(0);
 	activeChannels.set([]);
+	activeDeviceIndices.set(new Set());
 }

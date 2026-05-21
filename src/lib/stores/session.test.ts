@@ -8,6 +8,7 @@ import {
 	clearing,
 	lastMode,
 	activeChannels,
+	activeDeviceIndices,
 	addActivity,
 	removeActivity,
 	clearActivities,
@@ -24,6 +25,7 @@ function makeActivity(id: string): Activity {
 		records: [],
 		laps: [],
 		devices: [],
+		deviceStreams: [],
 	};
 }
 
@@ -31,6 +33,7 @@ beforeEach(() => {
 	activities.set([]);
 	referenceIndex.set(0);
 	activeChannels.set([]);
+	activeDeviceIndices.set(new Set());
 	smoothing.set(10);
 	xAxisMode.set('time');
 	clearing.set(false);
@@ -141,5 +144,25 @@ describe('clearActivities', () => {
 		expect(get(activities)).toEqual([]);
 		expect(get(referenceIndex)).toBe(0);
 		expect(get(activeChannels)).toEqual([]);
+	});
+
+	it('clearActivities_withActiveDevices_resetsActiveDeviceIndices', () => {
+		activeDeviceIndices.set(new Set([1, 2, 3]));
+		clearActivities();
+		expect(get(activeDeviceIndices).size).toBe(0);
+	});
+});
+
+describe('activeDeviceIndices', () => {
+	it('activeDeviceIndices_onInit_isEmpty', () => {
+		expect(get(activeDeviceIndices).size).toBe(0);
+	});
+
+	it('activeDeviceIndices_canAddAndRemoveIndices', () => {
+		activeDeviceIndices.update(s => { s.add(1); s.add(2); return s; });
+		expect(get(activeDeviceIndices).has(1)).toBe(true);
+		expect(get(activeDeviceIndices).has(2)).toBe(true);
+		activeDeviceIndices.update(s => { s.delete(1); return s; });
+		expect(get(activeDeviceIndices).has(1)).toBe(false);
 	});
 });

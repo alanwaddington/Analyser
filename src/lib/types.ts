@@ -38,7 +38,24 @@ export interface Device {
 	product?: string;
 	serialNumber?: number;
 	antDeviceNumber?: number;
-	label?: string; // user-assigned
+	antDeviceType?: number;  // ANT+ device type from device_info message
+	sourceType?: string;     // 'antplus' | 'bluetooth_low_energy' | 'local' | etc.
+	label?: string;          // user-assigned
+}
+
+export const ANT_DEVICE_TYPE = {
+	HEART_RATE: 120,
+	BIKE_POWER: 11,
+	BIKE_SPEED_CADENCE: 121,
+	BIKE_CADENCE: 122,
+	BIKE_SPEED: 123,
+	STRIDE_SPEED_DISTANCE: 3,
+	RUNNING_DYNAMICS: 36,
+} as const;
+
+export interface DeviceStream {
+	device: Device;
+	channels: ChannelKey[]; // channels this device contributes to the merged record stream
 }
 
 export interface Activity {
@@ -51,6 +68,7 @@ export interface Activity {
 	records: ActivityRecord[];
 	laps: Lap[];
 	devices: Device[];
+	deviceStreams: DeviceStream[]; // per-device channel attribution (always populated)
 }
 
 export interface AlignedSeries {
@@ -106,6 +124,18 @@ export const FILE_COLOURS = [
 	'#8b5cf6', // Violet
 	'#14b8a6', // Teal
 	'#84cc16', // Lime
+] as const;
+
+// Distinct colour palette for device comparison series
+export const DEVICE_COLOURS = [
+	'#f97316', // Orange
+	'#38bdf8', // Sky
+	'#f43f5e', // Rose
+	'#8b5cf6', // Violet
+	'#14b8a6', // Teal
+	'#84cc16', // Lime
+	'#ec4899', // Pink
+	'#06b6d4', // Cyan
 ] as const;
 
 export const MAX_FILES = 6;

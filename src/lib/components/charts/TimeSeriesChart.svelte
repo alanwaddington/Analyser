@@ -153,11 +153,11 @@
 					z: 0,
 				}] : []),
 				...seriesInputs.map((s, i) => {
-					const colour = FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
+					const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
 					const dashed = isDashed(i, referenceIndex);
 					return {
 						type: 'line' as const,
-						name: s.activity.filename,
+						name: s.label ?? s.activity.filename,
 						yAxisIndex: 0,
 						data: hiddenSeries.has(i) ? [] : buildData(s.activity),
 						lineStyle: {
@@ -247,7 +247,7 @@
 				class:series-hidden={hiddenSeries.has(i)}
 				onclick={() => toggleSeries(i)}
 				aria-pressed={!hiddenSeries.has(i)}
-				aria-label="{hiddenSeries.has(i) ? 'Show' : 'Hide'} {s.activity.filename}"
+				aria-label="{hiddenSeries.has(i) ? 'Show' : 'Hide'} {s.label ?? s.activity.filename}"
 			>
 				<svg width="24" height="10" aria-hidden="true" focusable="false">
 					{#if dashed}
@@ -258,7 +258,7 @@
 							stroke={colour} stroke-width="2" />
 					{/if}
 				</svg>
-				<span class="legend-label">{s.activity.filename}</span>
+				<span class="legend-label">{s.label ?? s.activity.filename}</span>
 			</button>
 		{/each}
 	</div>
