@@ -8,8 +8,12 @@ export const referenceIndex = writable<number>(0);
 export const clearing = writable<boolean>(false);
 export const lastMode = writable<'compare' | 'event'>('compare');
 export const activeChannels = writable<ChannelKey[]>([]);
-// Tracks which device indices are toggled on in device comparison mode
-export const activeDeviceIndices = writable<Set<number>>(new Set());
+// Tracks which cross-file device keys are toggled on in device comparison mode
+// Key format: `${activity.id}:${device.deviceIndex}` (see CrossFileStream.key)
+export const activeDeviceIndices = writable<Set<string>>(new Set());
+// Per-file time offsets (seconds) relative to the first loaded file in device comparison mode
+// Key: activity.id, Value: offset in seconds
+export const timeOffsets = writable<Map<string, number>>(new Map());
 
 export function addActivity(activity: Activity): void {
 	activities.update(list => [...list, activity]);
@@ -35,4 +39,5 @@ export function clearActivities(): void {
 	referenceIndex.set(0);
 	activeChannels.set([]);
 	activeDeviceIndices.set(new Set());
+	timeOffsets.set(new Map());
 }

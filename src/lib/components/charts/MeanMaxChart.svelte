@@ -72,10 +72,11 @@
 			},
 			dataZoom: [{ type: 'inside' }],
 			series: seriesInputs.map((s, i) => {
-				const colour = FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
+				const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
+				const name = s.label ?? s.activity.filename;
 				return {
 					type: 'line' as const,
-					name: s.activity.filename,
+					name,
 					data: hiddenSeries.has(i) ? [] : seriesData[i],
 					lineStyle: { color: colour, type: 'solid' as const, width: 1.5 },
 					itemStyle: { color: colour },
@@ -133,18 +134,19 @@
 
 	<div class="chart-legend" role="group" aria-label="Series visibility toggles">
 		{#each seriesInputs as s, i}
-			{@const colour = FILE_COLOURS[s.colourIndex % FILE_COLOURS.length]}
+			{@const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length]}
+			{@const name = s.label ?? s.activity.filename}
 			<button
 				class="legend-btn"
 				class:series-hidden={hiddenSeries.has(i)}
 				onclick={() => toggleSeries(i)}
 				aria-pressed={!hiddenSeries.has(i)}
-				aria-label="{hiddenSeries.has(i) ? 'Show' : 'Hide'} {s.activity.filename}"
+				aria-label="{hiddenSeries.has(i) ? 'Show' : 'Hide'} {name}"
 			>
 				<svg width="24" height="10" aria-hidden="true" focusable="false">
 					<line x1="0" y1="5" x2="24" y2="5" stroke={colour} stroke-width="2" />
 				</svg>
-				<span class="legend-label">{s.activity.filename}</span>
+				<span class="legend-label">{name}</span>
 			</button>
 		{/each}
 	</div>

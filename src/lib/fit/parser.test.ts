@@ -3,6 +3,42 @@ import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams } from './pars
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
+describe('normaliseRecord — running dynamics field mapping', () => {
+	it('normaliseRecord_stanceTime_mapsToGroundContactTime', () => {
+		// Garmin and Stryd devices output stance_time rather than ground_contact_time
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, stance_time: 286 } as any);
+		expect(record.groundContactTime).toBe(286);
+	});
+
+	it('normaliseRecord_groundContactTime_mapsToGroundContactTime', () => {
+		// Standard FIT field also accepted
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, ground_contact_time: 250 } as any);
+		expect(record.groundContactTime).toBe(250);
+	});
+
+	it('normaliseRecord_groundContactTimeTakesPrecedenceOverStanceTime', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, ground_contact_time: 250, stance_time: 286 } as any);
+		expect(record.groundContactTime).toBe(250);
+	});
+
+	it('normaliseRecord_stepLength_mapsToStrideLength', () => {
+		// Garmin/Stryd output step_length (mm) which maps to strideLength
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, step_length: 961 } as any);
+		expect(record.strideLength).toBe(961);
+	});
+
+	it('normaliseRecord_noRunningDynamics_fieldsAreUndefined', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10 } as any);
+		expect(record.groundContactTime).toBeUndefined();
+		expect(record.strideLength).toBeUndefined();
+	});
+});
+
 describe('normaliseRecord — power field mapping', () => {
 	it('normaliseRecord_strydDeveloperPower_mapsToActivityRecordPower', () => {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,6 +97,34 @@ describe('normaliseDeviceInfo', () => {
 		const result = normaliseDeviceInfo({});
 		expect(result.deviceIndex).toBe(0);
 	});
+
+	it('normaliseDeviceInfo_stringDeviceTypeHeartRate_mapsToNumericConstant', () => {
+		// fit-file-parser outputs known ANT+ types as strings like "heart_rate"
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result = normaliseDeviceInfo({ device_index: 1, device_type: 'heart_rate' as any });
+		expect(result.antDeviceType).toBe(120); // ANT_DEVICE_TYPE.HEART_RATE
+	});
+
+	it('normaliseDeviceInfo_stringDeviceTypeBikePower_mapsToNumericConstant', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result = normaliseDeviceInfo({ device_index: 2, device_type: 'bike_power' as any });
+		expect(result.antDeviceType).toBe(11); // ANT_DEVICE_TYPE.BIKE_POWER
+	});
+
+	it('normaliseDeviceInfo_stringDeviceTypeStrideSpeedDistance_mapsToNumericConstant', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result = normaliseDeviceInfo({ device_index: 3, device_type: 'stride_speed_distance' as any });
+		expect(result.antDeviceType).toBe(3); // ANT_DEVICE_TYPE.STRIDE_SPEED_DISTANCE
+	});
+
+	it('normaliseDeviceInfo_unknownStringDeviceType_yieldsUndefined', () => {
+		// Internal Garmin components ("barometer", "gps", etc.) are not in the
+		// ANT+ mapping — they should resolve to undefined so they go through
+		// Pass 2 (watch) and are silently excluded if they have no channel data.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result = normaliseDeviceInfo({ device_index: 4, device_type: 'barometer' as any });
+		expect(result.antDeviceType).toBeUndefined();
+	});
 });
 
 // ---- helpers for buildDeviceStreams tests ----
@@ -73,9 +137,13 @@ function makeDevice(overrides: Partial<Device> = {}): Device {
 }
 
 describe('buildDeviceStreams', () => {
-	it('buildDeviceStreams_noDevices_returnsEmptyArray', () => {
-		const result = buildDeviceStreams([], [makeRecord({ heartRate: 120 })]);
-		expect(result).toHaveLength(0);
+	it('buildDeviceStreams_noDevices_createsFallbackStreamWithPresentChannels', () => {
+		const records = [makeRecord({ heartRate: 120, speed: 10 })];
+		const result = buildDeviceStreams([], records);
+		expect(result).toHaveLength(1);
+		expect(result[0].device.deviceIndex).toBe(0);
+		expect(result[0].channels).toContain('heartRate');
+		expect(result[0].channels).toContain('speed');
 	});
 
 	it('buildDeviceStreams_watchOnly_attributesAllPresentChannelsToWatch', () => {
@@ -98,6 +166,25 @@ describe('buildDeviceStreams', () => {
 		const watchStream = streams.find(s => s.device === watch);
 		expect(hrmStream?.channels).toContain('heartRate');
 		expect(watchStream?.channels).not.toContain('heartRate');
+		// speed is unclaimed by the HRM and must be allocated to the watch
+		expect(watchStream?.channels).toContain('speed');
+	});
+
+	it('buildDeviceStreams_externalHRMWithNoWatchDevice_unclaimedChannelsAllocatedViaFallback', () => {
+		// Garmin FIT files often report the watch itself with device_type=0, meaning
+		// Pass 2 finds no watch devices.  When an HRM has claimed heartRate, the
+		// remaining channels (speed, pace, altitude, etc.) must still be allocated via
+		// the safety-net fallback — NOT silently dropped.
+		const watchWithType = makeDevice({ deviceIndex: 0, antDeviceType: 0 });
+		const hrm = makeDevice({ deviceIndex: 1, antDeviceType: ANT_DEVICE_TYPE.HEART_RATE });
+		const records = [makeRecord({ heartRate: 140, speed: 12 })];
+		const streams = buildDeviceStreams([watchWithType, hrm], records);
+		const hrmStream = streams.find(s => s.device === hrm);
+		// Find the stream(s) containing speed — must exist even though HRM already has heartRate
+		const speedStream = streams.find(s => s.channels.includes('speed'));
+		expect(hrmStream?.channels).toContain('heartRate');
+		expect(speedStream).toBeDefined();
+		expect(speedStream?.channels).toContain('speed');
 	});
 
 	it('buildDeviceStreams_powerMeter_attributesPowerChannelsToPowerMeter', () => {
@@ -143,5 +230,18 @@ describe('buildDeviceStreams', () => {
 		const watch = makeDevice({ deviceIndex: 0 });
 		const result = buildDeviceStreams([watch], []);
 		expect(result).toHaveLength(0);
+	});
+
+	it('buildDeviceStreams_allDevicesHaveAntDeviceType_unclaimedChannelsAllocatedToFirstDevice', () => {
+		// Some FIT files report the primary device with device_type set (e.g. 0),
+		// which means Pass 2 finds no watch devices and channels go unallocated.
+		// The safety net should allocate remaining channels to the first device.
+		const primaryWithType = makeDevice({ deviceIndex: 0, antDeviceType: 0 });
+		const records = [makeRecord({ heartRate: 140, speed: 12 })];
+		const streams = buildDeviceStreams([primaryWithType], records);
+		const channelStream = streams.find(s => s.channels.length > 0);
+		expect(channelStream).toBeDefined();
+		expect(channelStream?.channels).toContain('heartRate');
+		expect(channelStream?.channels).toContain('speed');
 	});
 });

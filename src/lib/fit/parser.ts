@@ -54,6 +54,8 @@ interface FitRecord {
 	skin_temperature?: number;
 	vertical_oscillation?: number;
 	ground_contact_time?: number;
+	stance_time?: number;        // Garmin/Stryd: ground contact time (synonym for ground_contact_time)
+	step_length?: number;        // Garmin/Stryd: stride length in mm
 	position_lat?: number;
 	position_long?: number;
 }
@@ -70,20 +72,41 @@ interface FitDeviceInfo {
 	product_name?: string;
 	serial_number?: number;
 	ant_device_number?: number;
-	device_type?: number;    // ANT+ device type (e.g. 120 = HRM, 11 = power meter)
+	// fit-file-parser outputs device_type as a string for known ANT+ types
+	// (e.g. "heart_rate", "bike_power") and as a number for unknown types.
+	device_type?: number | string;
 	source_type?: string;    // 'antplus' | 'bluetooth_low_energy' | 'local'
 }
+
+// fit-file-parser outputs known ANT+ device types as lowercase snake_case strings.
+// Map those back to the numeric ANT+ device type constants so DEVICE_TYPE_CHANNELS
+// can look them up.  Garmin-internal components (barometer, gps, whr, …) are
+// intentionally absent — they fall through to Pass 2 (watch) and are silently
+// excluded from device pills if they contribute no channels.
+const STRING_DEVICE_TYPE: Record<string, number> = {
+	'heart_rate':            ANT_DEVICE_TYPE.HEART_RATE,
+	'bike_power':            ANT_DEVICE_TYPE.BIKE_POWER,
+	'bike_speed_cadence':    ANT_DEVICE_TYPE.BIKE_SPEED_CADENCE,
+	'bike_cadence':          ANT_DEVICE_TYPE.BIKE_CADENCE,
+	'bike_speed':            ANT_DEVICE_TYPE.BIKE_SPEED,
+	'stride_speed_distance': ANT_DEVICE_TYPE.STRIDE_SPEED_DISTANCE,
+	'running_dynamics':      ANT_DEVICE_TYPE.RUNNING_DYNAMICS,
+};
 
 // ---- normalisation ----
 
 export function normaliseDeviceInfo(d: FitDeviceInfo): Device {
+	const rawType = d.device_type;
+	const antDeviceType =
+		typeof rawType === 'string' ? STRING_DEVICE_TYPE[rawType]   // undefined for unknown strings
+		: rawType;                                                    // numeric or undefined as-is
 	return {
 		deviceIndex: d.device_index ?? 0,
 		manufacturer: d.manufacturer,
 		product: d.product_name,
 		serialNumber: d.serial_number,
 		antDeviceNumber: d.ant_device_number,
-		antDeviceType: d.device_type,
+		antDeviceType,
 		sourceType: d.source_type,
 	};
 }
@@ -104,7 +127,8 @@ export function normaliseRecord(r: FitRecord): ActivityRecord {
 		coreTemperature: r.core_temperature,
 		skinTemperature: r.skin_temperature,
 		verticalOscillation: r.vertical_oscillation,
-		groundContactTime: r.ground_contact_time,
+		groundContactTime: r.ground_contact_time ?? r.stance_time,
+		strideLength: r.step_length,
 		position:
 			r.position_lat != null && r.position_long != null
 				? { lat: r.position_lat, lon: r.position_long }
@@ -152,7 +176,15 @@ export function buildDeviceStreams(
 	devices: Device[],
 	records: ActivityRecord[]
 ): DeviceStream[] {
-	if (records.length === 0 || devices.length === 0) return [];
+	if (records.length === 0) return [];
+
+	// Files with no device_info messages get a single synthetic fallback device
+	// so the compare view always has at least one stream to display.
+	if (devices.length === 0) {
+		const present = channelsPresentInRecords(records);
+		const channels = ALL_RECORD_CHANNELS.filter(ch => present.has(ch));
+		return [{ device: { deviceIndex: 0 }, channels }];
+	}
 
 	const present = channelsPresentInRecords(records);
 	// Track which channels have been claimed by external sensors
@@ -175,8 +207,27 @@ export function buildDeviceStreams(
 	const watchDevices = devices.filter(d => d.antDeviceType == null);
 	for (const device of watchDevices) {
 		const channels = ALL_RECORD_CHANNELS.filter(ch => present.has(ch) && !claimed.has(ch));
+		channels.forEach(ch => claimed.add(ch)); // mark as claimed so safety net skips them
 		if (channels.length === 0) continue;
 		streams.push({ device, channels });
+	}
+
+	// Safety net: any present channels still unclaimed after both passes (e.g. all
+	// device_info entries had antDeviceType set, or only external sensors were
+	// recognised by ANT+ type) are merged into the first device's existing stream.
+	// We merge (not push) to avoid duplicate device entries which would cause
+	// duplicate keys in DeviceToggleBar's keyed {#each}.
+	// This fires even when other streams already have channels — a typical Garmin +
+	// HRM file has heartRate claimed by the HRM but speed/pace/altitude unclaimed.
+	const unclaimed = ALL_RECORD_CHANNELS.filter(ch => present.has(ch) && !claimed.has(ch));
+	if (unclaimed.length > 0) {
+		const primary = streams[0]?.device ?? { deviceIndex: 0 };
+		const existingStream = streams.find(s => s.device === primary);
+		if (existingStream) {
+			existingStream.channels.push(...unclaimed);
+		} else {
+			streams.push({ device: primary, channels: unclaimed });
+		}
 	}
 
 	return streams;
@@ -189,7 +240,19 @@ function normalise(data: FitData, filename: string): Activity {
 	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
-	const devices: Device[] = (data.device_infos ?? []).map(normaliseDeviceInfo);
+
+	// Deduplicate device_infos: some FIT files include the same device_index
+	// multiple times (e.g. once at activity start and once at end).  Keep only
+	// the first occurrence of each device_index so downstream code never sees
+	// duplicate keys in crossFileStreams.
+	const seenDeviceIndices = new Set<number>();
+	const uniqueDeviceInfos = (data.device_infos ?? []).filter(d => {
+		const idx = d.device_index ?? 0;
+		if (seenDeviceIndices.has(idx)) return false;
+		seenDeviceIndices.add(idx);
+		return true;
+	});
+	const devices: Device[] = uniqueDeviceInfos.map(normaliseDeviceInfo);
 	applyLabels(devices); // restore any user-assigned labels from localStorage
 	const deviceStreams = buildDeviceStreams(devices, records);
 

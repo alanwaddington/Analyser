@@ -1,6 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { buildMeanMaxData, formatDuration } from './MeanMaxChart.utils.ts';
-import type { ActivityRecord } from '$lib/types';
+import type { MeanMaxSeriesInput } from './MeanMaxChart.utils.ts';
+import type { Activity, ActivityRecord } from '$lib/types';
+
+function makeActivity(overrides: Partial<Activity> = {}): Activity {
+	return {
+		id: 'act-1',
+		filename: 'test.fit',
+		startTime: new Date('2025-01-01T10:00:00Z'),
+		totalDistance: 5000,
+		totalElapsedTime: 1800,
+		records: [],
+		laps: [],
+		devices: [],
+		deviceStreams: [],
+		...overrides,
+	};
+}
 
 function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
 	return {
@@ -100,5 +116,48 @@ describe('formatDuration', () => {
 
 	it('formatDuration_overOneHour_showsHoursMinutesSeconds', () => {
 		expect(formatDuration(3661)).toBe('1:01:01');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// MeanMaxSeriesInput — colour and label overrides
+// ---------------------------------------------------------------------------
+describe('MeanMaxSeriesInput', () => {
+	it('MeanMaxSeriesInput_withColourOverride_acceptsColourField', () => {
+		const input: MeanMaxSeriesInput = {
+			activity: makeActivity(),
+			colourIndex: 0,
+			colour: '#ff0000',
+		};
+		expect(input.colour).toBe('#ff0000');
+	});
+
+	it('MeanMaxSeriesInput_withLabelOverride_acceptsLabelField', () => {
+		const input: MeanMaxSeriesInput = {
+			activity: makeActivity(),
+			colourIndex: 0,
+			label: 'Assioma Duo',
+		};
+		expect(input.label).toBe('Assioma Duo');
+	});
+
+	it('MeanMaxSeriesInput_withoutOverrides_colourAndLabelAreUndefined', () => {
+		const input: MeanMaxSeriesInput = {
+			activity: makeActivity(),
+			colourIndex: 1,
+		};
+		expect(input.colour).toBeUndefined();
+		expect(input.label).toBeUndefined();
+	});
+
+	it('MeanMaxSeriesInput_withBothOverrides_bothFieldsAccessible', () => {
+		const input: MeanMaxSeriesInput = {
+			activity: makeActivity(),
+			colourIndex: 0,
+			colour: '#22c55e',
+			label: 'Polar H10',
+		};
+		expect(input.colour).toBe('#22c55e');
+		expect(input.label).toBe('Polar H10');
 	});
 });

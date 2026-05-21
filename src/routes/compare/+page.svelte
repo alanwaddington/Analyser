@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { activities, activeDeviceIndices, xAxisMode } from '$lib/stores/session';
-	import { CHANNEL_META, DEVICE_COLOURS } from '$lib/types';
-	import type { ChannelKey } from '$lib/types';
+	import { activities, activeDeviceIndices, xAxisMode, timeOffsets } from '$lib/stores/session';
+	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
+	import type { ChannelKey, CrossFileStream } from '$lib/types';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
 	import { summarise } from '$lib/analytics/summary';
 	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils';
@@ -12,8 +12,9 @@
 	import MeanMaxChart from '$lib/components/charts/MeanMaxChart.svelte';
 	import ActivityMap from '$lib/components/map/ActivityMap.svelte';
 	import DeviceToggleBar from '$lib/components/ui/DeviceToggleBar.svelte';
-	import { getActiveStreamsForChannel } from '$lib/utils/deviceChannels';
-	import { deriveDeviceLabel } from '$lib/utils/deviceChannels';
+	import TimeOffsetControl from '$lib/components/ui/TimeOffsetControl.svelte';
+	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
+	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -44,48 +45,111 @@
 		}
 	}
 
-	// The single loaded activity (device comparison is single-file)
-	const activity = $derived($activities[0]);
-	const deviceStreams = $derived(activity?.deviceStreams ?? []);
-	const lapMarkers = $derived(buildLapMarkers(activity, $xAxisMode));
+	// True when more than one file is loaded
+	const multiFile = $derived($activities.length > 1);
 
-	// Derive which channels have at least one active device
+	// Flat list of all CrossFileStream objects across all loaded activities
+	const crossFileStreams = $derived.by<CrossFileStream[]>(() => {
+		const result: CrossFileStream[] = [];
+		for (const activity of $activities) {
+			for (const stream of activity.deviceStreams) {
+				result.push({
+					stream,
+					activity,
+					key: deviceKey(activity.id, stream.device.deviceIndex),
+				});
+			}
+		}
+		return result;
+	});
+
+	// Auto-computed time offsets (used as defaults and for reset in TimeOffsetControl)
+	const autoOffsets = $derived(computeTimeOffsets($activities));
+
+	// Initialise the timeOffsets store whenever activities change.
+	// The store may then be overridden by TimeOffsetControl for manual fine-tuning.
+	$effect(() => {
+		timeOffsets.set(computeTimeOffsets($activities));
+	});
+
+	// Auto-select all streams with data whenever the file set changes, so charts
+	// display immediately on load without requiring manual pill clicks.
+	$effect(() => {
+		const selectableKeys = crossFileStreams
+			.filter(cfs => cfs.stream.channels.length > 0)
+			.map(cfs => cfs.key);
+		activeDeviceIndices.set(new Set(selectableKeys));
+	});
+
+	// Lap markers from first activity (used for chart annotations)
+	const lapMarkers = $derived(buildLapMarkers($activities[0], $xAxisMode));
+
+	// Channels that have at least one currently active device across all files
 	const activeChannels = $derived.by<ChannelKey[]>(() => {
-		if (!activity || $activeDeviceIndices.size === 0) return [];
+		if (crossFileStreams.length === 0 || $activeDeviceIndices.size === 0) return [];
 		const channels = new Set<ChannelKey>();
-		for (const stream of deviceStreams) {
-			if ($activeDeviceIndices.has(stream.device.deviceIndex)) {
-				stream.channels.forEach(ch => channels.add(ch));
+		for (const cfs of crossFileStreams) {
+			if ($activeDeviceIndices.has(cfs.key)) {
+				cfs.stream.channels.forEach(ch => channels.add(ch));
 			}
 		}
 		return Array.from(channels);
 	});
 
-	// Build series inputs for a given channel: one per active device that claims it
+	// Build series inputs for one channel — one entry per active CrossFileStream claiming it
 	function buildSeriesForChannel(channel: ChannelKey): SeriesInput[] {
-		if (!activity) return [];
 		const activeStreams = getActiveStreamsForChannel(
-			deviceStreams,
+			crossFileStreams,
 			channel,
-			$activeDeviceIndices
+			$activeDeviceIndices,
 		);
-		return activeStreams.map((stream, i) => ({
-			activity,
-			colourIndex: i,
-			colour: DEVICE_COLOURS[i % DEVICE_COLOURS.length],
-			label: deriveDeviceLabel(stream.device),
-		}));
+		return activeStreams.map((cfs) => {
+			const actIndex = $activities.indexOf(cfs.activity);
+			return {
+				activity: cfs.activity,
+				colourIndex: actIndex,
+				colour: FILE_COLOURS[actIndex % FILE_COLOURS.length],
+				label: deriveDeviceLabel(cfs.stream.device),
+				timeOffset: $timeOffsets.get(cfs.activity.id) ?? 0,
+			};
+		});
 	}
 
-	// Series inputs for mean/max (all active device streams, de-duped to the activity)
-	const meanMaxSeriesInputs: SeriesInput[] = $derived(
-		activity ? [{ activity, colourIndex: 0 }] : []
+	// Mean/Max: one series per loaded file
+	const meanMaxSeriesInputs = $derived(
+		$activities.map((a, i) => ({
+			activity: a,
+			colourIndex: i,
+			colour: FILE_COLOURS[i % FILE_COLOURS.length],
+			label: a.filename,
+		}))
 	);
 
-	// Summary: devices that have at least one active channel
-	const summaryDevices = $derived(
-		deviceStreams.filter(s => $activeDeviceIndices.has(s.device.deviceIndex))
+	// Active CrossFileStreams for the summary table columns
+	const activeCrossFileStreams = $derived(
+		crossFileStreams.filter(cfs => $activeDeviceIndices.has(cfs.key))
 	);
+
+	// ── Session warning banner ────────────────────────────────────────────────
+
+	let warningDismissed = $state(false);
+
+	// Reset when activities change (new files loaded)
+	$effect(() => {
+		void $activities;
+		warningDismissed = false;
+	});
+
+	const showSessionWarning = $derived(
+		!activitiesOverlap($activities) &&
+		$xAxisMode === 'time' &&
+		!warningDismissed
+	);
+
+	function switchToDistance() {
+		xAxisMode.set('distance');
+		warningDismissed = true;
+	}
 
 	$effect(() => {
 		if ($activities.length === 0) goto('/');
@@ -116,7 +180,12 @@
 	>
 		{#if activeTab === 'charts'}
 			<div class="toolbar">
-				<DeviceToggleBar {deviceStreams} />
+				<DeviceToggleBar streams={crossFileStreams} {multiFile} />
+				{#if multiFile && $xAxisMode === 'time'}
+					<div class="toc-wrap">
+						<TimeOffsetControl activities={$activities} {autoOffsets} />
+					</div>
+				{/if}
 				<div class="axis-toggle" role="group" aria-label="X-axis mode">
 					<button
 						class="axis-btn"
@@ -132,6 +201,25 @@
 					>Distance</button>
 				</div>
 			</div>
+
+			{#if showSessionWarning}
+				<div class="session-warning" role="alert">
+					<span class="warning-icon" aria-hidden="true">⚠</span>
+					<span class="warning-text">
+						Files appear to be from different sessions. Time-axis alignment may not
+						be meaningful —
+						<button class="warning-link" onclick={switchToDistance}>
+							switch to Distance mode
+						</button>.
+					</span>
+					<button
+						class="warning-dismiss"
+						onclick={() => { warningDismissed = true; }}
+						aria-label="Dismiss warning"
+					>×</button>
+				</div>
+			{/if}
+
 			<div class="charts-scroll">
 				{#if $activeDeviceIndices.size === 0}
 					<p class="empty">Toggle a device above to see its data.</p>
@@ -153,30 +241,40 @@
 					{/each}
 				{/if}
 			</div>
+
 		{:else if activeTab === 'map'}
 			<div class="map-wrap">
 				<ActivityMap activities={$activities} hoveredDistance={null} />
 			</div>
+
 		{:else if activeTab === 'meanmax'}
 			<div class="cards-scroll">
 				<div class="card card--meanmax">
 					<MeanMaxChart seriesInputs={meanMaxSeriesInputs} />
 				</div>
 			</div>
+
 		{:else if activeTab === 'summary'}
 			<div class="summary-scroll">
-				{#if summaryDevices.length === 0}
+				{#if activeCrossFileStreams.length === 0}
 					<p class="empty">Toggle devices above to see their statistics.</p>
 				{:else}
 					<table class="summary-table">
 						<thead>
 							<tr>
 								<th class="col-channel"></th>
-								{#each summaryDevices as stream, i}
+								{#each activeCrossFileStreams as cfs}
+									{@const actIndex = $activities.indexOf(cfs.activity)}
+									{@const dotColour = FILE_COLOURS[actIndex % FILE_COLOURS.length]}
 									<th class="col-device">
 										<span class="device-header">
-											<span class="device-dot" style="background:{DEVICE_COLOURS[i % DEVICE_COLOURS.length]}"></span>
-											{deriveDeviceLabel(stream.device)}
+											<span class="device-dot" style="background:{dotColour}"></span>
+											<span class="device-header-text">
+												<span class="device-name">{deriveDeviceLabel(cfs.stream.device)}</span>
+												{#if multiFile}
+													<span class="device-filename">{cfs.activity.filename}</span>
+												{/if}
+											</span>
 										</span>
 									</th>
 								{/each}
@@ -186,8 +284,8 @@
 							{#each activeChannels as ch, rowIdx}
 								<tr class:row-alt={rowIdx % 2 === 1}>
 									<td class="cell-label">{CHANNEL_META[ch].label}</td>
-									{#each summaryDevices as stream}
-										{@const s = summarise(extractChannel(activity.records, ch))}
+									{#each activeCrossFileStreams as cfs}
+										{@const s = summarise(extractChannel(cfs.activity.records, ch))}
 										<td class="cell-stat">
 											{#if s}
 												{s.avg.toFixed(1)} / {s.max.toFixed(1)} / {s.min.toFixed(1)}
@@ -267,6 +365,11 @@
 		flex-wrap: wrap;
 	}
 
+	.toc-wrap {
+		flex: 1;
+		min-width: 0;
+	}
+
 	.axis-toggle {
 		display: flex;
 		border: 1px solid var(--color-border);
@@ -298,6 +401,68 @@
 		background: #3b82f6;
 		color: #fff;
 	}
+
+	/* ── Session warning banner ─────────────────────────────────────── */
+
+	.session-warning {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		padding: 8px 14px;
+		background: rgba(245, 158, 11, 0.10);
+		border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+		flex-shrink: 0;
+		font-size: 0.8125rem;
+	}
+
+	.warning-icon {
+		color: #f59e0b;
+		flex-shrink: 0;
+		font-size: 0.875rem;
+		line-height: 1.5;
+	}
+
+	.warning-text {
+		flex: 1;
+		color: var(--color-muted);
+		line-height: 1.5;
+	}
+
+	.warning-link {
+		background: none;
+		border: none;
+		color: #3b82f6;
+		cursor: pointer;
+		font-size: inherit;
+		text-decoration: underline;
+		padding: 0;
+		font-family: inherit;
+	}
+
+	.warning-link:hover { color: #60a5fa; }
+
+	.warning-dismiss {
+		background: none;
+		border: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		font-size: 1.1rem;
+		padding: 0 2px;
+		line-height: 1;
+		border-radius: 4px;
+		transition: color 0.1s;
+		flex-shrink: 0;
+		align-self: flex-start;
+	}
+
+	.warning-dismiss:hover { color: var(--color-text); }
+
+	.warning-dismiss:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 2px;
+	}
+
+	/* ── Chart area ─────────────────────────────────────────────────── */
 
 	.charts-scroll {
 		flex: 1;
@@ -336,6 +501,8 @@
 	.card--meanmax {
 		height: 400px;
 	}
+
+	/* ── Summary table ──────────────────────────────────────────────── */
 
 	.summary-scroll {
 		flex: 1;
@@ -402,6 +569,37 @@
 		height: 8px;
 		border-radius: 50%;
 		flex-shrink: 0;
+	}
+
+	/* Two-line device header for multi-file mode */
+	.device-header-text {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1px;
+		overflow: hidden;
+		min-width: 0;
+	}
+
+	.device-name {
+		font-weight: 600;
+		font-size: 0.75rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 130px;
+		display: block;
+	}
+
+	.device-filename {
+		font-weight: 400;
+		font-size: 0.65rem;
+		color: var(--color-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 130px;
+		display: block;
 	}
 
 	.cell-label {
