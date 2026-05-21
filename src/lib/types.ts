@@ -53,6 +53,11 @@ export const ANT_DEVICE_TYPE = {
 	RUNNING_DYNAMICS: 36,
 } as const;
 
+export interface DeviceStream {
+	device: Device;
+	channels: ChannelKey[]; // channels this device contributes to the merged record stream
+}
+
 export interface Activity {
 	id: string; // derived from filename + timestamp
 	filename: string;
@@ -63,6 +68,7 @@ export interface Activity {
 	records: ActivityRecord[];
 	laps: Lap[];
 	devices: Device[];
+	deviceStreams: DeviceStream[]; // per-device channel attribution (always populated)
 }
 
 export interface AlignedSeries {
