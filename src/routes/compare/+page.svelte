@@ -72,6 +72,15 @@
 		timeOffsets.set(computeTimeOffsets($activities));
 	});
 
+	// Auto-select all streams with data whenever the file set changes, so charts
+	// display immediately on load without requiring manual pill clicks.
+	$effect(() => {
+		const selectableKeys = crossFileStreams
+			.filter(cfs => cfs.stream.channels.length > 0)
+			.map(cfs => cfs.key);
+		activeDeviceIndices.set(new Set(selectableKeys));
+	});
+
 	// Lap markers from first activity (used for chart annotations)
 	const lapMarkers = $derived(buildLapMarkers($activities[0], $xAxisMode));
 
