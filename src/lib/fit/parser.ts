@@ -190,14 +190,20 @@ export function buildDeviceStreams(
 
 	// Safety net: any present channels still unclaimed after both passes (e.g. all
 	// device_info entries had antDeviceType set, or only external sensors were
-	// recognised by ANT+ type) are given to the first device so the UI always has
-	// data to show.  This fires even when other streams already have channels — a
-	// typical Garmin + HRM file has heartRate claimed by the HRM but speed/pace/
-	// altitude unclaimed, and this ensures those channels are never silently dropped.
+	// recognised by ANT+ type) are merged into the first device's existing stream.
+	// We merge (not push) to avoid duplicate device entries which would cause
+	// duplicate keys in DeviceToggleBar's keyed {#each}.
+	// This fires even when other streams already have channels — a typical Garmin +
+	// HRM file has heartRate claimed by the HRM but speed/pace/altitude unclaimed.
 	const unclaimed = ALL_RECORD_CHANNELS.filter(ch => present.has(ch) && !claimed.has(ch));
 	if (unclaimed.length > 0) {
 		const primary = streams[0]?.device ?? { deviceIndex: 0 };
-		streams.push({ device: primary, channels: unclaimed });
+		const existingStream = streams.find(s => s.device === primary);
+		if (existingStream) {
+			existingStream.channels.push(...unclaimed);
+		} else {
+			streams.push({ device: primary, channels: unclaimed });
+		}
 	}
 
 	return streams;
