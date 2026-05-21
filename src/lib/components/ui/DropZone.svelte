@@ -1,15 +1,18 @@
 <script lang="ts">
 	import { get } from 'svelte/store';
 	import { parseFitFile } from '$lib/fit/parser';
-	import { activities, addActivity } from '$lib/stores/session';
+	import { activities, addActivity, clearActivities } from '$lib/stores/session';
 	import { MAX_FILES } from '$lib/types';
 
-	let { compact = false }: { compact?: boolean } = $props();
+	let { compact = false, singleFile = false }: { compact?: boolean; singleFile?: boolean } = $props();
 
 	let dragover = $state(false);
 	let warning = $state('');
 	let error = $state('');
 	let inputEl: HTMLInputElement = $state(null!);
+
+	// In singleFile mode the input accepts one file at a time
+	const multiple = $derived(!singleFile);
 
 	async function handleFiles(files: FileList | File[]) {
 		warning = '';
@@ -17,6 +20,19 @@
 
 		const fitFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.fit'));
 		if (fitFiles.length === 0) return;
+
+		if (singleFile) {
+			// Replace mode: clear existing activities then load only the first file
+			clearActivities();
+			try {
+				const buffer = await fitFiles[0].arrayBuffer();
+				const activity = await parseFitFile(buffer, fitFiles[0].name);
+				addActivity(activity);
+			} catch (e) {
+				error = `${fitFiles[0].name}: ${e instanceof Error ? e.message : 'parse failed'}`;
+			}
+			return;
+		}
 
 		if (get(activities).length >= MAX_FILES) {
 			warning = `Maximum ${MAX_FILES} files — remove one before adding another`;
@@ -75,8 +91,8 @@
 		ondragleave={onDragLeave}
 		ondrop={onDrop}
 	>
-		<input bind:this={inputEl} type="file" multiple accept=".fit" hidden oninput={onInput} />
-		+ Add files
+		<input bind:this={inputEl} type="file" accept=".fit" {multiple} hidden oninput={onInput} />
+		{singleFile ? '↻ Replace file' : '+ Add files'}
 	</label>
 {:else}
 	<label
@@ -86,7 +102,7 @@
 		ondragleave={onDragLeave}
 		ondrop={onDrop}
 	>
-		<input bind:this={inputEl} type="file" multiple accept=".fit" hidden oninput={onInput} />
+		<input bind:this={inputEl} type="file" accept=".fit" {multiple} hidden oninput={onInput} />
 		<span class="icon">⬇</span>
 		<p class="primary">Drop .fit files here</p>
 		<p class="secondary">.fit supported</p>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { activities, lastMode } from '$lib/stores/session';
+	import { activities, lastMode, clearActivities } from '$lib/stores/session';
 	import FileList from '$lib/components/ui/FileList.svelte';
 	import DropZone from '$lib/components/ui/DropZone.svelte';
 	import XAxisToggle from '$lib/components/ui/XAxisToggle.svelte';
@@ -11,6 +11,9 @@
 	const isEvent = $derived(page.url.pathname.startsWith('/event'));
 
 	function goToCompare() {
+		// Device comparison is single-file — clear before navigating so stale
+		// multi-file event data doesn't carry over
+		clearActivities();
 		lastMode.set('compare');
 		goto('/compare');
 	}
@@ -43,7 +46,13 @@
 	{#if $activities.length > 0}
 		<div class="file-section">
 			<FileList mode={isEvent ? 'event' : 'compare'} />
-			<DropZone compact={true} />
+			{#if isEvent}
+				<!-- Event mode: allow multiple files -->
+				<DropZone compact={true} />
+			{:else if isCompare}
+				<!-- Device comparison: single-file — show replace drop zone -->
+				<DropZone compact={true} singleFile={true} />
+			{/if}
 		</div>
 	{/if}
 
