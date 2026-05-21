@@ -67,9 +67,23 @@ interface FitDeviceInfo {
 	product_name?: string;
 	serial_number?: number;
 	ant_device_number?: number;
+	device_type?: number;    // ANT+ device type (e.g. 120 = HRM, 11 = power meter)
+	source_type?: string;    // 'antplus' | 'bluetooth_low_energy' | 'local'
 }
 
 // ---- normalisation ----
+
+export function normaliseDeviceInfo(d: FitDeviceInfo): Device {
+	return {
+		deviceIndex: d.device_index ?? 0,
+		manufacturer: d.manufacturer,
+		product: d.product_name,
+		serialNumber: d.serial_number,
+		antDeviceNumber: d.ant_device_number,
+		antDeviceType: d.device_type,
+		sourceType: d.source_type,
+	};
+}
 
 export function normaliseRecord(r: FitRecord): ActivityRecord {
 	const speed = r.enhanced_speed ?? r.speed;
@@ -102,13 +116,7 @@ function normalise(data: FitData, filename: string): Activity {
 	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
-	const devices: Device[] = (data.device_infos ?? []).map((d) => ({
-		deviceIndex: d.device_index ?? 0,
-		manufacturer: d.manufacturer,
-		product: d.product_name,
-		serialNumber: d.serial_number,
-		antDeviceNumber: d.ant_device_number
-	}));
+	const devices: Device[] = (data.device_infos ?? []).map(normaliseDeviceInfo);
 
 	return {
 		id: crypto.randomUUID(),

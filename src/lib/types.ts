@@ -38,8 +38,20 @@ export interface Device {
 	product?: string;
 	serialNumber?: number;
 	antDeviceNumber?: number;
-	label?: string; // user-assigned
+	antDeviceType?: number;  // ANT+ device type from device_info message
+	sourceType?: string;     // 'antplus' | 'bluetooth_low_energy' | 'local' | etc.
+	label?: string;          // user-assigned
 }
+
+export const ANT_DEVICE_TYPE = {
+	HEART_RATE: 120,
+	BIKE_POWER: 11,
+	BIKE_SPEED_CADENCE: 121,
+	BIKE_CADENCE: 122,
+	BIKE_SPEED: 123,
+	STRIDE_SPEED_DISTANCE: 3,
+	RUNNING_DYNAMICS: 36,
+} as const;
 
 export interface Activity {
 	id: string; // derived from filename + timestamp
