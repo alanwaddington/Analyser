@@ -190,7 +190,8 @@
 		role="tabpanel"
 		aria-labelledby="tab-{activeTab}"
 	>
-		{#if activeTab === 'charts'}
+		<!-- Charts panel — always in DOM so ECharts instances survive tab switches -->
+		<div class="charts-panel" class:tab-hidden={activeTab !== 'charts'}>
 			<div class="toolbar">
 				<DeviceToggleBar streams={crossFileStreams} {multiFile} />
 				{#if multiFile && $xAxisMode === 'time'}
@@ -253,13 +254,17 @@
 					{/each}
 				{/if}
 			</div>
+		</div>
 
-		{:else if activeTab === 'map'}
+		<!-- Map panel — always in DOM so Leaflet map survives tab switches -->
+		<div class="map-panel" class:tab-hidden={activeTab !== 'map'}>
 			<div class="map-wrap">
 				<ActivityMap activities={$activities} hoveredDistance={null} />
 			</div>
+		</div>
 
-		{:else if activeTab === 'meanmax'}
+		<!-- Other tabs — conditional rendering (no hover sync required) -->
+		{#if activeTab === 'meanmax'}
 			<div class="cards-scroll">
 				<div class="card card--meanmax">
 					<MeanMaxChart seriesInputs={meanMaxSeriesInputs} />
@@ -504,6 +509,21 @@
 		border: 1px solid var(--color-border);
 		border-radius: 8px;
 		padding: 16px;
+	}
+
+	/* ── Always-rendered panels (chart↔map hover sync) ─────────────────── */
+
+	.charts-panel,
+	.map-panel {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.tab-hidden {
+		display: none !important;
 	}
 
 	.map-wrap {

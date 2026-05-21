@@ -109,7 +109,8 @@
 		role="tabpanel"
 		aria-labelledby="tab-{activeTab}"
 	>
-		{#if activeTab === 'charts'}
+		<!-- Charts panel — always in DOM so ECharts instances survive tab switches -->
+		<div class="charts-panel" class:tab-hidden={activeTab !== 'charts'}>
 			<div class="toolbar">
 				<ChannelToggleBar channels={availableChannels} />
 				<div class="axis-toggle" role="group" aria-label="X-axis mode">
@@ -151,11 +152,17 @@
 					{/each}
 				{/if}
 			</div>
-		{:else if activeTab === 'map'}
+		</div>
+
+		<!-- Map panel — always in DOM so Leaflet map survives tab switches -->
+		<div class="map-panel" class:tab-hidden={activeTab !== 'map'}>
 			<div class="map-wrap">
 				<ActivityMap activities={$activities} referenceIndex={$referenceIndex} hoveredDistance={null} />
 			</div>
-		{:else if activeTab === 'segments'}
+		</div>
+
+		<!-- Other tabs — conditional rendering (no hover sync required) -->
+		{#if activeTab === 'segments'}
 			<div class="cards-scroll">
 				{#if $activities.length < 2}
 					<p class="empty">Load at least 2 activities to see segment comparison.</p>
@@ -321,6 +328,21 @@
 		border: 1px solid var(--color-border);
 		border-radius: 8px;
 		padding: 16px;
+	}
+
+	/* ── Always-rendered panels (chart↔map hover sync) ─────────────────── */
+
+	.charts-panel,
+	.map-panel {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.tab-hidden {
+		display: none !important;
 	}
 
 	.map-wrap {

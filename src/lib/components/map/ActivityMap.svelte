@@ -21,6 +21,7 @@
 	let map = $state<import('leaflet').Map | undefined>(undefined);
 	let polylines: import('leaflet').Polyline[] = [];
 	let markers: (import('leaflet').CircleMarker | null)[] = [];
+	let resizeObserver: ResizeObserver | undefined;
 
 	onMount(async () => {
 		L = await import('leaflet');
@@ -32,9 +33,18 @@
 			attribution:
 				'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 		}).addTo(map);
+
+		// Invalidate Leaflet's size whenever the container changes dimensions.
+		// This handles tab switches where the container goes from display:none
+		// to display:flex — without this, the map renders grey tiles.
+		resizeObserver = new ResizeObserver(() => {
+			map?.invalidateSize();
+		});
+		resizeObserver.observe(container);
 	});
 
 	onDestroy(() => {
+		resizeObserver?.disconnect();
 		map?.remove();
 	});
 
