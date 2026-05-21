@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { positionAtDistance, positionFromPoints, extractGpsPoints } from './ActivityMap.utils.ts';
+import { positionAtDistance, positionFromPoints, extractGpsPoints, distanceAtPoint } from './ActivityMap.utils.ts';
 import type { GpsPointWithDistance } from './ActivityMap.utils.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
 
@@ -206,5 +206,83 @@ describe('extractGpsPoints', () => {
 		const result = extractGpsPoints(activity);
 		expect(result[0]).toEqual({ lat: 51.5, lon: -0.1, distance: 0 });
 		expect(result[1]).toEqual({ lat: 51.51, lon: -0.11, distance: 1000 });
+	});
+});
+
+// ---------------------------------------------------------------------------
+// distanceAtPoint
+// ---------------------------------------------------------------------------
+describe('distanceAtPoint', () => {
+	it('distanceAtPoint_emptyPoints_returnsNull', () => {
+		expect(distanceAtPoint([], 51.0, -1.0)).toBeNull();
+	});
+
+	it('distanceAtPoint_exactMatch_returnsDistance', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000 },
+			{ lat: 51.02, lon: -1.02, distance: 2000 },
+		];
+		const result = distanceAtPoint(points, 51.01, -1.01);
+		expect(result).toBeCloseTo(1000, 0);
+	});
+
+	it('distanceAtPoint_nearestPoint_returnsClosestDistance', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000 },
+			{ lat: 51.02, lon: -1.02, distance: 2000 },
+		];
+		// Target slightly closer to the middle point
+		const result = distanceAtPoint(points, 51.009, -1.009);
+		expect(result).toBeCloseTo(1000, 0);
+	});
+
+	it('distanceAtPoint_singlePoint_returnsThatDistance', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 500 },
+		];
+		const result = distanceAtPoint(points, 51.0, -1.0);
+		expect(result).toBeCloseTo(500, 0);
+	});
+
+	it('distanceAtPoint_pointBeyondTraceEnd_returnsLastPointDistance', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000 },
+		];
+		// Target well beyond the end of the trace — nearest is the last point
+		const result = distanceAtPoint(points, 52.0, -2.0);
+		expect(result).toBeCloseTo(1000, 0);
+	});
+
+	it('distanceAtPoint_pointBeforeTraceStart_returnsFirstPointDistance', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 100 },
+			{ lat: 51.01, lon: -1.01, distance: 1000 },
+		];
+		// Target well before the start — nearest is the first point
+		const result = distanceAtPoint(points, 50.0, 0.0);
+		expect(result).toBeCloseTo(100, 0);
+	});
+
+	it('distanceAtPoint_midpointBetweenTwoPoints_returnsNearer', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 0 },
+			{ lat: 51.02, lon: -1.02, distance: 2000 },
+		];
+		// Just past the halfway mark → nearer to second point
+		const result = distanceAtPoint(points, 51.011, -1.011);
+		expect(result).toBeCloseTo(2000, 0);
+	});
+
+	it('distanceAtPoint_firstPointIsNearest_returnsFirstDistance', () => {
+		const points: GpsPointWithDistance[] = [
+			{ lat: 51.0, lon: -1.0, distance: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000 },
+		];
+		// Target much closer to first point
+		const result = distanceAtPoint(points, 51.001, -1.001);
+		expect(result).toBeCloseTo(0, 0);
 	});
 });
