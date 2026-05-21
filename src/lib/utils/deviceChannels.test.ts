@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
 	deriveDeviceLabel,
+	deviceKey,
 	groupStreamsByChannel,
 	isComparableGroup,
 	getActiveStreamsForChannel,
 } from './deviceChannels.ts';
-import type { Device, DeviceStream } from '$lib/types';
+import type { Activity, CrossFileStream, Device, DeviceStream } from '$lib/types';
 
 function makeDevice(overrides: Partial<Device> = {}): Device {
 	return { deviceIndex: 0, ...overrides };
@@ -13,6 +14,30 @@ function makeDevice(overrides: Partial<Device> = {}): Device {
 
 function makeStream(device: Device, channels: DeviceStream['channels']): DeviceStream {
 	return { device, channels };
+}
+
+function makeActivity(id: string): Activity {
+	return {
+		id,
+		filename: `${id}.fit`,
+		startTime: new Date(),
+		totalDistance: 0,
+		totalElapsedTime: 0,
+		records: [],
+		laps: [],
+		devices: [],
+		deviceStreams: [],
+	};
+}
+
+function makeCrossFileStream(
+	activityId: string,
+	device: Device,
+	channels: DeviceStream['channels']
+): CrossFileStream {
+	const activity = makeActivity(activityId);
+	const stream = makeStream(device, channels);
+	return { stream, activity, key: deviceKey(activityId, device.deviceIndex) };
 }
 
 // ---- deriveDeviceLabel ----
@@ -49,6 +74,22 @@ describe('deriveDeviceLabel', () => {
 	});
 });
 
+// ---- deviceKey ----
+
+describe('deviceKey', () => {
+	it('deviceKey_activityIdAndDeviceIndex_returnsCompositeKey', () => {
+		expect(deviceKey('abc-123', 0)).toBe('abc-123:0');
+	});
+
+	it('deviceKey_differentActivityIds_produceDifferentKeys', () => {
+		expect(deviceKey('activity-a', 0)).not.toBe(deviceKey('activity-b', 0));
+	});
+
+	it('deviceKey_sameActivityIdDifferentDeviceIndex_produceDifferentKeys', () => {
+		expect(deviceKey('activity-a', 0)).not.toBe(deviceKey('activity-a', 1));
+	});
+});
+
 // ---- groupStreamsByChannel ----
 
 describe('groupStreamsByChannel', () => {
@@ -58,15 +99,15 @@ describe('groupStreamsByChannel', () => {
 	});
 
 	it('groupStreamsByChannel_singleDevice_groupsChannelsCorrectly', () => {
-		const stream = makeStream(makeDevice(), ['heartRate', 'speed']);
-		const result = groupStreamsByChannel([stream]);
-		expect(result.get('heartRate')).toEqual([stream]);
-		expect(result.get('speed')).toEqual([stream]);
+		const cfs = makeCrossFileStream('act1', makeDevice(), ['heartRate', 'speed']);
+		const result = groupStreamsByChannel([cfs]);
+		expect(result.get('heartRate')).toEqual([cfs]);
+		expect(result.get('speed')).toEqual([cfs]);
 	});
 
 	it('groupStreamsByChannel_twoDevicesSameChannel_bothAppearInGroup', () => {
-		const hrm = makeStream(makeDevice({ deviceIndex: 1 }), ['heartRate']);
-		const watch = makeStream(makeDevice({ deviceIndex: 0 }), ['heartRate', 'speed']);
+		const hrm = makeCrossFileStream('act1', makeDevice({ deviceIndex: 1 }), ['heartRate']);
+		const watch = makeCrossFileStream('act1', makeDevice({ deviceIndex: 0 }), ['heartRate', 'speed']);
 		const result = groupStreamsByChannel([hrm, watch]);
 		const hrGroup = result.get('heartRate')!;
 		expect(hrGroup).toHaveLength(2);
@@ -74,9 +115,19 @@ describe('groupStreamsByChannel', () => {
 		expect(hrGroup).toContain(watch);
 	});
 
+	it('groupStreamsByChannel_devicesAcrossFiles_groupedByChannel', () => {
+		const fileA = makeCrossFileStream('act-a', makeDevice({ deviceIndex: 0 }), ['heartRate']);
+		const fileB = makeCrossFileStream('act-b', makeDevice({ deviceIndex: 0 }), ['heartRate']);
+		const result = groupStreamsByChannel([fileA, fileB]);
+		const hrGroup = result.get('heartRate')!;
+		expect(hrGroup).toHaveLength(2);
+		expect(hrGroup[0]).toBe(fileA);
+		expect(hrGroup[1]).toBe(fileB);
+	});
+
 	it('groupStreamsByChannel_preservesInsertionOrderPerGroup', () => {
-		const s1 = makeStream(makeDevice({ deviceIndex: 1 }), ['power']);
-		const s2 = makeStream(makeDevice({ deviceIndex: 2 }), ['power']);
+		const s1 = makeCrossFileStream('act1', makeDevice({ deviceIndex: 1 }), ['power']);
+		const s2 = makeCrossFileStream('act1', makeDevice({ deviceIndex: 2 }), ['power']);
 		const result = groupStreamsByChannel([s1, s2]);
 		expect(result.get('power')![0]).toBe(s1);
 		expect(result.get('power')![1]).toBe(s2);
@@ -87,11 +138,13 @@ describe('groupStreamsByChannel', () => {
 
 describe('isComparableGroup', () => {
 	it('isComparableGroup_twoOrMoreStreams_returnsTrue', () => {
-		expect(isComparableGroup([makeStream(makeDevice(), ['heartRate']), makeStream(makeDevice({ deviceIndex: 1 }), ['heartRate'])])).toBe(true);
+		const s1 = makeCrossFileStream('act1', makeDevice(), ['heartRate']);
+		const s2 = makeCrossFileStream('act1', makeDevice({ deviceIndex: 1 }), ['heartRate']);
+		expect(isComparableGroup([s1, s2])).toBe(true);
 	});
 
 	it('isComparableGroup_oneStream_returnsFalse', () => {
-		expect(isComparableGroup([makeStream(makeDevice(), ['heartRate'])])).toBe(false);
+		expect(isComparableGroup([makeCrossFileStream('act1', makeDevice(), ['heartRate'])])).toBe(false);
 	});
 
 	it('isComparableGroup_emptyArray_returnsFalse', () => {
@@ -103,27 +156,37 @@ describe('isComparableGroup', () => {
 
 describe('getActiveStreamsForChannel', () => {
 	it('getActiveStreamsForChannel_activeDevice_returnsStream', () => {
-		const stream = makeStream(makeDevice({ deviceIndex: 1 }), ['heartRate']);
-		const result = getActiveStreamsForChannel([stream], 'heartRate', new Set([1]));
-		expect(result).toEqual([stream]);
+		const cfs = makeCrossFileStream('act1', makeDevice({ deviceIndex: 1 }), ['heartRate']);
+		const result = getActiveStreamsForChannel([cfs], 'heartRate', new Set([cfs.key]));
+		expect(result).toEqual([cfs]);
 	});
 
 	it('getActiveStreamsForChannel_inactiveDevice_returnsEmpty', () => {
-		const stream = makeStream(makeDevice({ deviceIndex: 1 }), ['heartRate']);
-		const result = getActiveStreamsForChannel([stream], 'heartRate', new Set());
+		const cfs = makeCrossFileStream('act1', makeDevice({ deviceIndex: 1 }), ['heartRate']);
+		const result = getActiveStreamsForChannel([cfs], 'heartRate', new Set());
 		expect(result).toEqual([]);
 	});
 
 	it('getActiveStreamsForChannel_streamDoesNotIncludeChannel_excluded', () => {
-		const stream = makeStream(makeDevice({ deviceIndex: 1 }), ['speed']);
-		const result = getActiveStreamsForChannel([stream], 'heartRate', new Set([1]));
+		const cfs = makeCrossFileStream('act1', makeDevice({ deviceIndex: 1 }), ['speed']);
+		const result = getActiveStreamsForChannel([cfs], 'heartRate', new Set([cfs.key]));
 		expect(result).toEqual([]);
 	});
 
 	it('getActiveStreamsForChannel_mixedActiveInactive_returnsOnlyActive', () => {
-		const s1 = makeStream(makeDevice({ deviceIndex: 1 }), ['power']);
-		const s2 = makeStream(makeDevice({ deviceIndex: 2 }), ['power']);
-		const result = getActiveStreamsForChannel([s1, s2], 'power', new Set([1]));
+		const s1 = makeCrossFileStream('act1', makeDevice({ deviceIndex: 1 }), ['power']);
+		const s2 = makeCrossFileStream('act1', makeDevice({ deviceIndex: 2 }), ['power']);
+		const result = getActiveStreamsForChannel([s1, s2], 'power', new Set([s1.key]));
 		expect(result).toEqual([s1]);
+	});
+
+	it('getActiveStreamsForChannel_sameDeviceIndexAcrossFiles_filteredByKey', () => {
+		// Two files both have deviceIndex 0, but different activity IDs
+		const s1 = makeCrossFileStream('act-a', makeDevice({ deviceIndex: 0 }), ['heartRate']);
+		const s2 = makeCrossFileStream('act-b', makeDevice({ deviceIndex: 0 }), ['heartRate']);
+		// Only activate s1
+		const result = getActiveStreamsForChannel([s1, s2], 'heartRate', new Set([s1.key]));
+		expect(result).toEqual([s1]);
+		expect(result).not.toContain(s2);
 	});
 });

@@ -9,6 +9,7 @@ import {
 	lastMode,
 	activeChannels,
 	activeDeviceIndices,
+	timeOffsets,
 	addActivity,
 	removeActivity,
 	clearActivities,
@@ -34,6 +35,7 @@ beforeEach(() => {
 	referenceIndex.set(0);
 	activeChannels.set([]);
 	activeDeviceIndices.set(new Set());
+	timeOffsets.set(new Map());
 	smoothing.set(10);
 	xAxisMode.set('time');
 	clearing.set(false);
@@ -128,7 +130,7 @@ describe('removeActivity', () => {
 });
 
 describe('clearActivities', () => {
-	it('clearActivities_withData_resetsAllThreeFields', () => {
+	it('clearActivities_withData_resetsAllFields', () => {
 		addActivity(makeActivity('a'));
 		addActivity(makeActivity('b'));
 		referenceIndex.set(1);
@@ -147,9 +149,15 @@ describe('clearActivities', () => {
 	});
 
 	it('clearActivities_withActiveDevices_resetsActiveDeviceIndices', () => {
-		activeDeviceIndices.set(new Set([1, 2, 3]));
+		activeDeviceIndices.set(new Set(['act-a:1', 'act-b:2']));
 		clearActivities();
 		expect(get(activeDeviceIndices).size).toBe(0);
+	});
+
+	it('clearActivities_withTimeOffsets_resetsTimeOffsets', () => {
+		timeOffsets.set(new Map([['act-a', 0], ['act-b', 5]]));
+		clearActivities();
+		expect(get(timeOffsets).size).toBe(0);
 	});
 });
 
@@ -158,11 +166,28 @@ describe('activeDeviceIndices', () => {
 		expect(get(activeDeviceIndices).size).toBe(0);
 	});
 
-	it('activeDeviceIndices_canAddAndRemoveIndices', () => {
-		activeDeviceIndices.update(s => { s.add(1); s.add(2); return s; });
-		expect(get(activeDeviceIndices).has(1)).toBe(true);
-		expect(get(activeDeviceIndices).has(2)).toBe(true);
-		activeDeviceIndices.update(s => { s.delete(1); return s; });
-		expect(get(activeDeviceIndices).has(1)).toBe(false);
+	it('activeDeviceIndices_canAddAndRemoveStringKeys', () => {
+		activeDeviceIndices.update(s => { s.add('act-a:1'); s.add('act-b:2'); return s; });
+		expect(get(activeDeviceIndices).has('act-a:1')).toBe(true);
+		expect(get(activeDeviceIndices).has('act-b:2')).toBe(true);
+		activeDeviceIndices.update(s => { s.delete('act-a:1'); return s; });
+		expect(get(activeDeviceIndices).has('act-a:1')).toBe(false);
+	});
+
+	it('activeDeviceIndices_sameDeviceIndexDifferentFiles_treatedAsSeparate', () => {
+		activeDeviceIndices.update(s => { s.add('act-a:0'); s.add('act-b:0'); return s; });
+		expect(get(activeDeviceIndices).size).toBe(2);
+	});
+});
+
+describe('timeOffsets', () => {
+	it('timeOffsets_onInit_isEmpty', () => {
+		expect(get(timeOffsets).size).toBe(0);
+	});
+
+	it('timeOffsets_canSetAndGetOffsets', () => {
+		timeOffsets.set(new Map([['act-a', 0], ['act-b', 12.5]]));
+		expect(get(timeOffsets).get('act-a')).toBe(0);
+		expect(get(timeOffsets).get('act-b')).toBe(12.5);
 	});
 });

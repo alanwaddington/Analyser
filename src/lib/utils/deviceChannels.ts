@@ -1,4 +1,4 @@
-import type { ChannelKey, Device, DeviceStream } from '$lib/types';
+import type { ChannelKey, CrossFileStream, Device } from '$lib/types';
 
 /**
  * Derive a human-readable label for a device.
@@ -14,18 +14,26 @@ export function deriveDeviceLabel(device: Device): string {
 }
 
 /**
- * Group device streams by the channels they contribute.
+ * Build the globally-unique key for a cross-file device stream.
+ * Format: `${activityId}:${deviceIndex}`
+ */
+export function deviceKey(activityId: string, deviceIndex: number): string {
+	return `${activityId}:${deviceIndex}`;
+}
+
+/**
+ * Group cross-file device streams by the channels they contribute.
  * A stream appears once per channel it declares.
  */
-export function groupStreamsByChannel(streams: DeviceStream[]): Map<ChannelKey, DeviceStream[]> {
-	const map = new Map<ChannelKey, DeviceStream[]>();
-	for (const stream of streams) {
-		for (const ch of stream.channels) {
+export function groupStreamsByChannel(streams: CrossFileStream[]): Map<ChannelKey, CrossFileStream[]> {
+	const map = new Map<ChannelKey, CrossFileStream[]>();
+	for (const cfs of streams) {
+		for (const ch of cfs.stream.channels) {
 			const existing = map.get(ch);
 			if (existing) {
-				existing.push(stream);
+				existing.push(cfs);
 			} else {
-				map.set(ch, [stream]);
+				map.set(ch, [cfs]);
 			}
 		}
 	}
@@ -33,23 +41,23 @@ export function groupStreamsByChannel(streams: DeviceStream[]): Map<ChannelKey, 
 }
 
 /**
- * Returns true when two or more devices contribute to the same channel —
+ * Returns true when two or more cross-file streams contribute to the same channel —
  * i.e. there is something to compare.
  */
-export function isComparableGroup(streams: DeviceStream[]): boolean {
+export function isComparableGroup(streams: CrossFileStream[]): boolean {
 	return streams.length >= 2;
 }
 
 /**
- * Filter streams to only those that are active (device index in activeIndices)
+ * Filter cross-file streams to only those that are active (key in activeIndices)
  * and contribute to the given channel.
  */
 export function getActiveStreamsForChannel(
-	streams: DeviceStream[],
+	streams: CrossFileStream[],
 	channel: ChannelKey,
-	activeIndices: Set<number>
-): DeviceStream[] {
+	activeIndices: Set<string>
+): CrossFileStream[] {
 	return streams.filter(
-		s => activeIndices.has(s.device.deviceIndex) && s.channels.includes(channel)
+		s => activeIndices.has(s.key) && s.stream.channels.includes(channel)
 	);
 }

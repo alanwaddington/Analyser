@@ -58,6 +58,16 @@ export interface DeviceStream {
 	channels: ChannelKey[]; // channels this device contributes to the merged record stream
 }
 
+/**
+ * A DeviceStream tagged with its source Activity for cross-file device comparison.
+ * key = `${activity.id}:${stream.device.deviceIndex}` — globally unique per session.
+ */
+export interface CrossFileStream {
+	stream: DeviceStream;
+	activity: Activity;
+	key: string;
+}
+
 export interface Activity {
 	id: string; // derived from filename + timestamp
 	filename: string;
