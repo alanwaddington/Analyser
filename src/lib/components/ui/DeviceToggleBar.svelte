@@ -25,6 +25,18 @@
 		)
 	);
 
+	// Devices that are connected but contributed no data to the record stream
+	const noDataDevices = $derived(deviceStreams.filter(s => s.channels.length === 0));
+
+	// Devices that have at least one channel — these can be selected/deselected
+	const selectableDevices = $derived(deviceStreams.filter(s => s.channels.length > 0));
+
+	// True when every selectable device is currently active
+	const allSelected = $derived(
+		selectableDevices.length > 0 &&
+		selectableDevices.every(s => $activeDeviceIndices.has(s.device.deviceIndex))
+	);
+
 	// Track which multi-metric pills are expanded
 	let expandedDevices = $state(new Set<number>());
 
@@ -74,6 +86,16 @@
 		}
 	}
 
+	function toggleAll() {
+		if (allSelected) {
+			activeDeviceIndices.set(new Set());
+		} else {
+			activeDeviceIndices.set(
+				new Set(selectableDevices.map(s => s.device.deviceIndex))
+			);
+		}
+	}
+
 	// Build the ordered list of channel groups, skipping channels that belong
 	// only to multi-metric devices (those are shown under their expandable pill)
 	const visibleGroups = $derived.by(() => {
@@ -95,6 +117,15 @@
 	<p class="empty">No devices detected.</p>
 {:else}
 	<div class="bar">
+		<!-- Select all / Deselect all quick toggle -->
+		{#if selectableDevices.length > 1}
+			<button
+				class="select-all-btn"
+				onclick={toggleAll}
+				title={allSelected ? 'Deselect all devices' : 'Select all devices'}
+			>{allSelected ? 'Deselect all' : 'Select all'}</button>
+		{/if}
+
 		<!-- Multi-metric devices get a single expandable pill first -->
 		{#each deviceStreams.filter(s => multiMetricDeviceIndices.has(s.device.deviceIndex)) as stream (stream.device.deviceIndex)}
 			{@const label = deriveDeviceLabel(stream.device)}
@@ -163,6 +194,21 @@
 				</div>
 			</div>
 		{/each}
+
+		<!-- Connected devices that recorded no data -->
+		{#if noDataDevices.length > 0}
+			<div class="channel-group">
+				<span class="group-label">Connected · no data</span>
+				<div class="group-pills">
+					{#each noDataDevices as stream (stream.device.deviceIndex)}
+						<span
+							class="pill pill--no-data"
+							title="Connected but no data recorded"
+						>{deriveDeviceLabel(stream.device)}</span>
+					{/each}
+				</div>
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -172,6 +218,29 @@
 		flex-wrap: wrap;
 		gap: 8px;
 		align-items: flex-start;
+	}
+
+	.select-all-btn {
+		padding: 3px 10px;
+		border-radius: 999px;
+		border: 1px dashed var(--color-border);
+		background: transparent;
+		color: var(--color-muted);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: color 0.1s, border-color 0.1s;
+		white-space: nowrap;
+		align-self: center;
+	}
+
+	.select-all-btn:hover {
+		color: var(--color-text);
+		border-color: var(--color-text);
+	}
+
+	.select-all-btn:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 2px;
 	}
 
 	.channel-group {
@@ -227,6 +296,17 @@
 	.pill:focus-visible {
 		outline: 2px solid #3b82f6;
 		outline-offset: 2px;
+	}
+
+	/* Connected but no data recorded */
+	.pill--no-data {
+		cursor: default;
+		opacity: 0.4;
+		border-style: dashed;
+	}
+
+	.pill--no-data:hover {
+		color: var(--color-muted);
 	}
 
 	/* Multi-metric device pill layout */

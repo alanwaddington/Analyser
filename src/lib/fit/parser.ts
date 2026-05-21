@@ -159,13 +159,14 @@ export function buildDeviceStreams(
 	const claimed = new Set<ChannelKey>();
 	const streams: DeviceStream[] = [];
 
-	// Pass 1: external sensors (those with a known antDeviceType)
+	// Pass 1: external sensors (those with a known antDeviceType).
+	// Devices that matched no recorded channels are still included with an empty
+	// channels array so the UI can show "connected but no data" pills.
 	for (const device of devices) {
 		const { antDeviceType } = device;
 		if (antDeviceType == null) continue;
 		const candidates = DEVICE_TYPE_CHANNELS[antDeviceType] ?? [];
 		const channels = candidates.filter(ch => present.has(ch));
-		if (channels.length === 0) continue;
 		channels.forEach(ch => claimed.add(ch));
 		streams.push({ device, channels });
 	}

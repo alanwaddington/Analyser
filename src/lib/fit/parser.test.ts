@@ -117,13 +117,15 @@ describe('buildDeviceStreams', () => {
 		expect(streams[0].channels).toContain('speed');
 	});
 
-	it('buildDeviceStreams_devicesWithNoMatchingChannels_excludedFromResult', () => {
+	it('buildDeviceStreams_externalSensorWithNoMatchingChannels_includedWithEmptyChannels', () => {
 		const watch = makeDevice({ deviceIndex: 0, sourceType: 'local' });
 		const sensor = makeDevice({ deviceIndex: 1, antDeviceType: ANT_DEVICE_TYPE.HEART_RATE });
-		// No heartRate in records → sensor has no channels
+		// No heartRate in records → sensor is still included so the UI can show a "no data" pill
 		const records = [makeRecord({ speed: 10 })];
 		const streams = buildDeviceStreams([watch, sensor], records);
-		expect(streams.every(s => s.device !== sensor)).toBe(true);
+		const sensorStream = streams.find(s => s.device === sensor);
+		expect(sensorStream).toBeDefined();
+		expect(sensorStream?.channels).toHaveLength(0);
 	});
 
 	it('buildDeviceStreams_runningDynamicsPod_attributesRunningDynamicsChannels', () => {
