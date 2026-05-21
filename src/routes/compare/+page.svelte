@@ -156,6 +156,23 @@
 	});
 </script>
 
+<!-- DEBUG PANEL — remove before merge -->
+<details style="position:fixed;bottom:8px;right:8px;z-index:9999;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 12px;font-size:11px;font-family:monospace;color:#94a3b8;max-width:340px;max-height:50vh;overflow:auto;">
+	<summary style="cursor:pointer;color:#e2e8f0;font-weight:700;">🔍 Debug state</summary>
+	<pre style="margin:6px 0 0;white-space:pre-wrap;">{JSON.stringify({
+		activities: $activities.length,
+		crossFileStreams: crossFileStreams.length,
+		activeDeviceIndices: $activeDeviceIndices.size,
+		activeChannels,
+		streams: crossFileStreams.map(cfs => ({
+			key: cfs.key,
+			file: cfs.activity.filename,
+			device: cfs.stream.device,
+			channels: cfs.stream.channels,
+		})),
+	}, null, 2)}</pre>
+</details>
+
 <div class="page">
 	<div class="tab-bar" role="tablist" aria-label="Compare views">
 		{#each TABS as tab}
