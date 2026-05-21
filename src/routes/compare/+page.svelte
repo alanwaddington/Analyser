@@ -50,7 +50,7 @@
 	const lapMarkers = $derived(buildLapMarkers(activity, $xAxisMode));
 
 	// Derive which channels have at least one active device
-	const activeChannels = $derived<ChannelKey[]>(() => {
+	const activeChannels = $derived.by<ChannelKey[]>(() => {
 		if (!activity || $activeDeviceIndices.size === 0) return [];
 		const channels = new Set<ChannelKey>();
 		for (const stream of deviceStreams) {
@@ -72,6 +72,7 @@
 		return activeStreams.map((stream, i) => ({
 			activity,
 			colourIndex: i,
+			colour: DEVICE_COLOURS[i % DEVICE_COLOURS.length],
 			label: deriveDeviceLabel(stream.device),
 		}));
 	}
@@ -134,10 +135,10 @@
 			<div class="charts-scroll">
 				{#if $activeDeviceIndices.size === 0}
 					<p class="empty">Toggle a device above to see its data.</p>
-				{:else if activeChannels().length === 0}
+				{:else if activeChannels.length === 0}
 					<p class="empty">No data available for the selected devices.</p>
 				{:else}
-					{#each activeChannels() as channel (channel)}
+					{#each activeChannels as channel (channel)}
 						{@const seriesInputs = buildSeriesForChannel(channel)}
 						{#if seriesInputs.length > 0}
 							<div class="card">
@@ -173,14 +174,16 @@
 								<th class="col-channel"></th>
 								{#each summaryDevices as stream, i}
 									<th class="col-device">
-										<span class="device-dot" style="background:{DEVICE_COLOURS[i % DEVICE_COLOURS.length]}"></span>
-										{deriveDeviceLabel(stream.device)}
+										<span class="device-header">
+											<span class="device-dot" style="background:{DEVICE_COLOURS[i % DEVICE_COLOURS.length]}"></span>
+											{deriveDeviceLabel(stream.device)}
+										</span>
 									</th>
 								{/each}
 							</tr>
 						</thead>
 						<tbody>
-							{#each activeChannels() as ch, rowIdx}
+							{#each activeChannels as ch, rowIdx}
 								<tr class:row-alt={rowIdx % 2 === 1}>
 									<td class="cell-label">{CHANNEL_META[ch].label}</td>
 									{#each summaryDevices as stream}
@@ -380,13 +383,17 @@
 	.col-device {
 		font-weight: 600;
 		font-size: 0.75rem;
+		max-width: 160px;
+	}
+
+	.device-header {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		max-width: 160px;
-		display: flex;
-		align-items: center;
-		gap: 6px;
+		max-width: 100%;
 	}
 
 	.device-dot {

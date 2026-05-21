@@ -76,7 +76,7 @@
 
 	// Build the ordered list of channel groups, skipping channels that belong
 	// only to multi-metric devices (those are shown under their expandable pill)
-	const visibleGroups = $derived(() => {
+	const visibleGroups = $derived.by(() => {
 		const groups: Array<{ channelKey: string; streams: DeviceStream[]; comparable: boolean }> = [];
 		for (const [ch, streams] of channelGroups) {
 			// If all streams for this channel are multi-metric devices, skip the group
@@ -126,7 +126,7 @@
 		{/each}
 
 		<!-- Per-channel groups for regular (non-multi-metric) devices -->
-		{#each visibleGroups() as group (group.channelKey)}
+		{#each visibleGroups as group (group.channelKey)}
 			<div class="channel-group">
 				<span class="group-label">
 					{CHANNEL_META[group.channelKey as keyof typeof CHANNEL_META]?.label ?? group.channelKey}
@@ -141,6 +141,7 @@
 								class="rename-input"
 								type="text"
 								bind:value={renameValue}
+								autofocus
 								onblur={() => commitRename(stream)}
 								onkeydown={(e) => {
 									if (e.key === 'Enter') commitRename(stream);

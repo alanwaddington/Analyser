@@ -153,7 +153,7 @@
 					z: 0,
 				}] : []),
 				...seriesInputs.map((s, i) => {
-					const colour = FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
+					const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
 					const dashed = isDashed(i, referenceIndex);
 					return {
 						type: 'line' as const,
