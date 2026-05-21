@@ -148,4 +148,17 @@ describe('buildDeviceStreams', () => {
 		const result = buildDeviceStreams([watch], []);
 		expect(result).toHaveLength(0);
 	});
+
+	it('buildDeviceStreams_allDevicesHaveAntDeviceType_unclaimedChannelsAllocatedToFirstDevice', () => {
+		// Some FIT files report the primary device with device_type set (e.g. 0),
+		// which means Pass 2 finds no watch devices and channels go unallocated.
+		// The safety net should allocate remaining channels to the first device.
+		const primaryWithType = makeDevice({ deviceIndex: 0, antDeviceType: 0 });
+		const records = [makeRecord({ heartRate: 140, speed: 12 })];
+		const streams = buildDeviceStreams([primaryWithType], records);
+		const channelStream = streams.find(s => s.channels.length > 0);
+		expect(channelStream).toBeDefined();
+		expect(channelStream?.channels).toContain('heartRate');
+		expect(channelStream?.channels).toContain('speed');
+	});
 });

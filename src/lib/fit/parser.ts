@@ -187,6 +187,19 @@ export function buildDeviceStreams(
 		streams.push({ device, channels });
 	}
 
+	// Safety net: if no stream has any channels (e.g. all device_info entries had
+	// antDeviceType set, leaving unclaimed channels with no watch device to receive
+	// them), promote the first device to a catch-all so the UI always has data to
+	// show.
+	const hasChannels = streams.some(s => s.channels.length > 0);
+	if (!hasChannels) {
+		const unclaimed = ALL_RECORD_CHANNELS.filter(ch => present.has(ch) && !claimed.has(ch));
+		if (unclaimed.length > 0) {
+			const primary = streams[0]?.device ?? { deviceIndex: 0 };
+			streams.push({ device: primary, channels: unclaimed });
+		}
+	}
+
 	return streams;
 }
 
