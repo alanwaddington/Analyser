@@ -78,19 +78,6 @@
 		const selectableKeys = crossFileStreams
 			.filter(cfs => cfs.stream.channels.length > 0)
 			.map(cfs => cfs.key);
-		// DEBUG — remove before merge
-		console.log('[compare] auto-select effect', {
-			activities: $activities.length,
-			crossFileStreams: crossFileStreams.length,
-			selectableKeys,
-			streams: crossFileStreams.map(cfs => ({
-				key: cfs.key,
-				file: cfs.activity.filename,
-				deviceIndex: cfs.stream.device.deviceIndex,
-				antDeviceType: cfs.stream.device.antDeviceType,
-				channels: cfs.stream.channels,
-			})),
-		});
 		activeDeviceIndices.set(new Set(selectableKeys));
 	});
 
@@ -183,14 +170,6 @@
 				onkeydown={(e) => handleTabKey(e, tab.id)}
 			>{tab.label}</button>
 		{/each}
-	</div>
-
-	<!-- DEBUG STRIP — remove before merge -->
-	<div style="background:#1e293b;color:#94a3b8;font-size:10px;font-family:monospace;padding:4px 12px;display:flex;gap:16px;flex-wrap:wrap;">
-		<span>activities={$activities.length}</span>
-		<span>streams={crossFileStreams.length}</span>
-		<span>active={$activeDeviceIndices.size}</span>
-		<span>channels={activeChannels.join(',') || 'none'}</span>
 	</div>
 
 	<div

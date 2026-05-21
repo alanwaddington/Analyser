@@ -61,6 +61,34 @@ describe('normaliseDeviceInfo', () => {
 		const result = normaliseDeviceInfo({});
 		expect(result.deviceIndex).toBe(0);
 	});
+
+	it('normaliseDeviceInfo_stringDeviceTypeHeartRate_mapsToNumericConstant', () => {
+		// fit-file-parser outputs known ANT+ types as strings like "heart_rate"
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result = normaliseDeviceInfo({ device_index: 1, device_type: 'heart_rate' as any });
+		expect(result.antDeviceType).toBe(120); // ANT_DEVICE_TYPE.HEART_RATE
+	});
+
+	it('normaliseDeviceInfo_stringDeviceTypeBikePower_mapsToNumericConstant', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result = normaliseDeviceInfo({ device_index: 2, device_type: 'bike_power' as any });
+		expect(result.antDeviceType).toBe(11); // ANT_DEVICE_TYPE.BIKE_POWER
+	});
+
+	it('normaliseDeviceInfo_stringDeviceTypeStrideSpeedDistance_mapsToNumericConstant', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result = normaliseDeviceInfo({ device_index: 3, device_type: 'stride_speed_distance' as any });
+		expect(result.antDeviceType).toBe(3); // ANT_DEVICE_TYPE.STRIDE_SPEED_DISTANCE
+	});
+
+	it('normaliseDeviceInfo_unknownStringDeviceType_yieldsUndefined', () => {
+		// Internal Garmin components ("barometer", "gps", etc.) are not in the
+		// ANT+ mapping — they should resolve to undefined so they go through
+		// Pass 2 (watch) and are silently excluded if they have no channel data.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result = normaliseDeviceInfo({ device_index: 4, device_type: 'barometer' as any });
+		expect(result.antDeviceType).toBeUndefined();
+	});
 });
 
 // ---- helpers for buildDeviceStreams tests ----

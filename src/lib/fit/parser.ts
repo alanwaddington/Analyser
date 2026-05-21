@@ -70,20 +70,41 @@ interface FitDeviceInfo {
 	product_name?: string;
 	serial_number?: number;
 	ant_device_number?: number;
-	device_type?: number;    // ANT+ device type (e.g. 120 = HRM, 11 = power meter)
+	// fit-file-parser outputs device_type as a string for known ANT+ types
+	// (e.g. "heart_rate", "bike_power") and as a number for unknown types.
+	device_type?: number | string;
 	source_type?: string;    // 'antplus' | 'bluetooth_low_energy' | 'local'
 }
+
+// fit-file-parser outputs known ANT+ device types as lowercase snake_case strings.
+// Map those back to the numeric ANT+ device type constants so DEVICE_TYPE_CHANNELS
+// can look them up.  Garmin-internal components (barometer, gps, whr, …) are
+// intentionally absent — they fall through to Pass 2 (watch) and are silently
+// excluded from device pills if they contribute no channels.
+const STRING_DEVICE_TYPE: Record<string, number> = {
+	'heart_rate':            ANT_DEVICE_TYPE.HEART_RATE,
+	'bike_power':            ANT_DEVICE_TYPE.BIKE_POWER,
+	'bike_speed_cadence':    ANT_DEVICE_TYPE.BIKE_SPEED_CADENCE,
+	'bike_cadence':          ANT_DEVICE_TYPE.BIKE_CADENCE,
+	'bike_speed':            ANT_DEVICE_TYPE.BIKE_SPEED,
+	'stride_speed_distance': ANT_DEVICE_TYPE.STRIDE_SPEED_DISTANCE,
+	'running_dynamics':      ANT_DEVICE_TYPE.RUNNING_DYNAMICS,
+};
 
 // ---- normalisation ----
 
 export function normaliseDeviceInfo(d: FitDeviceInfo): Device {
+	const rawType = d.device_type;
+	const antDeviceType =
+		typeof rawType === 'string' ? STRING_DEVICE_TYPE[rawType]   // undefined for unknown strings
+		: rawType;                                                    // numeric or undefined as-is
 	return {
 		deviceIndex: d.device_index ?? 0,
 		manufacturer: d.manufacturer,
 		product: d.product_name,
 		serialNumber: d.serial_number,
 		antDeviceNumber: d.ant_device_number,
-		antDeviceType: d.device_type,
+		antDeviceType,
 		sourceType: d.source_type,
 	};
 }
@@ -216,7 +237,19 @@ function normalise(data: FitData, filename: string): Activity {
 	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
-	const devices: Device[] = (data.device_infos ?? []).map(normaliseDeviceInfo);
+
+	// Deduplicate device_infos: some FIT files include the same device_index
+	// multiple times (e.g. once at activity start and once at end).  Keep only
+	// the first occurrence of each device_index so downstream code never sees
+	// duplicate keys in crossFileStreams.
+	const seenDeviceIndices = new Set<number>();
+	const uniqueDeviceInfos = (data.device_infos ?? []).filter(d => {
+		const idx = d.device_index ?? 0;
+		if (seenDeviceIndices.has(idx)) return false;
+		seenDeviceIndices.add(idx);
+		return true;
+	});
+	const devices: Device[] = uniqueDeviceInfos.map(normaliseDeviceInfo);
 	applyLabels(devices); // restore any user-assigned labels from localStorage
 	const deviceStreams = buildDeviceStreams(devices, records);
 
