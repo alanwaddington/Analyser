@@ -7,6 +7,7 @@
 		groupStreamsByChannel,
 		isComparableGroup,
 	} from '$lib/utils/deviceChannels';
+	import { setDeviceLabel, removeDeviceLabel } from '$lib/stores/deviceLabels';
 
 	let { deviceStreams }: { deviceStreams: DeviceStream[] } = $props();
 
@@ -26,6 +27,31 @@
 
 	// Track which multi-metric pills are expanded
 	let expandedDevices = $state(new Set<number>());
+
+	// Inline rename state: deviceIndex → current edit value (null = not editing)
+	let renamingDevice = $state<number | null>(null);
+	let renameValue = $state('');
+
+	function startRename(deviceIndex: number, currentLabel: string) {
+		renamingDevice = deviceIndex;
+		renameValue = currentLabel;
+	}
+
+	function commitRename(stream: DeviceStream) {
+		const trimmed = renameValue.trim();
+		if (trimmed && stream.device.antDeviceNumber != null) {
+			setDeviceLabel(stream.device.antDeviceNumber, trimmed);
+			stream.device.label = trimmed; // update in-memory immediately
+		} else if (!trimmed && stream.device.antDeviceNumber != null) {
+			removeDeviceLabel(stream.device.antDeviceNumber);
+			stream.device.label = undefined;
+		}
+		renamingDevice = null;
+	}
+
+	function cancelRename() {
+		renamingDevice = null;
+	}
 
 	function toggleDevice(deviceIndex: number) {
 		activeDeviceIndices.update(indices => {
@@ -110,12 +136,28 @@
 					{#each group.streams as stream (stream.device.deviceIndex)}
 						{@const label = deriveDeviceLabel(stream.device)}
 						{@const isActive = $activeDeviceIndices.has(stream.device.deviceIndex)}
-						<button
-							class="pill"
-							class:active={isActive}
-							onclick={() => toggleDevice(stream.device.deviceIndex)}
-							aria-pressed={isActive}
-						>{label}</button>
+						{#if renamingDevice === stream.device.deviceIndex}
+							<input
+								class="rename-input"
+								type="text"
+								bind:value={renameValue}
+								onblur={() => commitRename(stream)}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') commitRename(stream);
+									else if (e.key === 'Escape') cancelRename();
+								}}
+								aria-label="Rename device"
+							/>
+						{:else}
+							<button
+								class="pill"
+								class:active={isActive}
+								onclick={() => toggleDevice(stream.device.deviceIndex)}
+								ondblclick={() => startRename(stream.device.deviceIndex, label)}
+								aria-pressed={isActive}
+								title="Double-click to rename"
+							>{label}</button>
+						{/if}
 					{/each}
 				</div>
 			</div>
@@ -237,5 +279,17 @@
 	.empty {
 		font-size: 0.8rem;
 		color: var(--color-muted);
+	}
+
+	.rename-input {
+		padding: 2px 8px;
+		border-radius: 999px;
+		border: 1px solid #3b82f6;
+		background: #1e3a5f;
+		color: #60a5fa;
+		font-size: 0.75rem;
+		outline: none;
+		min-width: 80px;
+		max-width: 160px;
 	}
 </style>

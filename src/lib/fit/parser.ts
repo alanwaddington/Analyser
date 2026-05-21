@@ -2,6 +2,7 @@ import FitParser from 'fit-file-parser';
 import type { Activity, ActivityRecord, Device, DeviceStream, Lap } from '../types';
 import { ANT_DEVICE_TYPE } from '../types';
 import type { ChannelKey } from '../types';
+import { applyLabels } from '../stores/deviceLabels';
 
 export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Activity> {
 	return new Promise((resolve, reject) => {
@@ -188,6 +189,7 @@ function normalise(data: FitData, filename: string): Activity {
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
 	const devices: Device[] = (data.device_infos ?? []).map(normaliseDeviceInfo);
+	applyLabels(devices); // restore any user-assigned labels from localStorage
 	const deviceStreams = buildDeviceStreams(devices, records);
 
 	return {
