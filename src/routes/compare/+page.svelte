@@ -115,15 +115,27 @@
 		});
 	}
 
-	// Mean/Max: one series per loaded file
-	const meanMaxSeriesInputs = $derived(
-		$activities.map((a, i) => ({
-			activity: a,
-			colourIndex: i,
-			colour: FILE_COLOURS[i % FILE_COLOURS.length],
-			label: a.filename,
-		}))
-	);
+	// Mean/Max: one series per file that has at least one active device.
+	// Filters out files whose devices are all toggled off so their curves disappear
+	// when deselected, consistent with the Charts and Summary tabs.
+	const meanMaxSeriesInputs = $derived.by(() => {
+		const activeActivityIds = new Set(
+			crossFileStreams
+				.filter(cfs => $activeDeviceIndices.has(cfs.key))
+				.map(cfs => cfs.activity.id)
+		);
+		return $activities
+			.filter(a => activeActivityIds.has(a.id))
+			.map(a => {
+				const actIndex = $activities.indexOf(a);
+				return {
+					activity: a,
+					colourIndex: actIndex,
+					colour: FILE_COLOURS[actIndex % FILE_COLOURS.length],
+					label: a.filename,
+				};
+			});
+	});
 
 	// Active CrossFileStreams for the summary table columns
 	const activeCrossFileStreams = $derived(
@@ -281,6 +293,13 @@
 							</tr>
 						</thead>
 						<tbody>
+							<!-- Sub-header row: format guide -->
+							<tr class="row-subheader">
+								<td class="cell-label cell-label--subheader">Channel</td>
+								{#each activeCrossFileStreams as _cfs}
+									<td class="cell-stat cell-stat--subheader">avg / max / min</td>
+								{/each}
+							</tr>
 							{#each activeChannels as ch, rowIdx}
 								<tr class:row-alt={rowIdx % 2 === 1}>
 									<td class="cell-label">{CHANNEL_META[ch].label}</td>
@@ -616,5 +635,18 @@
 
 	.row-alt {
 		background: color-mix(in srgb, var(--color-border) 30%, transparent);
+	}
+
+	.row-subheader {
+		background: color-mix(in srgb, var(--color-border) 15%, transparent);
+	}
+
+	.cell-label--subheader,
+	.cell-stat--subheader {
+		font-size: 0.65rem;
+		color: var(--color-muted);
+		font-weight: 400;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 </style>
