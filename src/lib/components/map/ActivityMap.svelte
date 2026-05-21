@@ -2,16 +2,20 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { Activity } from '$lib/types';
 	import { FILE_COLOURS } from '$lib/types';
-	import { positionFromPoints, extractGpsPoints } from './ActivityMap.utils.ts';
+	import { xAxisMode } from '$lib/stores/session';
+	import { positionFromPoints, extractGpsPoints, distanceAtPoint } from './ActivityMap.utils.ts';
 
 	let {
 		activities,
 		referenceIndex = undefined,
 		hoveredDistance,
+		onHoverDistance = undefined,
 	}: {
 		activities: Activity[];
 		referenceIndex?: number;
 		hoveredDistance: number | null;
+		/** Emits distance in metres when hovering a polyline (map→chart sync), or null on leave */
+		onHoverDistance?: (distanceMetres: number | null) => void;
 	} = $props();
 
 	const gpsCache = $derived(activities.map(a => extractGpsPoints(a)));
@@ -21,6 +25,7 @@
 	let map = $state<import('leaflet').Map | undefined>(undefined);
 	let polylines: import('leaflet').Polyline[] = [];
 	let markers: (import('leaflet').CircleMarker | null)[] = [];
+	let resizeObserver: ResizeObserver | undefined;
 
 	onMount(async () => {
 		L = await import('leaflet');
@@ -32,9 +37,18 @@
 			attribution:
 				'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 		}).addTo(map);
+
+		// Invalidate Leaflet's size whenever the container changes dimensions.
+		// This handles tab switches where the container goes from display:none
+		// to display:flex — without this, the map renders grey tiles.
+		resizeObserver = new ResizeObserver(() => {
+			map?.invalidateSize();
+		});
+		resizeObserver.observe(container);
 	});
 
 	onDestroy(() => {
+		resizeObserver?.disconnect();
 		map?.remove();
 	});
 
@@ -67,6 +81,22 @@
 			});
 
 			polyline.bindTooltip(activity.filename, { sticky: true, opacity: 0.9 });
+
+			// Map → chart sync: emit distance on polyline hover (distance mode only)
+			polyline.on('mousemove', (e: import('leaflet').LeafletMouseEvent) => {
+				if ($xAxisMode !== 'distance') return;
+				const dist = distanceAtPoint(gpsPoints, e.latlng.lat, e.latlng.lng);
+				if (dist !== null) {
+					onHoverDistance?.(dist);
+					polyline.setTooltipContent(`${activity.filename} · ${(dist / 1000).toFixed(2)} km`);
+				}
+			});
+
+			polyline.on('mouseout', () => {
+				onHoverDistance?.(null);
+				polyline.setTooltipContent(activity.filename);
+			});
+
 			polyline.addTo(map);
 			polylines.push(polyline);
 		}

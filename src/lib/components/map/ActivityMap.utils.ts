@@ -44,3 +44,36 @@ export function positionFromPoints(
 export function positionAtDistance(activity: Activity, targetDist: number): GpsPoint | null {
 	return positionFromPoints(extractGpsPoints(activity), targetDist);
 }
+
+/**
+ * Given a target lat/lon and an array of GPS points with distance values,
+ * returns the distance (in metres) of the nearest GPS point.
+ *
+ * Uses squared Euclidean distance on raw lat/lon coordinates — sufficient for
+ * finding the nearest point within a local area without the overhead of
+ * Haversine.
+ *
+ * Returns null if the points array is empty.
+ */
+export function distanceAtPoint(
+	points: GpsPointWithDistance[],
+	targetLat: number,
+	targetLon: number,
+): number | null {
+	if (points.length === 0) return null;
+
+	let nearestDist = points[0].distance;
+	let minSquaredDelta = Infinity;
+
+	for (const p of points) {
+		const dLat = p.lat - targetLat;
+		const dLon = p.lon - targetLon;
+		const squaredDelta = dLat * dLat + dLon * dLon;
+		if (squaredDelta < minSquaredDelta) {
+			minSquaredDelta = squaredDelta;
+			nearestDist = p.distance;
+		}
+	}
+
+	return nearestDist;
+}

@@ -67,6 +67,32 @@
 		if ($activities.length === 0) goto('/');
 	});
 
+	// ── Bidirectional map↔chart hover sync ───────────────────────────────────
+
+	/** Distance in metres from chart hover → shown as position marker on map */
+	let chartHoveredDistance = $state<number | null>(null);
+
+	/** Distance in metres from map hover → drives chart crosshairs */
+	let mapHoveredDistance = $state<number | null>(null);
+
+	function handleChartHoverDistance(distMetres: number | null) {
+		if ($xAxisMode !== 'distance') return;
+		chartHoveredDistance = distMetres;
+	}
+
+	function handleMapHoverDistance(distMetres: number | null) {
+		if ($xAxisMode !== 'distance') return;
+		mapHoveredDistance = distMetres;
+	}
+
+	// Clear both directions when switching away from distance mode
+	$effect(() => {
+		if ($xAxisMode !== 'distance') {
+			chartHoveredDistance = null;
+			mapHoveredDistance = null;
+		}
+	});
+
 	function formatDate(d: Date): string {
 		return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 	}
@@ -109,7 +135,8 @@
 		role="tabpanel"
 		aria-labelledby="tab-{activeTab}"
 	>
-		{#if activeTab === 'charts'}
+		<!-- Charts panel — always in DOM so ECharts instances survive tab switches -->
+		<div class="charts-panel" class:tab-hidden={activeTab !== 'charts'}>
 			<div class="toolbar">
 				<ChannelToggleBar channels={availableChannels} />
 				<div class="axis-toggle" role="group" aria-label="X-axis mode">
@@ -138,7 +165,7 @@
 				{#if $activeChannels.length === 0}
 					<p class="empty">No channels selected.</p>
 				{:else}
-					{#each $activeChannels as channel (channel)}
+					{#each $activeChannels as channel, chartIdx (channel)}
 						<div class="card">
 							<TimeSeriesChart
 								{channel}
@@ -146,16 +173,29 @@
 								{lapMarkers}
 								referenceIndex={$referenceIndex}
 								groupId="event-charts"
+								onHoverDistance={chartIdx === 0 ? handleChartHoverDistance : undefined}
+								externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
 							/>
 						</div>
 					{/each}
 				{/if}
 			</div>
-		{:else if activeTab === 'map'}
+		</div>
+
+		<!-- Map panel — always in DOM so Leaflet map survives tab switches -->
+		<div class="map-panel" class:tab-hidden={activeTab !== 'map'}>
 			<div class="map-wrap">
-				<ActivityMap activities={$activities} referenceIndex={$referenceIndex} hoveredDistance={null} />
+				<ActivityMap
+					activities={$activities}
+					referenceIndex={$referenceIndex}
+					hoveredDistance={chartHoveredDistance}
+					onHoverDistance={handleMapHoverDistance}
+				/>
 			</div>
-		{:else if activeTab === 'segments'}
+		</div>
+
+		<!-- Other tabs — conditional rendering (no hover sync required) -->
+		{#if activeTab === 'segments'}
 			<div class="cards-scroll">
 				{#if $activities.length < 2}
 					<p class="empty">Load at least 2 activities to see segment comparison.</p>
@@ -321,6 +361,21 @@
 		border: 1px solid var(--color-border);
 		border-radius: 8px;
 		padding: 16px;
+	}
+
+	/* ── Always-rendered panels (chart↔map hover sync) ─────────────────── */
+
+	.charts-panel,
+	.map-panel {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.tab-hidden {
+		display: none !important;
 	}
 
 	.map-wrap {

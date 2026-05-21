@@ -16,12 +16,18 @@
 		lapMarkers = [],
 		referenceIndex = undefined,
 		groupId,
+		onHoverDistance = undefined,
+		externalHoverDistance = undefined,
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
 		lapMarkers?: { value: number; label: string }[];
 		referenceIndex?: number;
 		groupId: string;
+		/** Emits the hovered x-axis distance in metres, or null when the cursor leaves */
+		onHoverDistance?: (distanceMetres: number | null) => void;
+		/** When set, drives the chart crosshair to this distance in metres (map→chart sync) */
+		externalHoverDistance?: number | null;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -204,6 +210,27 @@
 		chart.group = groupId;
 		echarts.connect(groupId);
 
+		// Chart → map sync: emit distance (metres) when crosshair moves in distance mode.
+		// updateAxisPointer fires for all connected charts; we only wire onHoverDistance
+		// on charts that explicitly request it to avoid duplicate emissions.
+		if (onHoverDistance) {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			chart.on('updateAxisPointer', (event: any) => {
+				// Only emit in distance mode — in time mode axisInfo.value is seconds,
+				// not km, so converting it would produce meaningless distance values.
+				if ($xAxisMode !== 'distance') return;
+				const axisInfo = event?.axesInfo?.[0];
+				if (axisInfo != null) {
+					// x-axis value is in km (distance mode) — convert to metres
+					onHoverDistance!(axisInfo.value * 1000);
+				}
+			});
+
+			chart.getZr().on('globalout', () => {
+				onHoverDistance!(null);
+			});
+		}
+
 		mq = window.matchMedia('(prefers-color-scheme: dark)');
 		themeHandler = (e: MediaQueryListEvent) => {
 			isDark = e.matches;
@@ -227,6 +254,28 @@
 		void seriesInputs;
 		void referenceIndex;
 		chart?.setOption(buildOption(), { notMerge: true });
+	});
+
+	// Map → chart sync: drive crosshair programmatically when externalHoverDistance changes.
+	// Uses dispatchAction which propagates to all connected charts via echarts.connect().
+	$effect(() => {
+		if (!chart) return;
+		if (externalHoverDistance == null) {
+			chart.dispatchAction({ type: 'hideTip' });
+			return;
+		}
+		const distKm = externalHoverDistance / 1000;
+		// Convert distance value to pixel position on the x-axis
+		const pixelX = chart.convertToPixel({ xAxisIndex: 0 }, distKm);
+		if (pixelX == null) return;
+		// Use the vertical centre of the chart plot area for the y position
+		const layout = chart.getOption() as { grid?: Array<{ top?: number; bottom?: number }> };
+		const grid = layout?.grid?.[0];
+		const containerHeight = container?.clientHeight ?? 200;
+		const top = typeof grid?.top === 'number' ? grid.top : 20;
+		const bottom = typeof grid?.bottom === 'number' ? grid.bottom : 30;
+		const pixelY = top + (containerHeight - top - bottom) / 2;
+		chart.dispatchAction({ type: 'showTip', x: pixelX, y: pixelY });
 	});
 </script>
 
