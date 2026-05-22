@@ -8,23 +8,35 @@
 	import SmoothingSlider from '$lib/components/ui/SmoothingSlider.svelte';
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 
-	let { compareDisabled = false }: { compareDisabled?: boolean } = $props();
+	let {
+		compareDisabled = false,
+		open = false,
+		onclose,
+	}: {
+		compareDisabled?: boolean;
+		/** Whether the drawer is open (mobile only — ignored on desktop). */
+		open?: boolean;
+		/** Called when a nav item is tapped or Escape is pressed on mobile. */
+		onclose?: () => void;
+	} = $props();
 
 	const isCompare = $derived(page.url.pathname.startsWith('/compare'));
 	const isEvent = $derived(page.url.pathname.startsWith('/event'));
 
 	function goToCompare() {
+		onclose?.();
 		lastMode.set('compare');
 		goto('/compare');
 	}
 
 	function goToEvent() {
+		onclose?.();
 		lastMode.set('event');
 		goto('/event');
 	}
 </script>
 
-<nav class="sidebar">
+<nav class="sidebar" class:open={open}>
 	<div class="logo">
 		<span class="wordmark">Analyser</span>
 		<span class="tagline">FIT file analysis</span>
@@ -163,5 +175,26 @@
 		gap: 12px;
 		padding: 12px;
 		margin-top: auto;
+	}
+
+	/* ── Mobile: drawer overlay at ≤768px ─────────────────────────────── */
+
+	@media (max-width: 768px) {
+		.sidebar {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 280px;
+			height: 100vh;
+			z-index: 100;
+			transform: translateX(-100%);
+			transition: transform 0.3s ease;
+			box-shadow: none;
+		}
+
+		.sidebar.open {
+			transform: translateX(0);
+			box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+		}
 	}
 </style>
