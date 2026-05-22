@@ -13,7 +13,8 @@ A browser-based FIT file analysis application for cyclists and runners. Load one
 - Time-offset controls for fine-tuning GPS timestamp alignment between files
 
 ### GPS Map
-- Interactive Leaflet/OpenStreetMap map showing GPS traces for all loaded activities
+- Interactive Leaflet map showing GPS traces for all loaded activities
+- **Five tile layer providers** — switch between Streets, Satellite, Topo, Cycling, and Dark base maps via the in-map layers control; all are free with no API key required
 - **Metric-coloured polylines** — colour each segment of the route by the value of any chosen metric (pace, heart rate, power, cadence, etc.) using a blue→green→yellow→red gradient
 - In-map channel selector and gradient legend with formatted min/max labels
 - Reference activity shown with a dashed overlay so it remains identifiable on the heatmap
@@ -41,7 +42,7 @@ A browser-based FIT file analysis application for cyclists and runners. Load one
 | Styling | TailwindCSS |
 | FIT parsing | fit-file-parser (browser, Web Worker) |
 | Charting | ECharts |
-| Maps | Leaflet + OpenStreetMap |
+| Maps | Leaflet + 5 tile providers (OSM, ESRI Satellite, OpenTopoMap, CyclOSM, CartoDB) |
 | Deployment | Vercel (`@sveltejs/adapter-vercel`) |
 
 ## Getting Started
