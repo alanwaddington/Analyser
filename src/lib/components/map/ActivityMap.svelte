@@ -107,8 +107,10 @@
 		}
 		// Add default (first) layer to map
 		baseLayers[TILE_PROVIDERS[0].name].addTo(map);
-		// Register all layers in the native Leaflet control at topleft
-		L.control.layers(baseLayers, {}, { position: 'topleft' }).addTo(map);
+		// Register all layers in the native Leaflet control at topleft.
+		// collapsed: false keeps the panel permanently open so all layer names are
+		// always visible — no hover required for discoverability.
+		L.control.layers(baseLayers, {}, { position: 'topleft', collapsed: false }).addTo(map);
 
 		// ── Metric selector control (top-right) ─────────────────────────────
 		const SelectorControl = L.Control.extend({
@@ -568,7 +570,8 @@
 		line-height: 1.3;
 	}
 
-	/* ── Leaflet layers control — base container ────────────────────────── */
+	/* ── Leaflet layers control — always-expanded panel ────────────────── */
+	/* collapsed: false is set in JS, so the toggle button never renders.   */
 	:global(.leaflet-control-layers) {
 		background: color-mix(in srgb, var(--color-card, #1e1e2e) 88%, transparent);
 		backdrop-filter: blur(6px);
@@ -579,23 +582,6 @@
 		font-family: inherit;
 	}
 
-	/* ── Collapsed toggle button ────────────────────────────────────────── */
-	:global(.leaflet-control-layers-toggle) {
-		width: 32px !important;
-		height: 32px !important;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12 2 2 7 12 12 22 7 12 2'/%3E%3Cpolyline points='2 17 12 22 22 17'/%3E%3Cpolyline points='2 12 12 17 22 12'/%3E%3C/svg%3E") !important;
-		background-repeat: no-repeat !important;
-		background-position: center !important;
-		background-size: 18px 18px !important;
-		background-color: transparent !important;
-		border-radius: 5px;
-	}
-
-	:global(.leaflet-control-layers-toggle:hover) {
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23f1f5f9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12 2 2 7 12 12 22 7 12 2'/%3E%3Cpolyline points='2 17 12 22 22 17'/%3E%3Cpolyline points='2 12 12 17 22 12'/%3E%3C/svg%3E") !important;
-	}
-
-	/* ── Expanded panel ─────────────────────────────────────────────────── */
 	:global(.leaflet-control-layers-expanded) {
 		padding: 7px 10px !important;
 		min-width: 130px;

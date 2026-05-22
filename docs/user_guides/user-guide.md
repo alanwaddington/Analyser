@@ -160,9 +160,9 @@ The Map tab renders the GPS route recorded in the activity.
 
 **Tile layers:**
 
-Click the layer control icon in the **top-left** corner of the map to switch between five map styles:
+A **Map Layer** panel is always visible in the **top-left** corner of the map. Click any layer name to switch the base map:
 
-![Tile layer switcher expanded showing five providers](screenshots/08-map-tile-switcher.png)
+![Map showing the always-visible tile layer panel with five providers](screenshots/08-map-tile-switcher.png)
 
 | Layer | Best for |
 |-------|---------|
