@@ -592,6 +592,18 @@
 		height: 400px;
 	}
 
+	@media (max-width: 480px) {
+		.card--meanmax {
+			height: 280px;
+		}
+	}
+
+	@media (max-height: 480px) {
+		.card--meanmax {
+			height: 220px;
+		}
+	}
+
 	/* ── Summary table ──────────────────────────────────────────────── */
 
 	.summary-scroll {

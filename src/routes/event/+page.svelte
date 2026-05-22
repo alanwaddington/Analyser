@@ -408,6 +408,18 @@
 		height: 400px;
 	}
 
+	@media (max-width: 480px) {
+		.card--segment {
+			height: 260px;
+		}
+	}
+
+	@media (max-height: 480px) {
+		.card--segment {
+			height: 200px;
+		}
+	}
+
 	.summary-scroll {
 		flex: 1;
 		overflow: auto;

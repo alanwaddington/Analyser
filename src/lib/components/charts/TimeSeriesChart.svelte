@@ -334,6 +334,18 @@
 		display: block;
 	}
 
+	@media (max-width: 480px) {
+		.chart-canvas {
+			height: 140px;
+		}
+	}
+
+	@media (max-height: 480px) {
+		.chart-canvas {
+			height: 110px;
+		}
+	}
+
 	.chart-legend {
 		display: flex;
 		flex-wrap: wrap;

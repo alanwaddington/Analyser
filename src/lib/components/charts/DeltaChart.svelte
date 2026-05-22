@@ -210,6 +210,18 @@
 		display: block;
 	}
 
+	@media (max-width: 480px) {
+		.chart-canvas {
+			height: 120px;
+		}
+	}
+
+	@media (max-height: 480px) {
+		.chart-canvas {
+			height: 90px;
+		}
+	}
+
 	.chart-legend {
 		display: flex;
 		flex-wrap: wrap;
