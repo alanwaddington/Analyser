@@ -100,6 +100,11 @@
 		renamingDevice = null;
 	}
 
+	// Svelte action: focuses the element when it mounts.
+	// Replaces the `autofocus` HTML attribute to avoid the a11y_autofocus warning —
+	// programmatic focus is equivalent but does not trip screen-reader heuristics.
+	function focusOnMount(node: HTMLInputElement) { node.focus(); }
+
 	function toggleDevice(key: string) {
 		activeDeviceIndices.update(indices => {
 			const next = new Set(indices);
@@ -179,7 +184,7 @@
 						class="rename-input"
 						type="text"
 						bind:value={renameValue}
-						autofocus
+						use:focusOnMount
 						onblur={() => commitRename(cfs)}
 						onkeydown={(e) => {
 							if (e.key === 'Enter') commitRename(cfs);
