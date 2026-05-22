@@ -46,7 +46,7 @@ describe('extractGpsPointsWithMetric', () => {
 		const activity = makeActivity(records);
 		const smoothed = [140, 155, 162];
 
-		const result = extractGpsPointsWithMetric(activity, 'heartRate', smoothed);
+		const result = extractGpsPointsWithMetric(activity, smoothed);
 
 		expect(result).toHaveLength(3);
 		expect(result[0]).toEqual({ lat: 51.0, lon: -1.0, distance: 0, metricValue: 140 });
@@ -63,7 +63,7 @@ describe('extractGpsPointsWithMetric', () => {
 		const activity = makeActivity(records);
 		const smoothed = [140, 148, 155];
 
-		const result = extractGpsPointsWithMetric(activity, 'heartRate', smoothed);
+		const result = extractGpsPointsWithMetric(activity, smoothed);
 
 		// Only 2 records have GPS
 		expect(result).toHaveLength(2);
@@ -79,7 +79,7 @@ describe('extractGpsPointsWithMetric', () => {
 		const activity = makeActivity(records);
 		const smoothed = [null, 155];
 
-		const result = extractGpsPointsWithMetric(activity, 'heartRate', smoothed);
+		const result = extractGpsPointsWithMetric(activity, smoothed);
 
 		expect(result).toHaveLength(2);
 		expect(result[0].metricValue).toBeNull();
@@ -88,7 +88,7 @@ describe('extractGpsPointsWithMetric', () => {
 
 	it('extractGpsPointsWithMetric_emptyRecords_returnsEmpty', () => {
 		const activity = makeActivity([]);
-		const result = extractGpsPointsWithMetric(activity, 'heartRate', []);
+		const result = extractGpsPointsWithMetric(activity, []);
 		expect(result).toHaveLength(0);
 	});
 
@@ -100,7 +100,7 @@ describe('extractGpsPointsWithMetric', () => {
 		const activity = makeActivity(records);
 		const smoothed = [null, null];
 
-		const result = extractGpsPointsWithMetric(activity, 'heartRate', smoothed);
+		const result = extractGpsPointsWithMetric(activity, smoothed);
 		expect(result).toHaveLength(0);
 	});
 
@@ -116,7 +116,7 @@ describe('extractGpsPointsWithMetric', () => {
 		const activity = makeActivity(records);
 		const smoothed = [100, 150, 200];
 
-		const result = extractGpsPointsWithMetric(activity, 'heartRate', smoothed);
+		const result = extractGpsPointsWithMetric(activity, smoothed);
 
 		// Index 1 has GPS → metricValue from smoothed[1] = 150
 		// Index 2 has GPS → metricValue from smoothed[2] = 200

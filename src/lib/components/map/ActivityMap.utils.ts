@@ -1,4 +1,4 @@
-import type { Activity, ActivityRecord, ChannelKey, GpsPoint } from '$lib/types';
+import type { Activity, ActivityRecord, GpsPoint } from '$lib/types';
 
 export interface GpsPointWithDistance {
 	lat: number;
@@ -45,16 +45,6 @@ export function positionAtDistance(activity: Activity, targetDist: number): GpsP
 	return positionFromPoints(extractGpsPoints(activity), targetDist);
 }
 
-/**
- * Given a target lat/lon and an array of GPS points with distance values,
- * returns the distance (in metres) of the nearest GPS point.
- *
- * Uses squared Euclidean distance on raw lat/lon coordinates — sufficient for
- * finding the nearest point within a local area without the overhead of
- * Haversine.
- *
- * Returns null if the points array is empty.
- */
 // ---------------------------------------------------------------------------
 // Metric-coloured polyline utilities
 // ---------------------------------------------------------------------------
@@ -71,7 +61,6 @@ export interface GpsPointWithMetric extends GpsPointWithDistance {
  */
 export function extractGpsPointsWithMetric(
 	activity: Activity,
-	_channel: ChannelKey,
 	smoothedValues: (number | null)[],
 ): GpsPointWithMetric[] {
 	const result: GpsPointWithMetric[] = [];
@@ -111,6 +100,16 @@ export function computeMetricRange(
 	return { min, max };
 }
 
+/**
+ * Given a target lat/lon and an array of GPS points with distance values,
+ * returns the distance (in metres) of the nearest GPS point.
+ *
+ * Uses squared Euclidean distance on raw lat/lon coordinates — sufficient for
+ * finding the nearest point within a local area without the overhead of
+ * Haversine.
+ *
+ * Returns null if the points array is empty.
+ */
 export function distanceAtPoint(
 	points: GpsPointWithDistance[],
 	targetLat: number,

@@ -51,6 +51,40 @@
 	let legendMinEl: HTMLSpanElement | undefined;
 	let legendMaxEl: HTMLSpanElement | undefined;
 
+	// ── Shared metric computation ────────────────────────────────────────────
+	// Computed once and consumed by both the legend and polyline effects,
+	// avoiding duplicate smooth() + extractGpsPointsWithMetric() work.
+	interface ActivityMetricData {
+		smoothedValues: (number | null)[] | null; // null = activity has no data for this channel
+		metricGpsPoints: GpsPointWithMetric[];    // empty when smoothedValues is null
+	}
+	interface MetricComputation {
+		channel: ChannelKey;
+		perActivity: ActivityMetricData[];
+		globalRange: { min: number; max: number } | null;
+	}
+
+	const metricComputation = $derived.by<MetricComputation | null>(() => {
+		if (!metricChannel) return null;
+		const ch = metricChannel;
+
+		const perActivity: ActivityMetricData[] = activities.map(activity => {
+			const raw = extractChannel(activity.records, ch);
+			const smoothedVals = smooth(raw, $smoothing);
+			if (!smoothedVals.some(v => v !== null)) {
+				return { smoothedValues: null, metricGpsPoints: [] };
+			}
+			return {
+				smoothedValues: smoothedVals,
+				metricGpsPoints: extractGpsPointsWithMetric(activity, smoothedVals),
+			};
+		});
+
+		const globalRange = computeMetricRange(perActivity.map(d => d.metricGpsPoints));
+
+		return { channel: ch, perActivity, globalRange };
+	});
+
 	onMount(async () => {
 		L = await import('leaflet');
 		await import('leaflet/dist/leaflet.css');
@@ -160,49 +194,31 @@
 		}
 	});
 
-	// ── Update legend content when metricChannel or data changes ────────────
+	// ── Update legend content from shared metricComputation ─────────────────
 	$effect(() => {
 		if (!legendControlEl || !legendLabelEl || !legendMinEl || !legendMaxEl) return;
 
-		if (!metricChannel) {
+		if (!metricComputation?.globalRange) {
 			legendControlEl.classList.add('hidden');
 			return;
 		}
 
-		const channel = metricChannel;
+		const { channel, globalRange } = metricComputation;
 		const meta = CHANNEL_META[channel];
-		const isPace = channel === 'pace';
-
-		const allSmoothedPoints = activities.map(activity => {
-			const raw = extractChannel(activity.records, channel);
-			const smoothedVals = smooth(raw, $smoothing);
-			return extractGpsPointsWithMetric(activity, channel, smoothedVals);
-		});
-
-		const range = computeMetricRange(allSmoothedPoints);
-
-		if (!range) {
-			legendControlEl.classList.add('hidden');
-			return;
-		}
 
 		legendControlEl.classList.remove('hidden');
 		legendLabelEl.textContent = `${meta.label} · ${meta.unit}`;
-
-		// For pace: lower value = faster = blue (left), so display min on left (fast) and max on right (slow)
-		// The gradient bar always shows blue→red left-to-right, matching the inverted mapping
-		legendMinEl.textContent = formatMetricValue(isPace ? range.min : range.min, channel);
-		legendMaxEl.textContent = formatMetricValue(isPace ? range.max : range.max, channel);
+		legendMinEl.textContent = formatMetricValue(globalRange.min, channel);
+		legendMaxEl.textContent = formatMetricValue(globalRange.max, channel);
 	});
 
 	// ── Polyline rendering ───────────────────────────────────────────────────
 	$effect(() => {
 		if (!map || !L) return;
 
-		void activities;
-		void referenceIndex;
-		void metricChannel;
-		void $smoothing;
+		void activities;       // re-render when activities change (even when metricChannel is null)
+		void referenceIndex;   // re-render when reference activity changes
+		void metricComputation; // re-render when channel, smoothing, or activity data changes
 
 		// Remove all existing layers
 		for (const layer of layers) layer.remove();
@@ -210,27 +226,8 @@
 
 		const allPoints: import('leaflet').LatLng[] = [];
 
-		// Precompute metric data for all activities if a channel is selected
-		const channel = metricChannel;
-		let metricDataPerActivity: ((number | null)[] | null)[] = [];
-		let globalRange: { min: number; max: number } | null = null;
-
-		if (channel) {
-			metricDataPerActivity = activities.map(activity => {
-				const raw = extractChannel(activity.records, channel);
-				const smoothedVals = smooth(raw, $smoothing);
-				const hasData = smoothedVals.some(v => v !== null);
-				return hasData ? smoothedVals : null;
-			});
-
-			const allMetricPoints = activities.map((activity, i) => {
-				const smoothed = metricDataPerActivity[i];
-				if (!smoothed) return [];
-				return extractGpsPointsWithMetric(activity, channel, smoothed);
-			});
-
-			globalRange = computeMetricRange(allMetricPoints);
-		}
+		const channel = metricComputation?.channel ?? null;
+		const globalRange = metricComputation?.globalRange ?? null;
 
 		// Shared Canvas renderer for all metric-coloured segments
 		// Canvas batches all segments into one <canvas> element — critical for performance
@@ -246,8 +243,8 @@
 			allPoints.push(...latLngs);
 
 			const isRef = referenceIndex !== undefined && i === referenceIndex;
-			const smoothedValues = channel ? metricDataPerActivity[i] : null;
-			const useMetric = channel && smoothedValues && globalRange;
+			const actData = metricComputation?.perActivity[i] ?? null;
+			const useMetric = channel && actData?.smoothedValues && globalRange;
 
 			if (!useMetric) {
 				// ── Flat colour polyline (default / fallback) ────────────────────
@@ -281,7 +278,8 @@
 			} else {
 				// ── Metric-coloured segmented polylines ──────────────────────────
 				const isPace = channel === 'pace';
-				const metricGpsPoints = extractGpsPointsWithMetric(activity, channel, smoothedValues);
+				// Pre-computed in metricComputation — no duplicate extraction here
+				const metricGpsPoints = actData!.metricGpsPoints;
 				const group = L.featureGroup();
 
 				for (let j = 0; j + 1 < metricGpsPoints.length; j++) {
@@ -305,7 +303,7 @@
 					L.polyline([L.latLng(ptA.lat, ptA.lon), L.latLng(ptB.lat, ptB.lon)], {
 						color: segColour,
 						weight: 3,
-						renderer: canvasRenderer ?? undefined,
+						renderer: canvasRenderer!,
 						interactive: true,
 					}).addTo(group);
 				}
@@ -401,23 +399,33 @@
 
 	/**
 	 * Returns the metric value at the GPS point nearest to `targetDist`.
+	 * Uses binary search (O(log n)) since metricGpsPoints is sorted by distance.
 	 * Used for tooltip content when metric colouring is active.
 	 */
 	function nearestMetricValue(points: GpsPointWithMetric[], targetDist: number): number | null {
 		if (points.length === 0) return null;
 
-		let nearestValue: number | null = null;
-		let minDelta = Infinity;
+		// Binary search for first point with distance >= targetDist
+		let lo = 0;
+		let hi = points.length - 1;
 
-		for (const p of points) {
-			const delta = Math.abs(p.distance - targetDist);
-			if (delta < minDelta) {
-				minDelta = delta;
-				nearestValue = p.metricValue;
-			}
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			if (points[mid].distance < targetDist) lo = mid + 1;
+			else hi = mid;
 		}
 
-		return nearestValue;
+		// All points are before targetDist → nearest is the last point
+		if (points[lo].distance < targetDist) return points[lo].metricValue;
+
+		// lo is first point >= targetDist; compare with predecessor if one exists
+		if (lo > 0) {
+			const distToLo   = points[lo].distance - targetDist;      // >= 0
+			const distToPrev = targetDist - points[lo - 1].distance;  // >= 0
+			if (distToPrev <= distToLo) return points[lo - 1].metricValue;
+		}
+
+		return points[lo].metricValue;
 	}
 </script>
 
