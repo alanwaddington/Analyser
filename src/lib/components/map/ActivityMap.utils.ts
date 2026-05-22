@@ -29,6 +29,9 @@ export const TILE_PROVIDERS: TileProvider[] = [
 	},
 	{
 		name: 'Satellite',
+		// Note: ESRI uses {z}/{y}/{x} tile ordering (row before column), which is the
+		// opposite of the {z}/{x}/{y} convention used by OSM-based providers. This is
+		// correct for this specific endpoint — do not change to {z}/{x}/{y}.
 		url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
 		attribution: '&copy; Esri, Maxar, Earthstar Geographics',
 		maxZoom: 18,
@@ -47,6 +50,8 @@ export const TILE_PROVIDERS: TileProvider[] = [
 	},
 	{
 		name: 'Dark',
+		// Note: {r} is a Leaflet retina token — replaced with '@2x' on HiDPI displays
+		// to request higher-resolution tiles. This is intentional and correct.
 		url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
 		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/attributions">CARTO</a>',
 		maxZoom: 20,
