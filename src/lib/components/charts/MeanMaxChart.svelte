@@ -165,6 +165,19 @@
 		display: block;
 	}
 
+	/* breakpoints: --bp-phone (480px) in layout.css */
+	@media (max-width: 480px) { /* --bp-phone */
+		.chart-canvas {
+			height: 200px;
+		}
+	}
+
+	@media (max-height: 480px) { /* landscape phone */
+		.chart-canvas {
+			height: 150px;
+		}
+	}
+
 	.chart-legend {
 		display: flex;
 		flex-wrap: wrap;

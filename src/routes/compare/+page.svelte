@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { browser } from '$app/environment';
 	import { activities, activeDeviceIndices, xAxisMode, timeOffsets } from '$lib/stores/session';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import type { ChannelKey, CrossFileStream } from '$lib/types';
@@ -16,6 +17,7 @@
 	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
 	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
+	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -33,6 +35,19 @@
 	function setTab(id: TabId) {
 		goto(`?tab=${id}`, { replaceState: true });
 	}
+
+	// Scroll the active tab button into view when the active tab changes (AC15).
+	// Needed when a non-default tab is loaded via URL param on a narrow viewport.
+	$effect(() => {
+		const id = activeTab; // reactive dependency
+		if (browser) {
+			document.getElementById(`tab-${id}`)?.scrollIntoView({
+				behavior: 'smooth',
+				block: 'nearest',
+				inline: 'nearest',
+			});
+		}
+	});
 
 	function handleTabKey(e: KeyboardEvent, currentId: TabId) {
 		const ids = TABS.map(t => t.id);
@@ -226,28 +241,30 @@
 	>
 		<!-- Charts panel — always in DOM so ECharts instances survive tab switches -->
 		<div class="charts-panel" class:tab-hidden={activeTab !== 'charts'}>
-			<div class="toolbar">
-				<DeviceToggleBar streams={crossFileStreams} {multiFile} />
-				{#if multiFile && $xAxisMode === 'time'}
-					<div class="toc-wrap">
-						<TimeOffsetControl activities={$activities} {autoOffsets} />
+			<CollapsiblePanel title="Devices & Options">
+				<div class="toolbar">
+					<DeviceToggleBar streams={crossFileStreams} {multiFile} />
+					{#if multiFile && $xAxisMode === 'time'}
+						<div class="toc-wrap">
+							<TimeOffsetControl activities={$activities} {autoOffsets} />
+						</div>
+					{/if}
+					<div class="axis-toggle" role="group" aria-label="X-axis mode">
+						<button
+							class="axis-btn"
+							class:axis-active={$xAxisMode === 'time'}
+							onclick={() => xAxisMode.set('time')}
+							aria-pressed={$xAxisMode === 'time'}
+						>Time</button>
+						<button
+							class="axis-btn"
+							class:axis-active={$xAxisMode === 'distance'}
+							onclick={() => xAxisMode.set('distance')}
+							aria-pressed={$xAxisMode === 'distance'}
+						>Distance</button>
 					</div>
-				{/if}
-				<div class="axis-toggle" role="group" aria-label="X-axis mode">
-					<button
-						class="axis-btn"
-						class:axis-active={$xAxisMode === 'time'}
-						onclick={() => xAxisMode.set('time')}
-						aria-pressed={$xAxisMode === 'time'}
-					>Time</button>
-					<button
-						class="axis-btn"
-						class:axis-active={$xAxisMode === 'distance'}
-						onclick={() => xAxisMode.set('distance')}
-						aria-pressed={$xAxisMode === 'distance'}
-					>Distance</button>
 				</div>
-			</div>
+			</CollapsiblePanel>
 
 			<div class="charts-scroll">
 				{#if $activeDeviceIndices.size === 0}
@@ -366,6 +383,12 @@
 		flex-shrink: 0;
 		padding: 0 16px;
 		gap: 4px;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.tab-bar::-webkit-scrollbar {
+		display: none;
 	}
 
 	.tab {
@@ -379,6 +402,8 @@
 		cursor: pointer;
 		transition: color 0.15s, border-color 0.15s;
 		margin-bottom: -1px;
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
 	.tab:hover {
@@ -394,6 +419,13 @@
 		outline: 2px solid #3b82f6;
 		outline-offset: -2px;
 		border-radius: 2px;
+	}
+
+	/* breakpoints: --bp-tablet (768px) / --bp-phone (480px) in layout.css */
+	@media (max-width: 768px) { /* --bp-tablet */
+		.tab {
+			min-height: 44px;
+		}
 	}
 
 	.tab-content {
@@ -581,6 +613,18 @@
 		height: 400px;
 	}
 
+	@media (max-width: 480px) { /* --bp-phone */
+		.card--meanmax {
+			height: 280px;
+		}
+	}
+
+	@media (max-height: 480px) { /* landscape phone */
+		.card--meanmax {
+			height: 220px;
+		}
+	}
+
 	/* ── Summary table ──────────────────────────────────────────────── */
 
 	.summary-scroll {
@@ -590,7 +634,8 @@
 	}
 
 	.summary-table {
-		width: 100%;
+		width: max-content;
+		min-width: 100%;
 		border-collapse: collapse;
 		font-size: 0.8125rem;
 		background: var(--color-card);

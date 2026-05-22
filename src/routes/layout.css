@@ -1,7 +1,20 @@
 @import 'tailwindcss';
 
+/*
+ * Responsive breakpoint tokens — canonical CSS source of truth.
+ * JS equivalents: PHONE_MAX and TABLET_MAX in src/lib/stores/viewport.ts
+ * Note: CSS custom properties cannot be used inside @media conditions
+ * (CSS Level 4 limitation), so @media rules repeat the raw pixel value
+ * with a comment referencing these tokens. If you change a breakpoint,
+ * update both this file and viewport.ts.
+ */
+
 /* Dark palette — default fallback (no data-theme set) */
 :root {
+  /* Breakpoints — see note above */
+  --bp-phone:  480px; /* = PHONE_MAX  in viewport.ts */
+  --bp-tablet: 768px; /* = TABLET_MAX in viewport.ts */
+
   --color-bg: #0f172a;
   --color-sidebar: #0a0f1a;
   --color-card: #0a0f1a;
