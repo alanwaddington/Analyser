@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.2 · **Last updated:** May 2026
+> **Version:** 1.3 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -45,7 +45,7 @@ You can load **up to 6 files** at once. Once the files are parsed, you are taken
 
 ## 2. The Interface
 
-After loading a file, the application has two main views accessible from the top navigation bar:
+After loading a file, the application has two main views:
 
 | View | What it shows |
 |------|---------------|
@@ -54,9 +54,21 @@ After loading a file, the application has two main views accessible from the top
 
 The **Device Comparison** view (described in sections 3–4) is the primary view and opens automatically when you load a file.
 
+### Navigation
+
+On a **desktop** browser, the two views are accessible from the left sidebar. Click **⚡ Device Comparison** or **🏃 Event Comparison** to switch modes.
+
+On a **tablet or phone**, the sidebar is hidden by default. Tap the **☰ menu button** in the top-left corner to slide out the navigation drawer. Tap any item or tap outside the drawer to close it. You can also swipe left across the drawer to close it.
+
+On a **phone** (narrow screen), a **bottom navigation bar** appears at the foot of the screen with the same ⚡ Device and 🏃 Event buttons for quick switching without opening the drawer.
+
+### Toolbar Controls
+
+On tablet and phone, the toolbar controls (Device Toggle Bar, Channel Toggle Bar, Fine-tune timing) are hidden behind a collapsible panel. Tap the **Devices & Options** (or **Channels & Options**) button to expand or collapse the controls. On desktop the controls are always visible.
+
 ### Theme
 
-The **Theme** control is in the bottom of the left sidebar, between the X-axis toggle and the Smoothing slider.
+The **Theme** control is in the bottom of the sidebar (or navigation drawer), between the X-axis toggle and the Smoothing slider.
 
 | Option | Behaviour |
 |--------|-----------|

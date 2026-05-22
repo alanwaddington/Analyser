@@ -155,6 +155,43 @@ The FIT parser includes several enhancements to handle edge cases and modern Gar
 - Parser device deduplication: some FIT files list the same `device_index` multiple times; only the first occurrence is kept to avoid duplicate entries in `deviceStreams` and `crossFileStreams`
 - Parser safety net: after assigning channels to known ANT+ device types (Pass 1) and to watch/primary devices (Pass 2), any remaining channels are merged into the first device to avoid losing data or creating spurious "device with no channels" entries
 
+## Responsive Layout (PR #77)
+
+The app is fully responsive across three viewport tiers:
+
+| Tier | Width | Sidebar behaviour | Extra UI |
+|------|-------|-------------------|----------|
+| Desktop | >768px | Fixed 210px left column | — |
+| Tablet | 481–768px | Slide-out drawer, hidden by default | Hamburger button (top-left), backdrop overlay |
+| Phone | ≤480px | Slide-out drawer | Hamburger button, bottom navigation bar |
+
+**Breakpoints** are defined in two places that must stay in sync:
+- CSS: `--bp-phone: 480px` and `--bp-tablet: 768px` custom properties in `src/routes/layout.css`
+- JS: `PHONE_MAX = 480` and `TABLET_MAX = 768` constants in `src/lib/stores/viewport.ts`
+
+**`viewport` readable store** (`src/lib/stores/viewport.ts`) — emits `'phone' | 'tablet' | 'desktop'` based on `window.matchMedia` listeners. SSR-safe (defaults to `'desktop'`). Follows the same cleanup pattern as the `isDark` store in `theme.ts`.
+
+**Sidebar drawer** — at ≤768px, `Sidebar.svelte` switches to `position: fixed; transform: translateX(-100%)`. The `open` prop (passed from `+layout.svelte`) drives a `translateX(0)` transition (300 ms ease). The `onclose` callback is called when a nav item is tapped, allowing the parent to close the drawer.
+
+**Hamburger button** — rendered in `+layout.svelte` when `$viewport !== 'desktop'`. Fixed 44×44 px in the top-left corner. A blue dot badge appears when files are loaded.
+
+**Backdrop** — semi-transparent overlay rendered behind the drawer at ≤768px. Tap closes the drawer. Supports swipe-left (>80 px horizontal delta) to close and Escape key.
+
+**Bottom navigation bar** — rendered in `+layout.svelte` when `$viewport === 'phone'` (≤480px). Fixed to the bottom of the screen; 56 px tall with `env(safe-area-inset-bottom)` padding for notched phones. Contains ⚡ Device and 🏃 Event buttons; active mode is highlighted with the mode accent colour and a top indicator bar.
+
+**CollapsiblePanel component** (`src/lib/components/ui/CollapsiblePanel.svelte`) — wraps toolbar controls (DeviceToggleBar, TimeOffsetControl, ChannelToggleBar) on both compare and event pages. On desktop it uses `display: contents` (zero layout impact). At ≤768px it renders a 44 px toggle button with a chevron; content collapses via `max-height` transition. Collapsed by default on mobile.
+
+**Horizontally scrollable tab bars and summary tables** — both `/compare` and `/event` pages set `overflow-x: auto; scrollbar-width: none` on tab bars, and `width: max-content; min-width: 100%` on summary tables, so they scroll horizontally rather than wrapping on narrow viewports.
+
+**Chart height reductions** — all four ECharts chart components reduce canvas height at ≤480px (portrait) and at viewport height ≤480px (landscape):
+
+| Chart | Default | Phone portrait | Landscape |
+|-------|---------|----------------|-----------|
+| TimeSeriesChart | 200px | 140px | 110px |
+| DeltaChart | 200px | 120px | 90px |
+| MeanMaxChart | 280px | 200px | 150px |
+| SegmentChart | 280px | 180px | 140px |
+
 ## Architecture
 
 ```
@@ -171,12 +208,17 @@ src/
 │   ├── components/
 │   │   ├── charts/   # ECharts wrappers (TimeSeries, DeltaPlot, MeanMax, SegmentBar)
 │   │   │             # Each includes .svelte component, .utils.ts (pure functions), .test.ts (unit tests)
+│   │   │             # All four components reduce chart height at ≤480px (portrait) and
+│   │   │             # at viewport height ≤480px (landscape) via media queries
 │   │   ├── map/      # Leaflet map component (ActivityMap.svelte, ActivityMap.utils.ts, ActivityMap.test.ts)
 │   │   └── ui/       # Layout, file loader, channel selector, controls
 │   │                 # - DeviceToggleBar.svelte: multi-file device grouping, comparable indicators (✦)
 │   │                 # - TimeOffsetControl.svelte: per-file manual time-offset fine-tuning UI
+│   │                 # - CollapsiblePanel.svelte: wraps toolbar at ≤768px; display:contents on desktop
 │   ├── stores/       # Svelte stores (activities, smoothing, xAxisMode, referenceIndex, etc.)
 │   │                 # - session.ts: activeDeviceIndices (Set<string>), timeOffsets (Map<activityId, offset>)
+│   │                 # - viewport.ts: viewport readable store ('phone'|'tablet'|'desktop')
+│   │                 #   PHONE_MAX=480, TABLET_MAX=768 constants (JS counterpart of CSS --bp-* tokens)
 │   ├── utils/        # Shared pure utility functions
 │   │   ├── deviceChannels.ts     # deviceKey, deriveDeviceLabel, groupStreamsByChannel, isComparableGroup
 │   │   ├── lapMarkers.ts         # buildLapMarkers(activity, xAxisMode) → LapMarker[]
@@ -187,14 +229,24 @@ src/
 │                     # - CrossFileStream (activity-tagged stream with composite key)
 │                     # - FILE_COLOURS, DEVICE_COLOURS, MAX_FILES constant
 └── routes/
-    ├── +layout.svelte              # App shell (sidebar + main)
+    ├── layout.css                  # CSS custom properties for themes and breakpoint tokens
+    │                               # --bp-phone: 480px, --bp-tablet: 768px (must match viewport.ts)
+    ├── +layout.svelte              # App shell — sidebar + main + responsive chrome
+    │                               # - Hamburger button at ≤768px (fixed, top-left, 44×44px)
+    │                               # - Backdrop overlay at ≤768px
+    │                               # - Bottom nav bar at ≤480px (⚡ Device / 🏃 Event)
+    │                               # - Swipe-to-close, Escape key, body-scroll lock
     ├── +page.svelte                # Landing / drop zone
     ├── compare/
     │   └── +page.svelte            # Device data comparison view (1–6 files)
-    │                                # - Builds crossFileStreams from all activities
-    │                                # - Time-axis warning banner if files don't overlap
+    │                               # - Toolbar wrapped in CollapsiblePanel at ≤768px
+    │                               # - Horizontally scrollable tab bar and summary table
+    │                               # - Builds crossFileStreams from all activities
+    │                               # - Time-axis warning banner if files don't overlap
     └── event/
         └── +page.svelte            # Event/course comparison view
+                                    # - Toolbar wrapped in CollapsiblePanel at ≤768px
+                                    # - Horizontally scrollable tab bar and summary table
 ```
 
 ### Data Flow (Device Comparison)
