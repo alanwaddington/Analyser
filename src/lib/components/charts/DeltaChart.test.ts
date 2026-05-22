@@ -20,6 +20,7 @@ function makeActivity(totalDistance: number, records: ActivityRecord[]): Activit
 		records,
 		laps: [],
 		devices: [],
+		deviceStreams: [],
 	};
 }
 
