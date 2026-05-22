@@ -407,6 +407,12 @@
 		border-radius: 2px;
 	}
 
+	@media (max-width: 768px) {
+		.tab {
+			min-height: 44px;
+		}
+	}
+
 	.tab-content {
 		flex: 1;
 		overflow: hidden;
