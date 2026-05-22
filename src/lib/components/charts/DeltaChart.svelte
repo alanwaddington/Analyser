@@ -4,6 +4,7 @@
 	import type { ECharts, EChartsOption } from 'echarts';
 	import { FILE_COLOURS } from '$lib/types';
 	import { xAxisMode } from '$lib/stores/session';
+	import { isDark } from '$lib/stores/theme';
 	import { getClipDistance, buildZeroLine, buildDeltaData } from './DeltaChart.utils.ts';
 	import type { DeltaSeriesInput } from './DeltaChart.utils.ts';
 
@@ -19,17 +20,14 @@
 
 	let container: HTMLDivElement;
 	let chart: ECharts | undefined;
-	let isDark = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 
-	let mq: MediaQueryList | undefined;
-	let themeHandler: ((e: MediaQueryListEvent) => void) | undefined;
 	let resizeObserver: ResizeObserver | undefined;
 
-	const textColour = () => isDark ? '#94a3b8' : '#64748b';
-	const gridColour = () => isDark ? '#1e293b' : '#e2e8f0';
-	const tooltipBg  = () => isDark ? '#0f172a' : '#ffffff';
-	const tooltipText = () => isDark ? '#e2e8f0' : '#0f172a';
+	const textColour = () => $isDark ? '#94a3b8' : '#64748b';
+	const gridColour = () => $isDark ? '#1e293b' : '#e2e8f0';
+	const tooltipBg  = () => $isDark ? '#0f172a' : '#ffffff';
+	const tooltipText = () => $isDark ? '#e2e8f0' : '#0f172a';
 
 	function buildOption(): EChartsOption {
 		const tc = textColour();
@@ -127,18 +125,9 @@
 	}
 
 	onMount(() => {
-		isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
 		chart = echarts.init(container, undefined, { renderer: 'canvas' });
 		chart.group = groupId;
 		echarts.connect(groupId);
-
-		mq = window.matchMedia('(prefers-color-scheme: dark)');
-		themeHandler = (e: MediaQueryListEvent) => {
-			isDark = e.matches;
-			chart?.setOption(buildOption(), { notMerge: true });
-		};
-		mq.addEventListener('change', themeHandler);
 
 		resizeObserver = new ResizeObserver(() => chart?.resize());
 		resizeObserver.observe(container);
@@ -146,11 +135,11 @@
 
 	onDestroy(() => {
 		resizeObserver?.disconnect();
-		if (mq && themeHandler) mq.removeEventListener('change', themeHandler);
 		chart?.dispose();
 	});
 
 	$effect(() => {
+		void $isDark;
 		void $xAxisMode;
 		void seriesInputs;
 		void referenceIndex;
@@ -246,10 +235,8 @@
 		background: rgba(255, 255, 255, 0.06);
 	}
 
-	@media (prefers-color-scheme: light) {
-		.legend-btn:hover {
-			background: rgba(0, 0, 0, 0.04);
-		}
+	:global([data-theme="light"]) .legend-btn:hover {
+		background: rgba(0, 0, 0, 0.04);
 	}
 
 	.legend-btn:focus-visible {
