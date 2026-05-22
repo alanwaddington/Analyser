@@ -1,4 +1,4 @@
-import type { Activity, GpsPoint } from '$lib/types';
+import type { Activity, ActivityRecord, GpsPoint } from '$lib/types';
 
 export interface GpsPointWithDistance {
 	lat: number;
@@ -43,6 +43,61 @@ export function positionFromPoints(
 
 export function positionAtDistance(activity: Activity, targetDist: number): GpsPoint | null {
 	return positionFromPoints(extractGpsPoints(activity), targetDist);
+}
+
+// ---------------------------------------------------------------------------
+// Metric-coloured polyline utilities
+// ---------------------------------------------------------------------------
+
+/** GPS point with distance and an optional smoothed metric value. */
+export interface GpsPointWithMetric extends GpsPointWithDistance {
+	metricValue: number | null;
+}
+
+/**
+ * Pairs GPS points from an activity with pre-computed smoothed metric values.
+ * Records without a GPS position are skipped; the smoothedValues array must be
+ * aligned to activity.records by index (same length).
+ */
+export function extractGpsPointsWithMetric(
+	activity: Activity,
+	smoothedValues: (number | null)[],
+): GpsPointWithMetric[] {
+	const result: GpsPointWithMetric[] = [];
+	for (let i = 0; i < activity.records.length; i++) {
+		const record: ActivityRecord = activity.records[i];
+		if (record.position === undefined) continue;
+		result.push({
+			lat: record.position.lat,
+			lon: record.position.lon,
+			distance: record.distance,
+			metricValue: smoothedValues[i] ?? null,
+		});
+	}
+	return result;
+}
+
+/**
+ * Computes the global min/max range across all activities' metric points,
+ * ignoring null values.
+ * Returns null if no valid values exist.
+ */
+export function computeMetricRange(
+	allPoints: GpsPointWithMetric[][],
+): { min: number; max: number } | null {
+	let min = Infinity;
+	let max = -Infinity;
+
+	for (const points of allPoints) {
+		for (const p of points) {
+			if (p.metricValue === null) continue;
+			if (p.metricValue < min) min = p.metricValue;
+			if (p.metricValue > max) max = p.metricValue;
+		}
+	}
+
+	if (!isFinite(min) || !isFinite(max)) return null;
+	return { min, max };
 }
 
 /**

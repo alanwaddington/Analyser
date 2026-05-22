@@ -15,6 +15,7 @@
 	import TimeOffsetControl from '$lib/components/ui/TimeOffsetControl.svelte';
 	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
 	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
+	import { deriveAvailableChannels } from '$lib/utils/channels';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -83,6 +84,9 @@
 
 	// Lap markers from first activity (used for chart annotations)
 	const lapMarkers = $derived(buildLapMarkers($activities[0], $xAxisMode));
+
+	// Channels with data in at least one loaded activity (for the map metric selector)
+	const mapAvailableChannels = $derived(deriveAvailableChannels($activities));
 
 	// Channels that have at least one currently active device across all files
 	const activeChannels = $derived.by<ChannelKey[]>(() => {
@@ -289,6 +293,7 @@
 			<div class="map-wrap">
 				<ActivityMap
 					activities={$activities}
+					availableChannels={mapAvailableChannels}
 					hoveredDistance={chartHoveredDistance}
 					onHoverDistance={handleMapHoverDistance}
 				/>

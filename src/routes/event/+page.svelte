@@ -188,6 +188,7 @@
 				<ActivityMap
 					activities={$activities}
 					referenceIndex={$referenceIndex}
+					availableChannels={availableChannels}
 					hoveredDistance={chartHoveredDistance}
 					onHoverDistance={handleMapHoverDistance}
 				/>
