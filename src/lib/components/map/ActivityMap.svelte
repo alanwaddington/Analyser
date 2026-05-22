@@ -277,7 +277,6 @@
 				layers.push(polyline);
 			} else {
 				// ── Metric-coloured segmented polylines ──────────────────────────
-				const isPace = channel === 'pace';
 				// Pre-computed in metricComputation — no duplicate extraction here
 				const metricGpsPoints = actData!.metricGpsPoints;
 				const group = L.featureGroup();
@@ -298,7 +297,10 @@
 							? (valA + valB) / 2
 							: (valA ?? valB)!;
 
-					const segColour = valueToColour(val, globalRange.min, globalRange.max, isPace);
+					// No invert needed: the default gradient (blue at min, red at max) already
+					// maps fast pace (low min/km) → blue and slow pace (high min/km) → red,
+					// which is the correct behaviour for all effort-based channels including pace.
+					const segColour = valueToColour(val, globalRange.min, globalRange.max);
 
 					L.polyline([L.latLng(ptA.lat, ptA.lon), L.latLng(ptB.lat, ptB.lon)], {
 						color: segColour,

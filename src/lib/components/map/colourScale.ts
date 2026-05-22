@@ -16,7 +16,6 @@ export const GRADIENT_STOPS: [number, number, number][] = [
  * Out-of-range values are clamped.
  * When min === max, returns the middle of the gradient.
  * If `invert` is true, the gradient is reversed (red at min, blue at max).
- * Used for pace where low min/km = fast = "cool" = blue.
  */
 export function valueToColour(
 	value: number,

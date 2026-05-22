@@ -59,7 +59,7 @@ describe('valueToColour', () => {
 	});
 
 	it('valueToColour_invertedTrue_minIsRed', () => {
-		// Inverted: min maps to red, max maps to blue (for pace where low = fast = "good" = blue)
+		// invert=true reverses the gradient: min → red, max → blue
 		const colour = valueToColour(0, 0, 100, true);
 		expect(colour.toLowerCase()).toBe('#ff3200');
 	});
@@ -72,6 +72,16 @@ describe('valueToColour', () => {
 	it('valueToColour_returnsValidHexFormat', () => {
 		const colour = valueToColour(42, 0, 100);
 		expect(colour).toMatch(/^#[0-9a-fA-F]{6}$/);
+	});
+
+	it('valueToColour_paceContract_fastPaceIsBlue', () => {
+		// Pace uses no inversion (invert=false / default).
+		// Low min/km = fast → blue; high min/km = slow → red.
+		// Verify the contract so a mistaken invert=true is caught by tests.
+		const fastColour = valueToColour(4.0, 4.0, 8.0);   // min = fastest
+		const slowColour = valueToColour(8.0, 4.0, 8.0);   // max = slowest
+		expect(fastColour.toLowerCase()).toBe('#0064ff');   // blue
+		expect(slowColour.toLowerCase()).toBe('#ff3200');   // red
 	});
 });
 
