@@ -6,6 +6,7 @@
 	import DropZone from '$lib/components/ui/DropZone.svelte';
 	import XAxisToggle from '$lib/components/ui/XAxisToggle.svelte';
 	import SmoothingSlider from '$lib/components/ui/SmoothingSlider.svelte';
+	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 
 	let { compareDisabled = false }: { compareDisabled?: boolean } = $props();
 
@@ -62,6 +63,7 @@
 
 	<div class="footer">
 		<XAxisToggle eventMode={isEvent} />
+		<ThemeToggle />
 		<SmoothingSlider />
 	</div>
 </nav>

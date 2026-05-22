@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.1 · **Last updated:** May 2026
+> **Version:** 1.2 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -53,6 +53,18 @@ After loading a file, the application has two main views accessible from the top
 | 🏃 **Event Comparison** | Two or more runs of the same course aligned by distance, showing where time was gained or lost |
 
 The **Device Comparison** view (described in sections 3–4) is the primary view and opens automatically when you load a file.
+
+### Theme
+
+The **Theme** control is in the bottom of the left sidebar, between the X-axis toggle and the Smoothing slider.
+
+| Option | Behaviour |
+|--------|-----------|
+| **🖥 Sys** (default) | Follows your operating system's dark/light preference |
+| **☀ Lit** | Forces the light theme regardless of OS setting |
+| **🌙 Drk** | Forces the dark theme regardless of OS setting |
+
+Your choice is saved in your browser and restored the next time you open Analyser.
 
 ---
 

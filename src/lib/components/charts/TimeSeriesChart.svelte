@@ -5,6 +5,7 @@
 	import type { Activity, ChannelKey } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
+	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
 	import { extractChannel, buildXValues, isDashed, paceFormat } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput } from './TimeSeriesChart.utils.ts';
@@ -32,18 +33,15 @@
 
 	let container: HTMLDivElement;
 	let chart: ECharts | undefined;
-	let isDark = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 
-	let mq: MediaQueryList | undefined;
-	let themeHandler: ((e: MediaQueryListEvent) => void) | undefined;
 	let resizeObserver: ResizeObserver | undefined;
 
-	// Theme colour helpers
-	const textColour = () => isDark ? '#94a3b8' : '#64748b';
-	const gridColour = () => isDark ? '#1e293b' : '#e2e8f0';
-	const tooltipBg  = () => isDark ? '#0f172a' : '#ffffff';
-	const tooltipText = () => isDark ? '#e2e8f0' : '#0f172a';
+	// Theme colour helpers — reactive via isDark store
+	const textColour = () => $isDark ? '#94a3b8' : '#64748b';
+	const gridColour = () => $isDark ? '#1e293b' : '#e2e8f0';
+	const tooltipBg  = () => $isDark ? '#0f172a' : '#ffffff';
+	const tooltipText = () => $isDark ? '#e2e8f0' : '#0f172a';
 
 	function buildAltitudeData(activity: Activity, timeOffset = 0): [number, number | null][] {
 		if ($xAxisMode === 'distance') {
@@ -80,8 +78,8 @@
 			: [];
 		const hasAlt = altData.some(([, v]) => v != null);
 
-		const altFill = isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.2)';
-		const altLine = isDark ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.35)';
+		const altFill = $isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.2)';
+		const altLine = $isDark ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.35)';
 
 		return {
 			grid: { top: 20, right: 16, bottom: 30, left: 55 },
@@ -204,8 +202,6 @@
 	}
 
 	onMount(() => {
-		isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
 		chart = echarts.init(container, undefined, { renderer: 'canvas' });
 		chart.group = groupId;
 		echarts.connect(groupId);
@@ -231,24 +227,17 @@
 			});
 		}
 
-		mq = window.matchMedia('(prefers-color-scheme: dark)');
-		themeHandler = (e: MediaQueryListEvent) => {
-			isDark = e.matches;
-			chart?.setOption(buildOption(), { notMerge: true });
-		};
-		mq.addEventListener('change', themeHandler);
-
 		resizeObserver = new ResizeObserver(() => chart?.resize());
 		resizeObserver.observe(container);
 	});
 
 	onDestroy(() => {
 		resizeObserver?.disconnect();
-		if (mq && themeHandler) mq.removeEventListener('change', themeHandler);
 		chart?.dispose();
 	});
 
 	$effect(() => {
+		void $isDark;
 		void $smoothing;
 		void $xAxisMode;
 		void seriesInputs;
@@ -370,10 +359,8 @@
 		background: rgba(255, 255, 255, 0.06);
 	}
 
-	@media (prefers-color-scheme: light) {
-		.legend-btn:hover {
-			background: rgba(0, 0, 0, 0.04);
-		}
+	:global([data-theme="light"]) .legend-btn:hover {
+		background: rgba(0, 0, 0, 0.04);
 	}
 
 	.legend-btn:focus-visible {
