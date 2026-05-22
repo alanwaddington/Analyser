@@ -21,6 +21,7 @@ function makeActivity(records: ActivityRecord[]): Activity {
 		records,
 		laps: [],
 		devices: [],
+		deviceStreams: [],
 	};
 }
 
