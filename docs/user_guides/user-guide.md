@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.0 · **Last updated:** May 2026
+> **Version:** 1.1 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -18,8 +18,9 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 3.5 [Map Tab](#35-map-tab)
 4. [Device Comparison — Multiple Files](#4-device-comparison--multiple-files)
    - 4.1 [Loading Multiple Files](#41-loading-multiple-files)
-   - 4.2 [Multi-File Device Bar](#42-multi-file-device-bar)
-   - 4.3 [Fine-Tuning Timing](#43-fine-tuning-timing)
+   - 4.2 [Different-Session Files](#42-different-session-files)
+   - 4.3 [Multi-File Device Bar](#43-multi-file-device-bar)
+   - 4.4 [Fine-Tuning Timing](#44-fine-tuning-timing)
 5. [Event Comparison](#5-event-comparison)
 6. [Reference](#6-reference)
 
@@ -192,11 +193,30 @@ Select multiple `.fit` files in the file picker (hold Shift or Cmd/Ctrl to selec
 
 ![Multi-file compare overview with two Zwift TrainerRoad sessions loaded](screenshots/09-multifile-overview.png)
 
-A **session warning banner** appears if the loaded files have start times more than 1 hour apart — this usually means the files are from different sessions. In that case, the **Distance axis** is recommended for a meaningful comparison (use the Time/Distance toggle at the top of the page).
+> **Note:** If the loaded files are from different sessions (start times more than 1 hour apart), Device Comparison will be unavailable — see [section 4.2](#42-different-session-files).
 
 ---
 
-### 4.2 Multi-File Device Bar
+### 4.2 Different-Session Files
+
+Device Comparison is designed for files recorded **during the same session** — for example, two devices worn simultaneously on the same run. Comparing files from completely different activities (different days, different events) produces charts with no meaningful relationship between the data streams.
+
+If you load two or more files whose start times are more than 1 hour apart, Analyser detects this and shows an explanation panel instead of charts:
+
+![Gate panel shown when files are from different sessions](screenshots/15-different-sessions-gate.png)
+
+The **⚡ Device Comparison** button in the sidebar also appears greyed-out with a tooltip explaining why it is unavailable.
+
+**What to do:**
+
+- Click **Switch to Event Comparison →** to use the 🏃 Event Comparison view, which is designed for comparing runs of the same course across different sessions.
+- Or remove one of the loaded files (using the × button in the sidebar) until the remaining files are from the same session.
+
+Once the remaining files overlap in time (within 1 hour), Device Comparison becomes available again automatically.
+
+---
+
+### 4.3 Multi-File Device Bar
 
 In multi-file mode the Device Toggle Bar groups sensors by their source file, with a coloured left-border header for each file.
 
@@ -208,13 +228,13 @@ In multi-file mode the Device Toggle Bar groups sensors by their source file, wi
 
 ---
 
-### 4.3 Fine-Tuning Timing
+### 4.4 Fine-Tuning Timing
 
 Even when files are from the same session, GPS clocks sometimes drift by a few seconds. The **Fine-tune timing** control lets you shift any file forwards or backwards in time to align the traces precisely.
 
 ![Fine-tune timing panel with per-file offset controls](screenshots/12-time-offset-control.png)
 
-Click the **⏱ Fine-tune timing** button (below the Device Toggle Bar, visible in multi-file + time-axis mode) to expand the panel.
+Click the **⏱ Fine-tune timing** button (below the Device Toggle Bar, visible in multi-file + time-axis mode) to expand the panel. This control is only relevant when files are from the **same session** — if they are from different sessions, the gate panel is shown instead (see [section 4.2](#42-different-session-files)).
 
 | Control | Function |
 |---------|---------|
@@ -277,7 +297,8 @@ Load two or more `.fit` files, then switch to the Event Comparison tab. The view
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | File loads but no charts appear | No sensor data in the file | Check the Device Toggle Bar — all devices may be deselected or no-data |
-| Two files don't align on the time axis | Different session start times | Use Distance axis, or adjust offsets in the Fine-tune timing panel |
+| Device Comparison shows "unavailable" panel | Files are from different sessions (start times >1 hour apart) | Use **Event Comparison** (🏃) to compare runs of the same course, or remove the out-of-session file |
+| Two same-session files don't align on the time axis | GPS clock drift between devices | Adjust offsets using the Fine-tune timing panel (section 4.4) |
 | Map shows no route | FIT file has no GPS data | Some indoor activities (turbo trainer, treadmill) do not record GPS |
 | Pace chart looks upside-down | Expected — faster pace (lower min/km) is plotted higher | This is correct; it matches the intuition of "going faster = higher on chart" |
 | Device name shows as "Device N" | ANT+ device ID not yet labelled | Double-click the pill to rename it; the label is saved for future sessions |

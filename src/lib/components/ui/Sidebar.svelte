@@ -7,6 +7,8 @@
 	import XAxisToggle from '$lib/components/ui/XAxisToggle.svelte';
 	import SmoothingSlider from '$lib/components/ui/SmoothingSlider.svelte';
 
+	let { compareDisabled = false }: { compareDisabled?: boolean } = $props();
+
 	const isCompare = $derived(page.url.pathname.startsWith('/compare'));
 	const isEvent = $derived(page.url.pathname.startsWith('/event'));
 
@@ -30,7 +32,12 @@
 	<div class="mode-nav">
 		<button
 			class="nav-btn"
-			class:active-compare={isCompare}
+			class:active-compare={isCompare && !compareDisabled}
+			class:nav-btn--disabled={compareDisabled}
+			aria-disabled={compareDisabled ? 'true' : undefined}
+			title={compareDisabled
+				? 'Activities are from different sessions — use Event Comparison'
+				: undefined}
 			onclick={goToCompare}
 		>⚡ Device Comparison</button>
 		<button
@@ -125,6 +132,16 @@
 	.nav-btn.active-event {
 		background: #14532d;
 		color: #4ade80;
+	}
+
+	.nav-btn--disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.nav-btn--disabled:hover {
+		background: transparent;
+		color: var(--color-muted);
 	}
 
 	.file-section {
