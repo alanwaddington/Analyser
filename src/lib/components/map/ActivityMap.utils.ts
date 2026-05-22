@@ -12,8 +12,13 @@ export interface TileProvider {
 	url: string;
 	/** Attribution HTML string required by the tile provider's terms of use. */
 	attribution: string;
-	/** Maximum zoom level supported by this provider. */
-	maxZoom: number;
+	/**
+	 * Highest zoom level at which the provider natively serves tiles.
+	 * Passed to Leaflet as `maxNativeZoom` (not `maxZoom`) so that the layer
+	 * remains selectable at any map zoom — tiles are simply upscaled beyond
+	 * this value rather than the layer being disabled in the control.
+	 */
+	maxNativeZoom: number;
 }
 
 /**
@@ -25,7 +30,7 @@ export const TILE_PROVIDERS: TileProvider[] = [
 		name: 'Streets',
 		url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
 		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-		maxZoom: 19,
+		maxNativeZoom: 19,
 	},
 	{
 		name: 'Satellite',
@@ -34,19 +39,19 @@ export const TILE_PROVIDERS: TileProvider[] = [
 		// correct for this specific endpoint — do not change to {z}/{x}/{y}.
 		url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
 		attribution: '&copy; Esri, Maxar, Earthstar Geographics',
-		maxZoom: 18,
+		maxNativeZoom: 18,
 	},
 	{
 		name: 'Topo',
 		url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
 		attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA), &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-		maxZoom: 17,
+		maxNativeZoom: 17,
 	},
 	{
 		name: 'Cycling',
 		url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
 		attribution: '&copy; <a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-		maxZoom: 20,
+		maxNativeZoom: 20,
 	},
 	{
 		name: 'Dark',
@@ -54,7 +59,7 @@ export const TILE_PROVIDERS: TileProvider[] = [
 		// to request higher-resolution tiles. This is intentional and correct.
 		url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
 		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/attributions">CARTO</a>',
-		maxZoom: 20,
+		maxNativeZoom: 20,
 	},
 ];
 

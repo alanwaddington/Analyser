@@ -308,8 +308,8 @@ describe('TILE_PROVIDERS', () => {
 			expect(provider.url.length).toBeGreaterThan(0);
 			expect(typeof provider.attribution).toBe('string');
 			expect(provider.attribution.length).toBeGreaterThan(0);
-			expect(typeof provider.maxZoom).toBe('number');
-			expect(provider.maxZoom).toBeGreaterThan(0);
+			expect(typeof provider.maxNativeZoom).toBe('number');
+			expect(provider.maxNativeZoom).toBeGreaterThan(0);
 		}
 	});
 

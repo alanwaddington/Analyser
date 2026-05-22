@@ -99,7 +99,10 @@
 		for (const provider of TILE_PROVIDERS) {
 			baseLayers[provider.name] = L.tileLayer(provider.url, {
 				attribution: provider.attribution,
-				maxZoom: provider.maxZoom,
+				maxNativeZoom: provider.maxNativeZoom,
+				// No maxZoom restriction — layer stays selectable at any zoom level.
+				// Tiles are upscaled by Leaflet beyond maxNativeZoom rather than
+				// the layer being disabled in the control.
 			});
 		}
 		// Add default (first) layer to map
