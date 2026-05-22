@@ -1,5 +1,58 @@
 import type { Activity, ActivityRecord, GpsPoint } from '$lib/types';
 
+// ---------------------------------------------------------------------------
+// Tile layer providers
+// ---------------------------------------------------------------------------
+
+/** Configuration for a Leaflet base tile layer. */
+export interface TileProvider {
+	/** Display name shown in the layers control. */
+	name: string;
+	/** Leaflet URL template (may contain {s}, {z}, {x}, {y}, {r} tokens). */
+	url: string;
+	/** Attribution HTML string required by the tile provider's terms of use. */
+	attribution: string;
+	/** Maximum zoom level supported by this provider. */
+	maxZoom: number;
+}
+
+/**
+ * Ordered list of free (no API key) tile layer providers.
+ * The first entry is the default layer shown on map load.
+ */
+export const TILE_PROVIDERS: TileProvider[] = [
+	{
+		name: 'Streets',
+		url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+		maxZoom: 19,
+	},
+	{
+		name: 'Satellite',
+		url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+		attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+		maxZoom: 18,
+	},
+	{
+		name: 'Topo',
+		url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+		attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA), &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+		maxZoom: 17,
+	},
+	{
+		name: 'Cycling',
+		url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+		attribution: '&copy; <a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+		maxZoom: 20,
+	},
+	{
+		name: 'Dark',
+		url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+		attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/attributions">CARTO</a>',
+		maxZoom: 20,
+	},
+];
+
 export interface GpsPointWithDistance {
 	lat: number;
 	lon: number;
