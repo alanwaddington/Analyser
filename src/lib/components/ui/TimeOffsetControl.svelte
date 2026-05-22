@@ -270,7 +270,7 @@
 	/* Hide native number spinners */
 	.toc-input::-webkit-inner-spin-button,
 	.toc-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-	.toc-input { -moz-appearance: textfield; }
+	.toc-input { appearance: textfield; -moz-appearance: textfield; }
 
 	.toc-unit {
 		font-size: 0.7rem;
