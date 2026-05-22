@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { browser } from '$app/environment';
 	import { activities, activeChannels, xAxisMode, referenceIndex } from '$lib/stores/session';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
@@ -33,6 +34,19 @@
 	function setTab(id: TabId) {
 		goto(`?tab=${id}`, { replaceState: true });
 	}
+
+	// Scroll the active tab button into view when the active tab changes (AC15).
+	// Needed when a non-default tab is loaded via URL param on a narrow viewport.
+	$effect(() => {
+		const id = activeTab; // reactive dependency
+		if (browser) {
+			document.getElementById(`tab-${id}`)?.scrollIntoView({
+				behavior: 'smooth',
+				block: 'nearest',
+				inline: 'nearest',
+			});
+		}
+	});
 
 	function handleTabKey(e: KeyboardEvent, currentId: TabId) {
 		const ids = TABS.map(t => t.id);
@@ -303,7 +317,8 @@
 		border-radius: 2px;
 	}
 
-	@media (max-width: 768px) {
+	/* breakpoints: --bp-tablet (768px) / --bp-phone (480px) in layout.css */
+	@media (max-width: 768px) { /* --bp-tablet */
 		.tab {
 			min-height: 44px;
 		}
@@ -414,13 +429,13 @@
 		height: 400px;
 	}
 
-	@media (max-width: 480px) {
+	@media (max-width: 480px) { /* --bp-phone */
 		.card--segment {
 			height: 260px;
 		}
 	}
 
-	@media (max-height: 480px) {
+	@media (max-height: 480px) { /* landscape phone */
 		.card--segment {
 			height: 200px;
 		}

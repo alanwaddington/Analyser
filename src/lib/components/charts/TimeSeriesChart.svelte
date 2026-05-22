@@ -334,13 +334,14 @@
 		display: block;
 	}
 
-	@media (max-width: 480px) {
+	/* breakpoints: --bp-phone (480px) in layout.css */
+	@media (max-width: 480px) { /* --bp-phone */
 		.chart-canvas {
 			height: 140px;
 		}
 	}
 
-	@media (max-height: 480px) {
+	@media (max-height: 480px) { /* landscape phone */
 		.chart-canvas {
 			height: 110px;
 		}

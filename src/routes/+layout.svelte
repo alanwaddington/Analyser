@@ -319,8 +319,9 @@
 	}
 
 	/* ── Responsive overrides ─────────────────────────────────────────── */
+	/* breakpoints: --bp-tablet (768px) / --bp-phone (480px) in layout.css */
 
-	@media (max-width: 768px) {
+	@media (max-width: 768px) { /* --bp-tablet */
 		.shell {
 			overflow: visible; /* allow fixed-position drawer to overlay */
 		}
@@ -338,7 +339,7 @@
 		}
 	}
 
-	@media (max-width: 480px) {
+	@media (max-width: 480px) { /* --bp-phone */
 		.main-area {
 			padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
 		}

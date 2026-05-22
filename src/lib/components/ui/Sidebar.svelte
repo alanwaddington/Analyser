@@ -178,8 +178,9 @@
 	}
 
 	/* ── Mobile: drawer overlay at ≤768px ─────────────────────────────── */
+	/* breakpoints: --bp-tablet (768px) in layout.css */
 
-	@media (max-width: 768px) {
+	@media (max-width: 768px) { /* --bp-tablet */
 		.sidebar {
 			position: fixed;
 			top: 0;
@@ -195,6 +196,10 @@
 		.sidebar.open {
 			transform: translateX(0);
 			box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+		}
+
+		.nav-btn {
+			min-height: 44px; /* WCAG 2.5.8 touch target */
 		}
 	}
 </style>

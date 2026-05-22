@@ -1,9 +1,21 @@
 import { readable } from 'svelte/store';
 
-/** Maximum width (inclusive) considered a phone viewport. */
+/**
+ * Maximum width (inclusive) considered a phone viewport.
+ *
+ * CSS counterpart: `--bp-phone` custom property in `src/routes/layout.css`.
+ * If you change this value, also update `--bp-phone` and all
+ * `@media (max-width: 480px)` rules that reference `--bp-phone`.
+ */
 export const PHONE_MAX = 480;
 
-/** Maximum width (inclusive) considered a tablet viewport. */
+/**
+ * Maximum width (inclusive) considered a tablet viewport.
+ *
+ * CSS counterpart: `--bp-tablet` custom property in `src/routes/layout.css`.
+ * If you change this value, also update `--bp-tablet` and all
+ * `@media (max-width: 768px)` rules that reference `--bp-tablet`.
+ */
 export const TABLET_MAX = 768;
 
 export type ViewportTier = 'phone' | 'tablet' | 'desktop';

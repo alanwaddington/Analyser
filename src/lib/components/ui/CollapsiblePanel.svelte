@@ -87,8 +87,9 @@
 	}
 
 	/* ── Mobile: collapsible at ≤768px ──────────────────────────────── */
+	/* breakpoints: --bp-tablet (768px) in layout.css */
 
-	@media (max-width: 768px) {
+	@media (max-width: 768px) { /* --bp-tablet */
 		.collapsible-panel {
 			display: flex;
 			flex-direction: column;
