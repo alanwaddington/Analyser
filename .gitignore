@@ -25,5 +25,6 @@ vite.config.ts.timestamp-*
 # Superpowers tool artefacts
 .superpowers/
 
-# Claude Code local settings (machine-specific permissions, not project config)
+# Claude Code — local settings and temporary agent worktrees
 .claude/settings.local.json
+.claude/worktrees/
