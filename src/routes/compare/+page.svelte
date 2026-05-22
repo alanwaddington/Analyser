@@ -146,26 +146,10 @@
 		crossFileStreams.filter(cfs => $activeDeviceIndices.has(cfs.key))
 	);
 
-	// ── Session warning banner ────────────────────────────────────────────────
-
-	let warningDismissed = $state(false);
-
-	// Reset when activities change (new files loaded)
-	$effect(() => {
-		void $activities;
-		warningDismissed = false;
-	});
-
-	const showSessionWarning = $derived(
-		!activitiesOverlap($activities) &&
-		$xAxisMode === 'time' &&
-		!warningDismissed
-	);
-
-	function switchToDistance() {
-		xAxisMode.set('distance');
-		warningDismissed = true;
-	}
+	// ── Different-sessions gate ───────────────────────────────────────────────
+	// True when 2+ files are loaded but their start times are >1 hour apart.
+	// In this state the tab UI is replaced by an explanation panel.
+	const differentSessions = $derived(!activitiesOverlap($activities));
 
 	$effect(() => {
 		if ($activities.length === 0) goto('/');
@@ -199,6 +183,26 @@
 </script>
 
 <div class="page">
+	{#if differentSessions}
+		<!-- Gate panel: files are from different sessions — compare is meaningless -->
+		<div class="gate-panel">
+			<div class="gate-card">
+				<span class="gate-icon" aria-hidden="true">⚠</span>
+				<h2 class="gate-heading">Device Comparison unavailable</h2>
+				<p class="gate-body">
+					The loaded files are from different sessions (start times more than
+					1&nbsp;hour apart). Device Comparison requires files from the same
+					session to produce meaningful results.
+				</p>
+				<button class="gate-cta" onclick={() => goto('/event')}>
+					Switch to Event Comparison →
+				</button>
+				<p class="gate-hint">
+					Or remove one of the loaded files to compare devices from the same session.
+				</p>
+			</div>
+		</div>
+	{:else}
 	<div class="tab-bar" role="tablist" aria-label="Compare views">
 		{#each TABS as tab}
 			<button
@@ -244,24 +248,6 @@
 					>Distance</button>
 				</div>
 			</div>
-
-			{#if showSessionWarning}
-				<div class="session-warning" role="alert">
-					<span class="warning-icon" aria-hidden="true">⚠</span>
-					<span class="warning-text">
-						Files appear to be from different sessions. Time-axis alignment may not
-						be meaningful —
-						<button class="warning-link" onclick={switchToDistance}>
-							switch to Distance mode
-						</button>.
-					</span>
-					<button
-						class="warning-dismiss"
-						onclick={() => { warningDismissed = true; }}
-						aria-label="Dismiss warning"
-					>×</button>
-				</div>
-			{/if}
 
 			<div class="charts-scroll">
 				{#if $activeDeviceIndices.size === 0}
@@ -363,6 +349,7 @@
 			</div>
 		{/if}
 	</div>
+	{/if}
 </div>
 
 <style>
@@ -463,64 +450,80 @@
 		color: #fff;
 	}
 
-	/* ── Session warning banner ─────────────────────────────────────── */
+	/* ── Different-sessions gate panel ─────────────────────────────── */
 
-	.session-warning {
-		display: flex;
-		align-items: baseline;
-		gap: 8px;
-		padding: 8px 14px;
-		background: rgba(245, 158, 11, 0.10);
-		border-bottom: 1px solid rgba(245, 158, 11, 0.25);
-		flex-shrink: 0;
-		font-size: 0.8125rem;
-	}
-
-	.warning-icon {
-		color: #f59e0b;
-		flex-shrink: 0;
-		font-size: 0.875rem;
-		line-height: 1.5;
-	}
-
-	.warning-text {
+	.gate-panel {
 		flex: 1;
-		color: var(--color-muted);
-		line-height: 1.5;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 32px 16px;
+		overflow-y: auto;
 	}
 
-	.warning-link {
-		background: none;
-		border: none;
-		color: #3b82f6;
-		cursor: pointer;
-		font-size: inherit;
-		text-decoration: underline;
-		padding: 0;
-		font-family: inherit;
+	.gate-card {
+		background: var(--color-card);
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		padding: 40px 36px;
+		max-width: 480px;
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 12px;
 	}
 
-	.warning-link:hover { color: #60a5fa; }
-
-	.warning-dismiss {
-		background: none;
-		border: none;
-		color: var(--color-muted);
-		cursor: pointer;
-		font-size: 1.1rem;
-		padding: 0 2px;
+	.gate-icon {
+		font-size: 2.5rem;
 		line-height: 1;
-		border-radius: 4px;
-		transition: color 0.1s;
-		flex-shrink: 0;
-		align-self: flex-start;
+		color: #f59e0b;
 	}
 
-	.warning-dismiss:hover { color: var(--color-text); }
+	.gate-heading {
+		margin: 0;
+		font-size: 1.125rem;
+		font-weight: 600;
+		color: var(--color-text);
+		letter-spacing: -0.01em;
+	}
 
-	.warning-dismiss:focus-visible {
+	.gate-body {
+		margin: 0;
+		font-size: 0.875rem;
+		color: var(--color-muted);
+		line-height: 1.6;
+		max-width: 360px;
+	}
+
+	.gate-cta {
+		margin-top: 8px;
+		padding: 8px 20px;
+		background: #3b82f6;
+		color: #fff;
+		border: none;
+		border-radius: 6px;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.gate-cta:hover {
+		background: #2563eb;
+	}
+
+	.gate-cta:focus-visible {
 		outline: 2px solid #3b82f6;
 		outline-offset: 2px;
+	}
+
+	.gate-hint {
+		margin: 0;
+		font-size: 0.75rem;
+		color: var(--color-muted);
+		opacity: 0.7;
 	}
 
 	/* ── Chart area ─────────────────────────────────────────────────── */

@@ -119,3 +119,51 @@ describe('activitiesOverlap', () => {
 		expect(activitiesOverlap([a, b])).toBe(true);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// differentSessions gate predicate
+// The compare-page gate is: !activitiesOverlap(activities)
+// These tests document the expected gate behaviour for each scenario
+// (AC1, AC2, AC3 from issue #70).
+// ---------------------------------------------------------------------------
+describe('differentSessions gate predicate', () => {
+	it('gate_emptyArray_shouldNotGate', () => {
+		// AC1 edge: 0 files — compare should be accessible
+		expect(!activitiesOverlap([])).toBe(false);
+	});
+
+	it('gate_singleFile_shouldNotGate', () => {
+		// AC1: single file — compare must always be accessible
+		expect(!activitiesOverlap([makeActivity('a', T0)])).toBe(false);
+	});
+
+	it('gate_twoFilesWithinOneHour_shouldNotGate', () => {
+		// AC2: same-session multi-file — compare must be accessible
+		const a = makeActivity('a', T0);
+		const b = makeActivity('b', T30);
+		expect(!activitiesOverlap([a, b])).toBe(false);
+	});
+
+	it('gate_twoFilesOnDifferentDays_shouldGate', () => {
+		// AC3: different-day files — compare must be gated
+		const a = makeActivity('a', T0);
+		const b = makeActivity('b', NEXT_DAY);
+		expect(!activitiesOverlap([a, b])).toBe(true);
+	});
+
+	it('gate_threeFilesAllSameSession_shouldNotGate', () => {
+		// AC2: three overlapping files — compare must be accessible
+		const a = makeActivity('a', T0);
+		const b = makeActivity('b', T5);
+		const c = makeActivity('c', T30);
+		expect(!activitiesOverlap([a, b, c])).toBe(false);
+	});
+
+	it('gate_threeFilesOneOutlier_shouldGate', () => {
+		// AC3: three files where one is from a different day
+		const a = makeActivity('a', T0);
+		const b = makeActivity('b', T30);
+		const c = makeActivity('c', NEXT_DAY);
+		expect(!activitiesOverlap([a, b, c])).toBe(true);
+	});
+});
