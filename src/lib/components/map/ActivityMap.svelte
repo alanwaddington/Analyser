@@ -335,11 +335,12 @@
 				group.addTo(map);
 				layers.push(group);
 
-				// Reference dashed overlay (transparent SVG polyline on top of canvas segments)
-				// Preserves the dashed indicator without colouring it
+				// Reference dashed overlay (SVG polyline on top of canvas segments).
+				// Uses the activity's flat file colour so the dashes are visible over the heatmap,
+				// matching how the reference is styled in the flat-colour path.
 				if (isRef) {
 					const dashOverlay = L.polyline(latLngs, {
-						color: 'transparent',
+						color: colour,
 						weight: 3,
 						renderer: L.svg(),
 						className: 'ref-polyline',
