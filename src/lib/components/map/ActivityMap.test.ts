@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { positionAtDistance, positionFromPoints, extractGpsPoints, distanceAtPoint } from './ActivityMap.utils.ts';
+import { positionAtDistance, positionFromPoints, extractGpsPoints, distanceAtPoint, TILE_PROVIDERS } from './ActivityMap.utils.ts';
 import type { GpsPointWithDistance } from './ActivityMap.utils.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
 
@@ -284,5 +284,68 @@ describe('distanceAtPoint', () => {
 		// Target much closer to first point
 		const result = distanceAtPoint(points, 51.001, -1.001);
 		expect(result).toBeCloseTo(0, 0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// TILE_PROVIDERS
+// ---------------------------------------------------------------------------
+describe('TILE_PROVIDERS', () => {
+	it('TILE_PROVIDERS_length_hasFiveEntries', () => {
+		expect(TILE_PROVIDERS).toHaveLength(5);
+	});
+
+	it('TILE_PROVIDERS_firstEntry_isOpenStreetMapStreets', () => {
+		expect(TILE_PROVIDERS[0].name).toBe('Streets');
+		expect(TILE_PROVIDERS[0].url).toContain('openstreetmap.org');
+	});
+
+	it('TILE_PROVIDERS_allEntries_haveRequiredFields', () => {
+		for (const provider of TILE_PROVIDERS) {
+			expect(typeof provider.name).toBe('string');
+			expect(provider.name.length).toBeGreaterThan(0);
+			expect(typeof provider.url).toBe('string');
+			expect(provider.url.length).toBeGreaterThan(0);
+			expect(typeof provider.attribution).toBe('string');
+			expect(provider.attribution.length).toBeGreaterThan(0);
+			expect(typeof provider.maxNativeZoom).toBe('number');
+			expect(provider.maxNativeZoom).toBeGreaterThan(0);
+		}
+	});
+
+	it('TILE_PROVIDERS_allUrls_useHttps', () => {
+		for (const provider of TILE_PROVIDERS) {
+			expect(provider.url).toMatch(/^https:\/\//);
+		}
+	});
+
+	it('TILE_PROVIDERS_names_areUnique', () => {
+		const names = TILE_PROVIDERS.map(p => p.name);
+		const unique = new Set(names);
+		expect(unique.size).toBe(names.length);
+	});
+
+	it('TILE_PROVIDERS_includesSatellite', () => {
+		const satellite = TILE_PROVIDERS.find(p => p.name === 'Satellite');
+		expect(satellite).toBeDefined();
+		expect(satellite!.url).toContain('arcgisonline.com');
+	});
+
+	it('TILE_PROVIDERS_includesTopo', () => {
+		const topo = TILE_PROVIDERS.find(p => p.name === 'Topo');
+		expect(topo).toBeDefined();
+		expect(topo!.url).toContain('opentopomap.org');
+	});
+
+	it('TILE_PROVIDERS_includesCycling', () => {
+		const cycling = TILE_PROVIDERS.find(p => p.name === 'Cycling');
+		expect(cycling).toBeDefined();
+		expect(cycling!.url).toContain('cyclosm');
+	});
+
+	it('TILE_PROVIDERS_includesDark', () => {
+		const dark = TILE_PROVIDERS.find(p => p.name === 'Dark');
+		expect(dark).toBeDefined();
+		expect(dark!.url).toContain('cartocdn.com');
 	});
 });

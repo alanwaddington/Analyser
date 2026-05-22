@@ -9,6 +9,7 @@
 		distanceAtPoint,
 		extractGpsPointsWithMetric,
 		computeMetricRange,
+		TILE_PROVIDERS,
 	} from './ActivityMap.utils.ts';
 	import type { GpsPointWithMetric } from './ActivityMap.utils.ts';
 	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils.ts';
@@ -91,10 +92,23 @@
 
 		map = L.map(container);
 
-		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-			attribution:
-				'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-		}).addTo(map);
+		// ── Tile layer switcher ──────────────────────────────────────────────
+		// Build a base layers record from TILE_PROVIDERS and register via
+		// L.control.layers. The first provider is added to the map as default.
+		const baseLayers: Record<string, import('leaflet').TileLayer> = {};
+		for (const provider of TILE_PROVIDERS) {
+			baseLayers[provider.name] = L.tileLayer(provider.url, {
+				attribution: provider.attribution,
+				maxNativeZoom: provider.maxNativeZoom,
+				// No maxZoom restriction — layer stays selectable at any zoom level.
+				// Tiles are upscaled by Leaflet beyond maxNativeZoom rather than
+				// the layer being disabled in the control.
+			});
+		}
+		// Add default (first) layer to map
+		baseLayers[TILE_PROVIDERS[0].name].addTo(map);
+		// Register all layers in the native Leaflet control at topleft
+		L.control.layers(baseLayers, {}, { position: 'topleft' }).addTo(map);
 
 		// ── Metric selector control (top-right) ─────────────────────────────
 		const SelectorControl = L.Control.extend({
@@ -552,5 +566,89 @@
 	:global(.metric-legend-min),
 	:global(.metric-legend-max) {
 		line-height: 1.3;
+	}
+
+	/* ── Leaflet layers control — base container ────────────────────────── */
+	:global(.leaflet-control-layers) {
+		background: color-mix(in srgb, var(--color-card, #1e1e2e) 88%, transparent);
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
+		border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12)) !important;
+		border-radius: 6px !important;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+		font-family: inherit;
+	}
+
+	/* ── Collapsed toggle button ────────────────────────────────────────── */
+	:global(.leaflet-control-layers-toggle) {
+		width: 32px !important;
+		height: 32px !important;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12 2 2 7 12 12 22 7 12 2'/%3E%3Cpolyline points='2 17 12 22 22 17'/%3E%3Cpolyline points='2 12 12 17 22 12'/%3E%3C/svg%3E") !important;
+		background-repeat: no-repeat !important;
+		background-position: center !important;
+		background-size: 18px 18px !important;
+		background-color: transparent !important;
+		border-radius: 5px;
+	}
+
+	:global(.leaflet-control-layers-toggle:hover) {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23f1f5f9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12 2 2 7 12 12 22 7 12 2'/%3E%3Cpolyline points='2 17 12 22 22 17'/%3E%3Cpolyline points='2 12 12 17 22 12'/%3E%3C/svg%3E") !important;
+	}
+
+	/* ── Expanded panel ─────────────────────────────────────────────────── */
+	:global(.leaflet-control-layers-expanded) {
+		padding: 7px 10px !important;
+		min-width: 130px;
+	}
+
+	:global(.leaflet-control-layers-expanded)::before {
+		content: 'Map Layer';
+		display: block;
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: var(--color-muted, #9ca3af);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		margin-bottom: 6px;
+		user-select: none;
+	}
+
+	/* ── Layer list ─────────────────────────────────────────────────────── */
+	:global(.leaflet-control-layers-list) {
+		margin: 0;
+	}
+
+	:global(.leaflet-control-layers-base label) {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 3px 0;
+		cursor: pointer;
+		border-radius: 3px;
+		transition: opacity 0.12s;
+	}
+
+	:global(.leaflet-control-layers-base label:hover) {
+		opacity: 0.75;
+	}
+
+	:global(.leaflet-control-layers-base label span) {
+		font-size: 0.775rem;
+		font-weight: 500;
+		color: var(--color-text, #f1f5f9);
+		user-select: none;
+	}
+
+	:global(.leaflet-control-layers-base input[type='radio']) {
+		accent-color: #3b82f6;
+		width: 13px;
+		height: 13px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	/* No overlay layers used — hide the separator */
+	:global(.leaflet-control-layers-separator) {
+		display: none;
 	}
 </style>
