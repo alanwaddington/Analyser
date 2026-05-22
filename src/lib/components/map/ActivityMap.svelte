@@ -12,8 +12,8 @@
 		TILE_PROVIDERS,
 	} from './ActivityMap.utils.ts';
 	import type { GpsPointWithMetric } from './ActivityMap.utils.ts';
-	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils.ts';
-	import { smooth } from '$lib/analytics/smooth.ts';
+	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils';
+	import { smooth } from '$lib/analytics/smooth';
 	import { valueToColour, formatMetricValue } from './colourScale.ts';
 
 	let {
@@ -113,15 +113,15 @@
 		// ── Metric selector control (top-right) ─────────────────────────────
 		const SelectorControl = L.Control.extend({
 			onAdd() {
-				const div = L.DomUtil.create('div', 'metric-selector-control');
-				L.DomEvent.disableClickPropagation(div);
-				L.DomEvent.disableScrollPropagation(div);
+				const div = L!.DomUtil.create('div', 'metric-selector-control');
+				L!.DomEvent.disableClickPropagation(div);
+				L!.DomEvent.disableScrollPropagation(div);
 
-				const label = L.DomUtil.create('label', 'metric-selector-label', div);
+				const label = L!.DomUtil.create('label', 'metric-selector-label', div);
 				label.setAttribute('for', 'metric-selector-select');
 				label.textContent = 'Colour by';
 
-				const select = L.DomUtil.create(
+				const select = L!.DomUtil.create(
 					'select',
 					'metric-selector-select',
 					div,
@@ -142,18 +142,18 @@
 		// ── Colour scale legend control (bottom-right) ───────────────────────
 		const LegendControl = L.Control.extend({
 			onAdd() {
-				const div = L.DomUtil.create('div', 'metric-legend-control hidden') as HTMLDivElement;
-				L.DomEvent.disableClickPropagation(div);
+				const div = L!.DomUtil.create('div', 'metric-legend-control hidden') as HTMLDivElement;
+				L!.DomEvent.disableClickPropagation(div);
 				legendControlEl = div;
 
-				const labelEl = L.DomUtil.create('div', 'metric-legend-label', div) as HTMLDivElement;
+				const labelEl = L!.DomUtil.create('div', 'metric-legend-label', div) as HTMLDivElement;
 				legendLabelEl = labelEl;
 
-				L.DomUtil.create('div', 'metric-legend-bar', div);
+				L!.DomUtil.create('div', 'metric-legend-bar', div);
 
-				const valuesEl = L.DomUtil.create('div', 'metric-legend-values', div);
-				const minEl = L.DomUtil.create('span', 'metric-legend-min', valuesEl) as HTMLSpanElement;
-				const maxEl = L.DomUtil.create('span', 'metric-legend-max', valuesEl) as HTMLSpanElement;
+				const valuesEl = L!.DomUtil.create('div', 'metric-legend-values', div);
+				const minEl = L!.DomUtil.create('span', 'metric-legend-min', valuesEl) as HTMLSpanElement;
+				const maxEl = L!.DomUtil.create('span', 'metric-legend-max', valuesEl) as HTMLSpanElement;
 				legendMinEl = minEl;
 				legendMaxEl = maxEl;
 
