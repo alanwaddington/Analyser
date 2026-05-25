@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.4 · **Last updated:** May 2026
+> **Version:** 1.5 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -22,7 +22,12 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 4.3 [Multi-File Device Bar](#43-multi-file-device-bar)
    - 4.4 [Fine-Tuning Timing](#44-fine-tuning-timing)
 5. [Event Comparison](#5-event-comparison)
-6. [Reference](#6-reference)
+6. [Syncing Device Labels Across Devices](#6-syncing-device-labels-across-devices)
+   - 6.1 [How Sync Works](#61-how-sync-works)
+   - 6.2 [Linking a Second Device](#62-linking-a-second-device)
+   - 6.3 [Sync Status and Errors](#63-sync-status-and-errors)
+   - 6.4 [Resetting Your Sync Identity](#64-resetting-your-sync-identity)
+7. [Reference](#7-reference)
 
 ---
 
@@ -273,6 +278,7 @@ The first loaded file is always the **reference** (offset = 0). All other files 
 
 ## 5. Event Comparison
 
+
 The **Event Comparison** view (🏃) is designed for comparing multiple runs of the same course — for example, several parkruns on the same route — aligned by **distance** to show exactly where time was gained or lost.
 
 ![Event Comparison view](screenshots/14-event-comparison.png)
@@ -287,7 +293,74 @@ Load two or more `.fit` files, then switch to the Event Comparison tab. The view
 
 ---
 
-## 6. Reference
+## 6. Syncing Device Labels Across Devices
+
+Device labels you create (by double-clicking a sensor pill) are saved in your browser's local storage. The **Sync** feature lets you share those labels across multiple browsers or devices — for example, so your phone and laptop both show "Polar H10" instead of "Device 1".
+
+Sync is **automatic and account-free**. No sign-in is required. Each browser is assigned a private sync identity (a UUID stored in local storage) the first time it loads Analyser.
+
+### 6.1 How Sync Works
+
+1. On first load, Analyser generates a unique sync identity (UUID) for your browser and pushes your current labels to a cloud key-value store under that identity.
+2. On every subsequent load, Analyser pulls the latest labels from the cloud and applies them locally — the cloud is the source of truth.
+3. Whenever you rename or remove a device label, the change is automatically pushed to the cloud in the background.
+4. All data is keyed by your private UUID. No one else can read or modify your labels without that UUID.
+
+> **Privacy note:** Labels are stored in Upstash Redis and expire automatically after **90 days** of inactivity. No personal information is stored — only the device labels you assign (e.g. "Polar H10", "Assioma Duo") keyed by a randomly generated UUID.
+
+### 6.2 Linking a Second Device
+
+To share your labels with a second browser or device:
+
+1. Open the **Sync** panel in the sidebar footer (click the ☁ Sync toggle).
+2. On the first device:
+   - **Scan the QR code** with the second device's camera app — this opens Analyser with the sync identity pre-loaded.
+   - Or click **📋 Copy link** and paste the URL into the second device's browser.
+   - Or note the **short sync code** (format: `XXX-XXXXX`, e.g. `E6Y-NXEMF`).
+3. On the second device, open Analyser and expand the Sync panel:
+   - If you used the QR code or copied link, Analyser automatically pulls labels from the first device's identity — no further action needed.
+   - If using the short code, type it into the **Link another device** input and press **→** (or Enter). Analyser resolves the code and pulls labels.
+
+After linking, both devices share the same sync identity and labels stay in sync automatically.
+
+> **Tip:** The QR code and copy-link methods are the most convenient. Use the short code when typing a URL isn't practical.
+
+### 6.3 Sync Status and Errors
+
+The Sync panel shows a status line:
+
+| Status | Meaning |
+|--------|---------|
+| ☁ Syncing across devices ✓ · *N min ago* | Labels synced successfully; time since last sync |
+| Setting up sync… | Initial sync in progress (first visit) |
+| ⚠ Sync error — retry | A push or pull failed; click **retry** to try again |
+
+Network errors are non-fatal — if a push fails, your local labels are unchanged and the error is shown in the panel. Analyser will retry automatically on the next label change.
+
+### 6.4 Resetting Your Sync Identity
+
+If you want to **break the link** between devices (e.g. after lending your laptop to someone):
+
+1. Open the Sync panel and click **Reset sync identity** at the bottom.
+2. Confirm when prompted.
+
+A new UUID is generated and your current labels are pushed under the new identity. Devices still using the old identity will no longer receive your label updates.
+
+> **Note:** Resetting does not delete the old identity from the cloud — it simply stops being used. The old data will expire after 90 days of inactivity.
+
+---
+
+## 7. Reference
+
+### Sync — Quick Reference
+
+| Action | How |
+|--------|-----|
+| Open Sync panel | Click **☁ Sync** in the sidebar footer |
+| Share labels with another device | QR code, Copy link, or short code |
+| Enter a short code | Type `XXX-XXXXX` in the **Link another device** input and press → |
+| Break the link / start fresh | **Reset sync identity** in the Sync panel |
+| Check last sync time | Status line in the Sync panel |
 
 ### Keyboard Shortcuts
 
@@ -326,6 +399,10 @@ Load two or more `.fit` files, then switch to the Event Comparison tab. The view
 | Map shows no route | FIT file has no GPS data | Some indoor activities (turbo trainer, treadmill) do not record GPS |
 | Pace chart looks upside-down | Expected — faster pace (lower min/km) is plotted higher | This is correct; it matches the intuition of "going faster = higher on chart" |
 | Device name shows as "Device N" | Device not yet labelled | Double-click the pill to rename it; the label is saved in your browser and restored for future sessions with any device of the same type |
+| Sync panel shows "⚠ Sync error" | Network error or server unavailable | Click **retry** in the Sync panel; your local labels are unaffected |
+| Short code entry says "Code not found" | Code is invalid, mistyped, or the 90-day TTL has expired | Check the code format (`XXX-XXXXX`) and re-copy it from the originating device |
+| Labels on second device are out of date | Sync has not triggered yet | Open the Sync panel — pulling happens automatically on load; refresh the page if needed |
+| Sync panel shows "Setting up sync…" for a long time | Connectivity issue on first visit | Check your network; the sync identity is assigned locally first so labels still work offline |
 
 ---
 
