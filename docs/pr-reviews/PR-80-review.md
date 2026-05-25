@@ -5,16 +5,18 @@
 **Branch:** feature/78-cross-device-label-sync → main
 **State:** Open
 
+> **Update 2026-05-25:** All findings (M1, m1, m2, m3, S1) resolved in commit `2edb2ec` and verified at runtime. Overall assessment upgraded to Pass ✅. See [Findings](#findings) for resolution notes.
+
 ---
 
 ## Summary
 
 | Item | Result |
 |------|--------|
-| Overall Assessment | Pass with comments ⚠️ |
+| Overall Assessment | Pass ✅ |
 | Risk Level | Low |
 | Test Coverage | Adequate |
-| Acceptance Criteria | 22/23 met |
+| Acceptance Criteria | 23/23 met |
 
 ---
 
@@ -47,35 +49,45 @@
 | Quality | ✅ No issues — both in `dependencies` (not devDeps) which is correct for server and client runtime use |
 | Test coverage | N/A — dependency manifest |
 
-### `src/lib/server/redis.ts` (+28 / -0 lines)
+### `src/lib/validation.ts` (new — added in fix commit)
+
+| Property | Detail |
+|----------|--------|
+| Purpose | Shared `UUID_REGEX` and `SHORT_CODE_REGEX` constants used by both API routes and `SyncPanel.svelte` |
+| Issues | #78 (m3 fix) |
+| Criteria covered | Single source of truth for format validation |
+| Quality | ✅ Correctly placed in `src/lib/` (not `src/lib/server/`) so it is importable by both server routes and client components |
+| Test coverage | Constants exercised by all existing API route tests and runtime Playwright verification |
+
+### `src/lib/server/redis.ts` (+28 / -0 lines → updated in fix commit)
 
 | Property | Detail |
 |----------|--------|
 | Purpose | Upstash Redis client singleton with lazy initialisation and credential validation |
 | Issues | #78 Task 1 |
 | Criteria covered | Redis client creation, credential guard |
-| Quality | ✅ Clean singleton pattern. Uses `process.env` instead of `$env/dynamic/private` to avoid build-time credential checks — documented trade-off |
+| Quality | ✅ Clean singleton pattern. Updated (m1 fix) to use `$env/dynamic/private` — `.env.local` values are now available in the SvelteKit dev server without shell exports |
 | Test coverage | Indirectly tested via API route tests that mock this module |
 
-### `src/routes/api/labels/[uuid]/+server.ts` (+84 / -0 lines)
+### `src/routes/api/labels/[uuid]/+server.ts` (+84 / -0 lines → updated in fix commit)
 
 | Property | Detail |
 |----------|--------|
 | Purpose | GET (pull labels) and PUT (push labels + refresh TTL) API routes |
 | Issues | #78 Task 1 |
 | Criteria covered | GET returns 200/404, PUT stores labels + code with 90-day TTL, UUID validation (400), Redis errors (500) |
-| Quality | ✅ Clean separation of validation and business logic. `isLabelsBody` type guard validates all fields including shortCode format and labels value types |
+| Quality | ✅ Regex constants now imported from `src/lib/validation.ts` (m3 fix). `isLabelsBody` type guard validates all fields |
 | Test coverage | `server.test.ts` — 11 tests covering GET valid/invalid/missing/error, PUT valid/empty/invalid-uuid/missing-fields/bad-json/error |
 
-### `src/routes/api/labels/resolve/[code]/+server.ts` (+30 / -0 lines)
+### `src/routes/api/labels/resolve/[code]/+server.ts` (+30 / -0 lines → updated in fix commit)
 
 | Property | Detail |
 |----------|--------|
 | Purpose | GET (resolve short code to UUID) API route |
 | Issues | #78 Task 1 |
-| Criteria covered | Code validation (400), resolve success (200), not found (404), Redis error (500) |
-| Quality | ✅ Concise, well-structured |
-| Test coverage | `server.test.ts` — 7 tests covering valid/missing/invalid-format/special-chars/empty/error |
+| Criteria covered | Code validation (400), resolve success (200), not found (404), Redis error (500), rate limiting (429) |
+| Quality | ✅ Concise, well-structured. Now imports `SHORT_CODE_REGEX` from `src/lib/validation.ts` (m3 fix) and includes in-memory sliding-window rate limiter — 10 req/min per IP, 429 + `Retry-After: 60` (S1 fix). Per-instance limitation documented in code |
+| Test coverage | `server.test.ts` — 9 tests: original 7 + 2 new rate limiter tests (429 on 11th request, independent limits per IP) |
 
 ### `src/routes/api/labels/[uuid]/server.test.ts` (+198 / -0 lines)
 
@@ -87,14 +99,14 @@
 | Quality | ✅ Good coverage of happy path, 400, 404, and 500 cases. Mock pattern is clean |
 | Test coverage | N/A — is the test file |
 
-### `src/routes/api/labels/resolve/[code]/server.test.ts` (+92 / -0 lines)
+### `src/routes/api/labels/resolve/[code]/server.test.ts` (+92 / -0 lines → updated in fix commit)
 
 | Property | Detail |
 |----------|--------|
 | Purpose | Unit tests for the resolve API route handler |
 | Issues | #78 Task 1 |
-| Criteria covered | Test coverage for resolve GET paths |
-| Quality | ✅ Thorough edge case coverage (too short, no dash, special chars, empty) |
+| Criteria covered | Test coverage for resolve GET paths including rate limiting |
+| Quality | ✅ `makeEvent()` updated to include `getClientAddress`. Rate limit tests use a dedicated IP (`10.0.0.99`) to avoid interfering with other test slots |
 | Test coverage | N/A — is the test file |
 
 ### `src/lib/stores/sync.ts` (+221 / -0 lines)
@@ -137,14 +149,14 @@
 | Quality | ✅ Thorough, including the important negative test that replaceAllLabels does NOT trigger the hook |
 | Test coverage | N/A — is the test file |
 
-### `src/lib/components/ui/SyncPanel.svelte` (+457 / -0 lines)
+### `src/lib/components/ui/SyncPanel.svelte` (+457 / -0 lines → updated in fix commit)
 
 | Property | Detail |
 |----------|--------|
 | Purpose | Collapsible sync panel with QR code, copy link, short code display, code entry, status/error, and reset identity |
 | Issues | #78 Task 3 |
 | Criteria covered | QR code display, copy link with feedback, short code in monospace, code entry with resolve, status display, error with retry, reset identity |
-| Quality | ✅ Follows existing sidebar footer control patterns. QR wrapper uses white background for scannability. Uses `$derived` for reactive QR/URL generation. SSR-safe (guards with `browser` check). Styling is consistent with existing components |
+| Quality | ✅ Follows existing sidebar footer control patterns. Updated: (M1 fix) client-side `SHORT_CODE_REGEX` format check in `submitCode()` before API call — shows `"Code must be in XXX-XXXXX format (e.g. E6Y-NXEMF)"` with no network round-trip; (m2 fix) `"✓ Linked! Labels synced."` green success message shown for 2s after successful adoption |
 | Test coverage | Runtime/Playwright verification (consistent with project approach — no .svelte unit tests) |
 
 ### `src/lib/components/ui/Sidebar.svelte` (+2 / -0 lines)
@@ -209,17 +221,17 @@
 | 12 | Short code displayed in large monospace text | `SyncPanel.svelte:135-136` (shortcode div), `SyncPanel.svelte:295-303` (styling) | Runtime verified | ✅ Met |
 | 13 | "Enter a code" input resolves code via API and stores resolved UUID | `SyncPanel.svelte:74-88` (submitCode), `SyncPanel.svelte:147-164` (input + button) | `sync.test.ts:389-409` (resolveCode), runtime verified | ✅ Met |
 | 14 | After entering valid code, device immediately pulls labels and joins sync ring | `sync.ts:143-149` (adoptSyncIdentity calls pullLabels) | `sync.test.ts:432-439` | ✅ Met |
-| 15 | Entering invalid code shows inline error message | `SyncPanel.svelte:83-84` (codeError set), `SyncPanel.svelte:165-167` (render) | Runtime verified — but see finding M1 | ⚠️ Partially Met |
+| 15 | Entering invalid code shows inline error message | `SyncPanel.svelte` — client-side format check shows `"Code must be in XXX-XXXXX format (e.g. E6Y-NXEMF)"`; server 404 shows `"Code not found"` | Runtime verified (Playwright) | ✅ Met |
 | 16 | Sync panel shows "Syncing across devices ✓" with last-synced timestamp | `SyncPanel.svelte:121` (status line), `SyncPanel.svelte:40-48` (formatAge) | Runtime verified | ✅ Met |
 | 17 | "Reset sync identity" generates new UUID, registers new short code, pushes current labels | `sync.ts:155-163` | `sync.test.ts:463-514` | ✅ Met |
 | 18 | Both KV keys expire after 90 days (TTL refreshed on every push) | `[uuid]/+server.ts:5` (TTL_SECONDS = 90 * 24 * 60 * 60), lines 76-78 (set with `{ ex: TTL_SECONDS }`) | `server.test.ts:113-123` | ✅ Met |
 | 19 | Existing localStorage labels pushed to KV on first sync | `sync.ts:193-194` (pushLabels after first-time UUID generation) | `sync.test.ts:176-184` | ✅ Met |
 | 20 | QR code generated client-side; library ≤ 10 kB gzipped | `SyncPanel.svelte:3` (import renderSVG from 'uqr'), bundle verified at 7.8 kB | N/A — verified via build output | ✅ Met |
 | 21 | All 3 API routes validate input (UUID format, code format, reject malformed with 400) | `[uuid]/+server.ts:28-29,52-53,64-69`, `resolve/+server.ts:15-16` | `server.test.ts:71-93`, `resolve/server.test.ts:57-81` | ✅ Met |
-| 22 | API routes return appropriate HTTP status codes (200, 400, 404, 500) | All routes implement all four status codes | All test files cover all status codes | ✅ Met |
-| 23 | `deviceLabels.test.ts` existing tests continue to pass | Existing tests unchanged; new functions are additive | All 394 tests passing | ✅ Met |
+| 22 | API routes return appropriate HTTP status codes (200, 400, 404, 500) | All routes implement all four status codes; resolve also returns 429 | All test files cover all status codes | ✅ Met |
+| 23 | `deviceLabels.test.ts` existing tests continue to pass | Existing tests unchanged; new functions are additive | All 396 tests passing | ✅ Met |
 
-**Summary:** 22/23 criteria met. 1 partially met (criterion 15 — error message UX).
+**Summary:** 23/23 criteria met.
 
 ---
 
@@ -232,6 +244,7 @@
 - **Location:** `src/lib/stores/sync.ts:129`, `src/lib/components/ui/SyncPanel.svelte:83`
 - **Description:** When a user enters a format-invalid code (e.g. `BAD-CODE` which doesn't match the server's `XXX-XXXXX` regex), the server returns 400 and `resolveCode()` throws `"Resolve failed: 400"`. The SyncPanel displays this raw technical message to the user. The acceptance criterion says the error should be "Code not found" or similar user-friendly text. The `resolveCode` function handles 404 with `"Code not found"` but passes through other status codes as `"Resolve failed: {status}"`.
 - **Recommendation:** Add client-side format validation in `SyncPanel.svelte`'s `submitCode()` before calling `resolveCode()`. If the trimmed input doesn't match `/^[A-Z0-9]{3}-[A-Z0-9]{5}$/`, set `codeError = 'Code must be in XXX-XXXXX format'` and return early. This also avoids a network round-trip for obviously invalid input.
+- ✅ **Resolved in commit `2edb2ec`** — `submitCode()` now checks `SHORT_CODE_REGEX` before calling `resolveCode()`. Bad format shows `"Code must be in XXX-XXXXX format (e.g. E6Y-NXEMF)"` with no network round-trip. Verified via Playwright.
 
 ### Minor (nice to fix)
 
@@ -240,26 +253,30 @@
 - **Location:** `src/lib/server/redis.ts:17-18`
 - **Description:** The Redis singleton reads credentials from `process.env` to avoid build-time checks with `$env/dynamic/private`. However, Vite's dev server only injects `.env.local` values into `import.meta.env` and SvelteKit's `$env/*` modules, not into `process.env`. Local development requires exporting the vars in the shell (`export UPSTASH_REDIS_REST_URL=...`) before running `npm run dev`. The `.env.example` and `.env.local` files exist but don't work as expected for local dev.
 - **Recommendation:** Document the shell export requirement in `.env.example` comments, or add a `dotenv` import at the top of `redis.ts` for development mode. Alternatively, consider switching to `$env/dynamic/private` with a `try/catch` around the import so the build can still succeed without credentials present.
+- ✅ **Resolved in commit `2edb2ec`** — `redis.ts` now uses `import { env } from '$env/dynamic/private'`. `.env.local` credentials are available in the SvelteKit dev server without any shell exports. Build verified clean.
 
 #### m2 — No confirmation feedback after successful code adoption
 - **Category:** Code Quality / UX
 - **Location:** `src/lib/components/ui/SyncPanel.svelte:74-88`
 - **Description:** When a user enters a valid short code and successfully adopts a sync identity, the `codeInput` is cleared but there is no visible confirmation (e.g. "Linked!" or brief success message). The panel silently updates to the new identity. Users may wonder if the action succeeded, especially if they don't notice the short code changing.
 - **Recommendation:** Add a brief success state (similar to the "✓ Copied!" feedback on the copy button) after successful adoption.
+- ✅ **Resolved in commit `2edb2ec`** — `SyncPanel.svelte` now shows `"✓ Linked! Labels synced."` in green for 2 seconds after successful adoption, then auto-dismisses. Verified via Playwright.
 
 #### m3 — `SHORT_CODE_REGEX` duplicated across three files
 - **Category:** Code Quality
 - **Location:** `src/routes/api/labels/[uuid]/+server.ts:11`, `src/routes/api/labels/resolve/[code]/+server.ts:6`
 - **Description:** The regex `/^[A-Z0-9]{3}-[A-Z0-9]{5}$/i` is defined identically in two route files. If the format ever changes, both must be updated.
 - **Recommendation:** Extract to a shared constants file (e.g. `src/lib/server/validation.ts` or `src/lib/constants.ts`) and import in both routes.
+- ✅ **Resolved in commit `2edb2ec`** — `UUID_REGEX` and `SHORT_CODE_REGEX` extracted to `src/lib/validation.ts`. Both API routes and `SyncPanel.svelte` import from there.
 
-### Suggestions (optional)
+### Suggestions
 
 #### S1 — Consider rate limiting on resolve endpoint
 - **Category:** Security
 - **Location:** `src/routes/api/labels/resolve/[code]/+server.ts`
 - **Description:** The resolve endpoint is unauthenticated and has a keyspace of 36^8 (~2.8T). While brute-force is impractical at this scale, a determined attacker could enumerate active codes. For the current user base this is a non-issue, but if the app scales, rate limiting per IP on the resolve endpoint would be prudent.
 - **Recommendation:** No action needed now. Consider Vercel's built-in rate limiting if usage grows.
+- ✅ **Resolved in commit `2edb2ec`** — In-memory sliding-window rate limiter added: 10 requests/min per IP → 429 with `Retry-After: 60`. Limitation documented in code: per-instance only (not shared across serverless function instances). 2 new tests added (429 on 11th request, independent limits per IP). Verified: requests 1–10 return 404, request 11 returns 429.
 
 ---
 
@@ -268,7 +285,7 @@
 - Clean separation of concerns: `deviceLabels.ts` handles CRUD, `sync.ts` handles identity and network, `SyncPanel.svelte` handles UI. No circular dependencies.
 - Fire-and-forget pattern for push is well-implemented — the `onLabelChange` hook captures fresh UUID/shortCode from localStorage each time, correctly surviving identity changes.
 - Error handling is consistent across all sync operations: catch, log, surface in `syncStatus.error`, never throw to caller.
-- Test coverage is thorough: 72 new tests across 3 files. The `vi.resetModules()` pattern cleanly isolates module-level state between tests.
+- Test coverage is thorough: 74 new tests across 3 files (396 total). The `vi.resetModules()` pattern cleanly isolates module-level state between tests.
 - The `isLabelsBody` type guard in the PUT route validates not just structure but also value types (`Object.values(b.labels).every(v => typeof v === 'string')`).
 - QR generation with `uqr` (7.8 kB) is well under the 10 kB budget and generates clean SVG with no server dependency.
 - `replaceAllLabels` intentionally does NOT trigger the `onLabelChange` hook, preventing infinite push-pull loops. This is tested explicitly.
@@ -278,15 +295,16 @@
 ## Action Items
 
 ### Immediate Fixes (block merge)
-(none — no critical findings)
+(none)
 
 ### Should fix before merge
-- [ ] M1: Add client-side format validation in `submitCode()` for user-friendly error message on invalid code format
+- [x] M1: Add client-side format validation in `submitCode()` for user-friendly error message on invalid code format ✅
 
 ### Post-merge improvements
-- [ ] m1: Document or fix `.env.local` + `process.env` gap for local development
-- [ ] m2: Add brief success feedback after code adoption
-- [ ] m3: Extract `SHORT_CODE_REGEX` to shared constants
+- [x] m1: Document or fix `.env.local` + `process.env` gap for local development ✅
+- [x] m2: Add brief success feedback after code adoption ✅
+- [x] m3: Extract `SHORT_CODE_REGEX` to shared constants ✅
+- [x] S1: Add rate limiting to resolve endpoint ✅
 
 ---
 
