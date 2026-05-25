@@ -7,7 +7,7 @@
 		groupStreamsByChannel,
 		isComparableGroup,
 	} from '$lib/utils/deviceChannels';
-	import { setDeviceLabel, removeDeviceLabel } from '$lib/stores/deviceLabels';
+	import { setDeviceLabel, removeDeviceLabel, deviceStorageKey } from '$lib/stores/deviceLabels';
 
 	let { streams, multiFile = false }: {
 		streams: CrossFileStream[];
@@ -86,11 +86,12 @@
 
 	function commitRename(cfs: CrossFileStream) {
 		const trimmed = renameValue.trim();
-		if (trimmed && cfs.stream.device.antDeviceNumber != null) {
-			setDeviceLabel(cfs.stream.device.antDeviceNumber, trimmed);
+		const key = deviceStorageKey(cfs.stream.device);
+		if (trimmed && key != null) {
+			setDeviceLabel(key, trimmed);
 			cfs.stream.device.label = trimmed;
-		} else if (!trimmed && cfs.stream.device.antDeviceNumber != null) {
-			removeDeviceLabel(cfs.stream.device.antDeviceNumber);
+		} else if (!trimmed && key != null) {
+			removeDeviceLabel(key);
 			cfs.stream.device.label = undefined;
 		}
 		renamingDevice = null;
