@@ -20,6 +20,9 @@ let getDeviceLabel: (key: string) => string | undefined;
 let setDeviceLabel: (key: string, label: string) => void;
 let removeDeviceLabel: (key: string) => void;
 let applyLabels: (devices: Device[]) => void;
+let getAllLabels: () => Record<string, string>;
+let replaceAllLabels: (labels: Record<string, string>) => void;
+let setOnLabelChange: (callback: () => void) => void;
 
 beforeEach(async () => {
 	vi.resetModules();
@@ -32,6 +35,9 @@ beforeEach(async () => {
 	setDeviceLabel = mod.setDeviceLabel;
 	removeDeviceLabel = mod.removeDeviceLabel;
 	applyLabels = mod.applyLabels;
+	getAllLabels = mod.getAllLabels;
+	replaceAllLabels = mod.replaceAllLabels;
+	setOnLabelChange = mod.setOnLabelChange;
 });
 
 function makeDevice(overrides: Partial<Device> = {}): Device {
@@ -192,5 +198,87 @@ describe('applyLabels', () => {
 		const devices = [makeDevice({ deviceIndex: 0 })];
 		applyLabels(devices);
 		expect(devices[0].label).toBeUndefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// getAllLabels / replaceAllLabels
+// ---------------------------------------------------------------------------
+
+describe('getAllLabels', () => {
+	it('getAllLabels_emptyStore_returnsEmptyObject', () => {
+		expect(getAllLabels()).toEqual({});
+	});
+
+	it('getAllLabels_populatedStore_returnsAllLabels', () => {
+		setDeviceLabel('ant:42', 'Polar H10');
+		setDeviceLabel('serial:999', 'Garmin Fenix');
+		const result = getAllLabels();
+		expect(result).toEqual({ 'ant:42': 'Polar H10', 'serial:999': 'Garmin Fenix' });
+	});
+});
+
+describe('replaceAllLabels', () => {
+	it('replaceAllLabels_replacesExistingLabels', () => {
+		setDeviceLabel('ant:42', 'Old Name');
+		replaceAllLabels({ 'serial:999': 'New Watch', 'ant:100': 'New HRM' });
+		expect(getDeviceLabel('ant:42')).toBeUndefined();
+		expect(getDeviceLabel('serial:999')).toBe('New Watch');
+		expect(getDeviceLabel('ant:100')).toBe('New HRM');
+	});
+
+	it('replaceAllLabels_persistsToLocalStorage', () => {
+		replaceAllLabels({ 'ant:42': 'Polar H10' });
+		const saved = localStorageMock.getItem('analyser-device-labels');
+		expect(saved).toContain('ant:42');
+		expect(saved).toContain('Polar H10');
+	});
+
+	it('replaceAllLabels_emptyObject_clearsAllLabels', () => {
+		setDeviceLabel('ant:42', 'Polar H10');
+		replaceAllLabels({});
+		expect(getDeviceLabel('ant:42')).toBeUndefined();
+		expect(getAllLabels()).toEqual({});
+	});
+
+	it('replaceAllLabels_doesNotTriggerOnLabelChange', () => {
+		const callback = vi.fn();
+		setOnLabelChange(callback);
+		replaceAllLabels({ 'ant:42': 'Polar H10' });
+		expect(callback).not.toHaveBeenCalled();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// setOnLabelChange hook
+// ---------------------------------------------------------------------------
+
+describe('setOnLabelChange', () => {
+	it('setOnLabelChange_callbackInvokedOnSetDeviceLabel', () => {
+		const callback = vi.fn();
+		setOnLabelChange(callback);
+		setDeviceLabel('ant:42', 'My HRM');
+		expect(callback).toHaveBeenCalledTimes(1);
+	});
+
+	it('setOnLabelChange_callbackInvokedOnRemoveDeviceLabel', () => {
+		const callback = vi.fn();
+		setOnLabelChange(callback);
+		removeDeviceLabel('ant:42');
+		expect(callback).toHaveBeenCalledTimes(1);
+	});
+
+	it('setOnLabelChange_noCallbackSet_setDeviceLabelDoesNotThrow', () => {
+		// Default state: no callback registered — must not throw
+		expect(() => setDeviceLabel('ant:42', 'My HRM')).not.toThrow();
+	});
+
+	it('setOnLabelChange_callbackCalledAfterWrite', () => {
+		let labelAtCallbackTime: string | undefined;
+		setOnLabelChange(() => {
+			labelAtCallbackTime = getDeviceLabel('ant:42');
+		});
+		setDeviceLabel('ant:42', 'My HRM');
+		expect(labelAtCallbackTime).toBe('My HRM');
 	});
 });

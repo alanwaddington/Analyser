@@ -9,6 +9,7 @@
 	import { activitiesOverlap } from '$lib/align';
 	import { isDark, initTheme } from '$lib/stores/theme';
 	import { viewport } from '$lib/stores/viewport';
+	import { initSync, adoptSyncIdentity } from '$lib/stores/sync.ts';
 	import Sidebar from '$lib/components/ui/Sidebar.svelte';
 
 	let { children } = $props();
@@ -69,8 +70,23 @@
 		goto('/event');
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		initTheme();
+
+		// Handle ?sync={uuid} linking URL (from QR scan, pasted link, or typed code).
+		// adoptSyncIdentity stores the UUID and pulls labels from the remote store.
+		const syncParam = page.url.searchParams.get('sync');
+		if (syncParam) {
+			await adoptSyncIdentity(syncParam);
+			// Clean the param from the URL without triggering a navigation
+			const cleanUrl = new URL(page.url);
+			cleanUrl.searchParams.delete('sync');
+			history.replaceState(null, '', cleanUrl.pathname + (cleanUrl.search || ''));
+		}
+
+		// Initialise sync identity (generates UUID on first visit, pulls on returning visits).
+		// Called after adoptSyncIdentity so a newly adopted identity is not overwritten.
+		await initSync();
 	});
 
 	// Sync data-theme attribute on <html> whenever the resolved theme changes.

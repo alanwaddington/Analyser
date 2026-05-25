@@ -6,6 +6,11 @@ const STORAGE_KEY = 'analyser-device-labels';
 // every write so repeated reads within a session never hit localStorage again.
 let _cache: Map<string, string> | null = null;
 
+// Callback hook set by sync.ts during initSync(). Called fire-and-forget after
+// every label write or delete so the remote store stays in sync automatically.
+// Defaults to null (no-op) until sync is initialised.
+let _onLabelChange: (() => void) | null = null;
+
 /**
  * Derive a stable localStorage key for a device.
  * Priority: antDeviceNumber → serialNumber → manufacturer:product → antDeviceType → null
@@ -78,6 +83,7 @@ export function setDeviceLabel(key: string, label: string): void {
 	const map = getCache();
 	map.set(key, label);
 	saveLabels(map);
+	_onLabelChange?.();
 }
 
 /** Remove a stored label for a device, reverting to manufacturer/product fallback. */
@@ -85,6 +91,31 @@ export function removeDeviceLabel(key: string): void {
 	const map = getCache();
 	map.delete(key);
 	saveLabels(map);
+	_onLabelChange?.();
+}
+
+/**
+ * Register a callback that fires after every label write or delete.
+ * Used by sync.ts to trigger a remote push on each label change.
+ * The callback is called synchronously but should initiate async work internally.
+ */
+export function setOnLabelChange(callback: () => void): void {
+	_onLabelChange = callback;
+}
+
+/** Returns all stored labels as a plain object for sync serialisation. */
+export function getAllLabels(): Record<string, string> {
+	return Object.fromEntries(getCache().entries());
+}
+
+/**
+ * Replace the entire label cache and localStorage with the provided map.
+ * Used by sync.ts when pulling labels from the remote store (bulk overwrite).
+ * Does NOT trigger the onLabelChange hook — this is a system write, not a user action.
+ */
+export function replaceAllLabels(labels: Record<string, string>): void {
+	_cache = new Map(Object.entries(labels));
+	saveLabels(_cache);
 }
 
 /**
