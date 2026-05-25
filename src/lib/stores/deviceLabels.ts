@@ -1,5 +1,19 @@
 import type { Device } from '$lib/types';
 
+/**
+ * Derive a stable localStorage key for a device.
+ * Priority: antDeviceNumber → serialNumber → manufacturer:product → null (unkeyable)
+ * Keys are namespaced to prevent collisions between different identifier types.
+ */
+export function deviceStorageKey(device: Device): string | null {
+	if (device.antDeviceNumber != null) return `ant:${device.antDeviceNumber}`;
+	if (device.serialNumber != null)    return `serial:${device.serialNumber}`;
+	const m = device.manufacturer?.trim();
+	const p = device.product?.trim();
+	if (m || p) return `device:${m ?? ''}:${p ?? ''}`;
+	return null;
+}
+
 const STORAGE_KEY = 'analyser-device-labels';
 
 // In-memory cache; populated lazily on first access and kept in sync with
