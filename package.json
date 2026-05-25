@@ -33,8 +33,10 @@
 		"vitest": "^4.1.6"
 	},
 	"dependencies": {
+		"@upstash/redis": "^1.38.0",
 		"echarts": "^6.0.0",
 		"fit-file-parser": "^3.0.0",
-		"leaflet": "^1.9.4"
+		"leaflet": "^1.9.4",
+		"uqr": "^0.1.3"
 	}
 }
