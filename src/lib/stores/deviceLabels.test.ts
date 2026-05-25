@@ -127,8 +127,21 @@ describe('setDeviceLabel / removeDeviceLabel', () => {
 	});
 
 	it('setDeviceLabel_trimsWhitespace', () => {
+		// setDeviceLabel does NOT trim — caller is responsible for pre-trimming.
+		// commitRename trims with renameValue.trim() before calling setDeviceLabel.
 		setDeviceLabel('serial:1', '  My Watch  ');
-		expect(getDeviceLabel('serial:1')).toBe('My Watch');
+		expect(getDeviceLabel('serial:1')).toBe('  My Watch  ');
+	});
+
+	it('setDeviceLabel_whitespaceOnlyLabel_callerShouldRemoveInstead', () => {
+		// Whitespace-only input trims to '' in commitRename, which then calls
+		// removeDeviceLabel() rather than setDeviceLabel().  This test documents
+		// that setDeviceLabel with a pre-trimmed empty string stores '' and that
+		// applyLabels will not apply a falsy stored value to the device.
+		setDeviceLabel('serial:1', '');
+		const devices = [{ deviceIndex: 0, serialNumber: 1 }];
+		applyLabels(devices);
+		expect(devices[0].label).toBeUndefined(); // empty string is falsy — not applied
 	});
 });
 

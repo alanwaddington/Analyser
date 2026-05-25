@@ -52,6 +52,7 @@
 	// Reactive label overrides: updated immediately on commit so the pill text
 	// re-renders without needing a store round-trip.  Keyed by CrossFileStream.key
 	// (not device storage key) because CrossFileStream.key is unique per pill.
+	// Bounded in practice by MAX_FILES × devices_per_file (≤ ~60 entries).
 	let renamedLabels = $state(new Map<string, string>());
 
 	// File groups for multi-file mode: ordered list derived from stream order

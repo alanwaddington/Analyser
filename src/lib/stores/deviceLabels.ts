@@ -29,6 +29,8 @@ function getCache(): Map<string, string> {
 			return _cache;
 		}
 		// Parse entries — keys may be numeric (old format) or string (current format).
+		// Old format always used antDeviceNumber (an ANT+ protocol field) as a raw
+		// numeric key; numeric entries are therefore safely re-keyed as `ant:{n}`.
 		const entries = JSON.parse(raw) as [number | string, string][];
 		let needsMigration = false;
 		const migrated: [string, string][] = entries.map(([k, v]) => {
@@ -62,10 +64,13 @@ export function getDeviceLabel(key: string): string | undefined {
 	return getCache().get(key);
 }
 
-/** Persist a user-assigned label for a device by its storage key. */
+/**
+ * Persist a user-assigned label for a device by its storage key.
+ * Callers are responsible for trimming `label` before passing it here.
+ */
 export function setDeviceLabel(key: string, label: string): void {
 	const map = getCache();
-	map.set(key, label.trim());
+	map.set(key, label);
 	saveLabels(map);
 }
 
