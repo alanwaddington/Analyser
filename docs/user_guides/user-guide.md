@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.3 · **Last updated:** May 2026
+> **Version:** 1.4 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -110,7 +110,7 @@ The Device Toggle Bar sits at the top of the content area and lists every sensor
 
 **Renaming a device:**
 
-Double-click any device pill to rename it. Type the new label and press **Enter** to confirm, or **Escape** to cancel. Labels are saved locally and will be recognised the next time a file from the same ANT+ device is loaded.
+Double-click any device pill to rename it. Type the new label and press **Enter** to confirm, or **Escape** to cancel. Labels are saved locally in your browser and are restored automatically the next time you load a file from the same device — this works for all device types, including Garmin watches, Stryd pods, ANT+ sensors, and BLE devices.
 
 ---
 
@@ -325,7 +325,7 @@ Load two or more `.fit` files, then switch to the Event Comparison tab. The view
 | Two same-session files don't align on the time axis | GPS clock drift between devices | Adjust offsets using the Fine-tune timing panel (section 4.4) |
 | Map shows no route | FIT file has no GPS data | Some indoor activities (turbo trainer, treadmill) do not record GPS |
 | Pace chart looks upside-down | Expected — faster pace (lower min/km) is plotted higher | This is correct; it matches the intuition of "going faster = higher on chart" |
-| Device name shows as "Device N" | ANT+ device ID not yet labelled | Double-click the pill to rename it; the label is saved for future sessions |
+| Device name shows as "Device N" | Device not yet labelled | Double-click the pill to rename it; the label is saved in your browser and restored for future sessions with any device of the same type |
 
 ---
 

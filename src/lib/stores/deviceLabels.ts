@@ -4,20 +4,60 @@ const STORAGE_KEY = 'analyser-device-labels';
 
 // In-memory cache; populated lazily on first access and kept in sync with
 // every write so repeated reads within a session never hit localStorage again.
-let _cache: Map<number, string> | null = null;
+let _cache: Map<string, string> | null = null;
 
-function getCache(): Map<number, string> {
+/**
+ * Derive a stable localStorage key for a device.
+ * Priority: antDeviceNumber → serialNumber → manufacturer:product → antDeviceType → null
+ * Keys are namespaced to prevent collisions between different identifier types.
+ *
+ * The `type:` fallback is intentionally last — it is stable only when a user has
+ * a single device of that ANT+ type. Two devices of the same type with no other
+ * identifiers would share the key, but that situation only arises for extremely
+ * minimal FIT device_info entries (no serial, no manufacturer, no device number).
+ */
+export function deviceStorageKey(device: Device): string | null {
+	if (device.antDeviceNumber != null) return `ant:${device.antDeviceNumber}`;
+	if (device.serialNumber != null)    return `serial:${device.serialNumber}`;
+	const m = device.manufacturer?.trim();
+	const p = device.product?.trim();
+	if (m || p) return `device:${m ?? ''}:${p ?? ''}`;
+	if (device.antDeviceType != null)   return `type:${device.antDeviceType}`;
+	return null;
+}
+
+function getCache(): Map<string, string> {
 	if (_cache !== null) return _cache;
 	try {
 		const raw = localStorage.getItem(STORAGE_KEY);
-		_cache = raw ? new Map(JSON.parse(raw) as [number, string][]) : new Map();
+		if (!raw) {
+			_cache = new Map();
+			return _cache;
+		}
+		// Parse entries — keys may be numeric (old format) or string (current format).
+		// Old format always used antDeviceNumber (an ANT+ protocol field) as a raw
+		// numeric key; numeric entries are therefore safely re-keyed as `ant:{n}`.
+		const entries = JSON.parse(raw) as [number | string, string][];
+		let needsMigration = false;
+		const migrated: [string, string][] = entries.map(([k, v]) => {
+			if (typeof k === 'number') {
+				needsMigration = true;
+				return [`ant:${k}`, v];
+			}
+			return [k, v];
+		});
+		_cache = new Map(migrated);
+		if (needsMigration) {
+			// Save back in the new format so migration only happens once.
+			saveLabels(_cache);
+		}
 	} catch {
 		_cache = new Map();
 	}
 	return _cache;
 }
 
-function saveLabels(map: Map<number, string>): void {
+function saveLabels(map: Map<string, string>): void {
 	try {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(map.entries())));
 	} catch {
@@ -25,34 +65,39 @@ function saveLabels(map: Map<number, string>): void {
 	}
 }
 
-/** Get the stored label for a device by its ANT+ device number. */
-export function getDeviceLabel(antDeviceNumber: number): string | undefined {
-	return getCache().get(antDeviceNumber);
+/** Get the stored label for a device by its storage key. */
+export function getDeviceLabel(key: string): string | undefined {
+	return getCache().get(key);
 }
 
-/** Persist a user-assigned label for a device by its ANT+ device number. */
-export function setDeviceLabel(antDeviceNumber: number, label: string): void {
+/**
+ * Persist a user-assigned label for a device by its storage key.
+ * Callers are responsible for trimming `label` before passing it here.
+ */
+export function setDeviceLabel(key: string, label: string): void {
 	const map = getCache();
-	map.set(antDeviceNumber, label.trim());
+	map.set(key, label);
 	saveLabels(map);
 }
 
 /** Remove a stored label for a device, reverting to manufacturer/product fallback. */
-export function removeDeviceLabel(antDeviceNumber: number): void {
+export function removeDeviceLabel(key: string): void {
 	const map = getCache();
-	map.delete(antDeviceNumber);
+	map.delete(key);
 	saveLabels(map);
 }
 
 /**
  * Apply stored labels to an array of devices in-place.
- * Only devices with a known antDeviceNumber are checked.
+ * Works for all device types — ANT+, BLE, local — by deriving the storage key
+ * from whatever identifying fields are available.
  */
 export function applyLabels(devices: Device[]): void {
 	const map = getCache();
 	for (const device of devices) {
-		if (device.antDeviceNumber != null) {
-			const stored = map.get(device.antDeviceNumber);
+		const key = deviceStorageKey(device);
+		if (key != null) {
+			const stored = map.get(key);
 			if (stored) device.label = stored;
 		}
 	}

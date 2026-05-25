@@ -7,7 +7,7 @@
 		groupStreamsByChannel,
 		isComparableGroup,
 	} from '$lib/utils/deviceChannels';
-	import { setDeviceLabel, removeDeviceLabel } from '$lib/stores/deviceLabels';
+	import { setDeviceLabel, removeDeviceLabel, deviceStorageKey } from '$lib/stores/deviceLabels';
 
 	let { streams, multiFile = false }: {
 		streams: CrossFileStream[];
@@ -43,7 +43,17 @@
 
 	// Inline rename state: key → current edit value (null = not editing)
 	let renamingDevice = $state<string | null>(null);
+	// For channelGroup pills, a device can appear in multiple channel groups (one per channel).
+	// renamingChannelKey scopes the rename input to exactly ONE channel group so only
+	// one input is created at a time (prevents duplicate focusOnMount stealing focus).
+	let renamingChannelKey = $state<string | null>(null);
 	let renameValue = $state('');
+
+	// Reactive label overrides: updated immediately on commit so the pill text
+	// re-renders without needing a store round-trip.  Keyed by CrossFileStream.key
+	// (not device storage key) because CrossFileStream.key is unique per pill.
+	// Bounded in practice by MAX_FILES × devices_per_file (≤ ~60 entries).
+	let renamedLabels = $state(new Map<string, string>());
 
 	// File groups for multi-file mode: ordered list derived from stream order
 	const fileGroups = $derived.by(() => {
@@ -79,25 +89,36 @@
 	// Visible channel groups for single-file mode
 	const visibleGroups = $derived(deriveVisibleGroups(streams, multiMetricKeys));
 
-	function startRename(key: string, currentLabel: string) {
+	function startRename(key: string, currentLabel: string, channelKey?: string) {
 		renamingDevice = key;
-		renameValue = currentLabel;
+		renamingChannelKey = channelKey ?? null;
+		renameValue = renamedLabels.get(key) ?? currentLabel;
 	}
 
 	function commitRename(cfs: CrossFileStream) {
+		// Guard: if Escape already called cancelRename(), a subsequent blur must not commit
+		if (renamingDevice !== cfs.key) return;
 		const trimmed = renameValue.trim();
-		if (trimmed && cfs.stream.device.antDeviceNumber != null) {
-			setDeviceLabel(cfs.stream.device.antDeviceNumber, trimmed);
+		const key = deviceStorageKey(cfs.stream.device);
+		if (trimmed && key != null) {
+			setDeviceLabel(key, trimmed);
 			cfs.stream.device.label = trimmed;
-		} else if (!trimmed && cfs.stream.device.antDeviceNumber != null) {
-			removeDeviceLabel(cfs.stream.device.antDeviceNumber);
+			// Update reactive map so the pill re-renders immediately
+			renamedLabels = new Map(renamedLabels).set(cfs.key, trimmed);
+		} else if (!trimmed && key != null) {
+			removeDeviceLabel(key);
 			cfs.stream.device.label = undefined;
+			const next = new Map(renamedLabels);
+			next.delete(cfs.key);
+			renamedLabels = next;
 		}
 		renamingDevice = null;
+		renamingChannelKey = null;
 	}
 
 	function cancelRename() {
 		renamingDevice = null;
+		renamingChannelKey = null;
 	}
 
 	// Svelte action: focuses the element when it mounts.
@@ -140,18 +161,35 @@
   Used by both single-file (flat) and multi-file (grouped) layouts.
 -->
 
-{#snippet multiMetricPill(cfs: CrossFileStream)}
-	{@const label = deriveDeviceLabel(cfs.stream.device)}
+{#snippet multiMetricPill(cfs: CrossFileStream, renaming: string | null, renamed: Map<string, string>)}
+	{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device)}
 	{@const isActive = $activeDeviceIndices.has(cfs.key)}
 	{@const isExpanded = expandedDevices.has(cfs.key)}
 	<div class="multi-device">
 		<div class="multi-row">
-			<button
-				class="pill"
-				class:active={isActive}
-				onclick={() => toggleDevice(cfs.key)}
-				aria-pressed={isActive}
-			>{label}</button>
+			{#if renaming === cfs.key}
+				<input
+					class="rename-input"
+					type="text"
+					bind:value={renameValue}
+					use:focusOnMount
+					onblur={() => commitRename(cfs)}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') commitRename(cfs);
+						else if (e.key === 'Escape') cancelRename();
+					}}
+					aria-label="Rename device"
+				/>
+			{:else}
+				<button
+					class="pill"
+					class:active={isActive}
+					onclick={() => toggleDevice(cfs.key)}
+					ondblclick={() => startRename(cfs.key, label)}
+					aria-pressed={isActive}
+					title="Double-click to rename"
+				>{label}</button>
+			{/if}
 			<button
 				class="expand-btn"
 				class:expanded={isExpanded}
@@ -169,7 +207,7 @@
 	</div>
 {/snippet}
 
-{#snippet channelGroup(group: { channelKey: string; streams: CrossFileStream[]; comparable: boolean })}
+{#snippet channelGroup(group: { channelKey: string; streams: CrossFileStream[]; comparable: boolean }, renaming: string | null, renamed: Map<string, string>, renamingCh: string | null)}
 	<div class="channel-group">
 		<span class="group-label">
 			{CHANNEL_META[group.channelKey as keyof typeof CHANNEL_META]?.label ?? group.channelKey}
@@ -177,9 +215,9 @@
 		</span>
 		<div class="group-pills">
 			{#each group.streams as cfs (cfs.key)}
-				{@const label = deriveDeviceLabel(cfs.stream.device)}
+				{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device)}
 				{@const isActive = $activeDeviceIndices.has(cfs.key)}
-				{#if renamingDevice === cfs.key}
+				{#if renaming === cfs.key && renamingCh === group.channelKey}
 					<input
 						class="rename-input"
 						type="text"
@@ -197,7 +235,7 @@
 						class="pill"
 						class:active={isActive}
 						onclick={() => toggleDevice(cfs.key)}
-						ondblclick={() => startRename(cfs.key, label)}
+						ondblclick={() => startRename(cfs.key, label, group.channelKey)}
 						aria-pressed={isActive}
 						title="Double-click to rename"
 					>{label}</button>
@@ -251,12 +289,12 @@
 
 					<!-- Multi-metric devices for this file -->
 					{#each group.streams.filter(cfs => grpMmKeys.has(cfs.key)) as cfs (cfs.key)}
-						{@render multiMetricPill(cfs)}
+						{@render multiMetricPill(cfs, renamingDevice, renamedLabels)}
 					{/each}
 
 					<!-- Per-channel groups for this file -->
 					{#each grpVisibleGroups as grp (grp.channelKey + group.filename)}
-						{@render channelGroup(grp)}
+						{@render channelGroup(grp, renamingDevice, renamedLabels, renamingChannelKey)}
 					{/each}
 
 					<!-- No-data devices for this file -->
@@ -269,12 +307,12 @@
 
 			<!-- Multi-metric devices get a single expandable pill first -->
 			{#each streams.filter(cfs => multiMetricKeys.has(cfs.key)) as cfs (cfs.key)}
-				{@render multiMetricPill(cfs)}
+				{@render multiMetricPill(cfs, renamingDevice, renamedLabels)}
 			{/each}
 
 			<!-- Per-channel groups for regular (non-multi-metric) devices -->
 			{#each visibleGroups as group (group.channelKey)}
-				{@render channelGroup(group)}
+				{@render channelGroup(group, renamingDevice, renamedLabels, renamingChannelKey)}
 			{/each}
 
 			<!-- Connected devices that recorded no data -->
