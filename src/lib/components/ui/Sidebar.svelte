@@ -7,6 +7,7 @@
 	import XAxisToggle from '$lib/components/ui/XAxisToggle.svelte';
 	import SmoothingSlider from '$lib/components/ui/SmoothingSlider.svelte';
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
+	import SyncPanel from '$lib/components/ui/SyncPanel.svelte';
 
 	let {
 		compareDisabled = false,
@@ -77,6 +78,7 @@
 		<XAxisToggle eventMode={isEvent} />
 		<ThemeToggle />
 		<SmoothingSlider />
+		<SyncPanel />
 	</div>
 </nav>
 
