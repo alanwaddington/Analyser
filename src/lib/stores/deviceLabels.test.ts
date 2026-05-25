@@ -74,6 +74,15 @@ describe('deviceStorageKey', () => {
 	it('deviceStorageKey_emptyStringsIgnored_returnsNull', () => {
 		expect(deviceStorageKey(makeDevice({ manufacturer: '', product: '' }))).toBeNull();
 	});
+
+	it('deviceStorageKey_antDeviceTypeOnlyNoOtherIds_returnsTypePrefix', () => {
+		// e.g. a bare ANT+ HRM with no serial, no manufacturer, no device number
+		expect(deviceStorageKey(makeDevice({ antDeviceType: 120 }))).toBe('type:120');
+	});
+
+	it('deviceStorageKey_antDeviceTypeWithSerial_serialTakesPrecedence', () => {
+		expect(deviceStorageKey(makeDevice({ antDeviceType: 120, serialNumber: 999 }))).toBe('serial:999');
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -169,6 +178,14 @@ describe('applyLabels', () => {
 		const devices = [makeDevice({ manufacturer: 'stryd', product: 'duo' })];
 		applyLabels(devices);
 		expect(devices[0].label).toBe('My Stryd');
+	});
+
+	it('applyLabels_antDeviceTypeOnlyDevice_labelsRestored', () => {
+		// A bare ANT+ HRM with no serial/manufacturer/device-number — keyed by type
+		setDeviceLabel('type:120', 'Polar H10');
+		const devices = [makeDevice({ antDeviceType: 120 })];
+		applyLabels(devices);
+		expect(devices[0].label).toBe('Polar H10');
 	});
 
 	it('applyLabels_unkeyableDevice_labelUntouched', () => {

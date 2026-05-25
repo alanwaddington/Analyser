@@ -8,8 +8,13 @@ let _cache: Map<string, string> | null = null;
 
 /**
  * Derive a stable localStorage key for a device.
- * Priority: antDeviceNumber → serialNumber → manufacturer:product → null (unkeyable)
+ * Priority: antDeviceNumber → serialNumber → manufacturer:product → antDeviceType → null
  * Keys are namespaced to prevent collisions between different identifier types.
+ *
+ * The `type:` fallback is intentionally last — it is stable only when a user has
+ * a single device of that ANT+ type. Two devices of the same type with no other
+ * identifiers would share the key, but that situation only arises for extremely
+ * minimal FIT device_info entries (no serial, no manufacturer, no device number).
  */
 export function deviceStorageKey(device: Device): string | null {
 	if (device.antDeviceNumber != null) return `ant:${device.antDeviceNumber}`;
@@ -17,6 +22,7 @@ export function deviceStorageKey(device: Device): string | null {
 	const m = device.manufacturer?.trim();
 	const p = device.product?.trim();
 	if (m || p) return `device:${m ?? ''}:${p ?? ''}`;
+	if (device.antDeviceType != null)   return `type:${device.antDeviceType}`;
 	return null;
 }
 
