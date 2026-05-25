@@ -1,14 +1,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { getRedis } from '$lib/server/redis.ts';
+import { UUID_REGEX, SHORT_CODE_REGEX } from '$lib/validation.ts';
 
 const TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
-
-/** Standard UUID v4 format: 8-4-4-4-12 hex chars. */
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Short sync code: 3 uppercase alphanumeric chars, dash, 5 uppercase alphanumeric chars. */
-const SHORT_CODE_REGEX = /^[A-Z0-9]{3}-[A-Z0-9]{5}$/i;
 
 function isLabelsBody(body: unknown): body is { labels: Record<string, string>; shortCode: string } {
 	if (typeof body !== 'object' || body === null) return false;

@@ -8,16 +8,18 @@
 		adoptSyncIdentity,
 		resetSyncIdentity,
 	} from '$lib/stores/sync.ts';
+	import { SHORT_CODE_REGEX } from '$lib/validation.ts';
 
 	// ---------------------------------------------------------------------------
 	// Local state
 	// ---------------------------------------------------------------------------
 
-	let isOpen     = $state(false);
-	let codeInput  = $state('');
-	let codeError  = $state<string | null>(null);
+	let isOpen      = $state(false);
+	let codeInput   = $state('');
+	let codeError   = $state<string | null>(null);
+	let codeSuccess = $state(false);
 	let isResolving = $state(false);
-	let copied     = $state(false);
+	let copied      = $state(false);
 
 	// ---------------------------------------------------------------------------
 	// Derived values
@@ -56,6 +58,7 @@
 		isOpen = !isOpen;
 		if (!isOpen) {
 			codeError = null;
+			codeSuccess = false;
 			codeInput = '';
 		}
 	}
@@ -74,12 +77,22 @@
 	async function submitCode(): Promise<void> {
 		const trimmed = codeInput.trim().toUpperCase();
 		if (!trimmed) return;
+
+		// Client-side format validation — gives a clear message before hitting the server
+		if (!SHORT_CODE_REGEX.test(trimmed)) {
+			codeError = 'Code must be in XXX-XXXXX format (e.g. E6Y-NXEMF)';
+			return;
+		}
+
 		codeError = null;
+		codeSuccess = false;
 		isResolving = true;
 		try {
 			const uuid = await resolveCode(trimmed);
 			await adoptSyncIdentity(uuid);
 			codeInput = '';
+			codeSuccess = true;
+			setTimeout(() => { codeSuccess = false; }, 2000);
 		} catch (err) {
 			codeError = err instanceof Error ? err.message : 'Failed to resolve code';
 		} finally {
@@ -162,7 +175,9 @@
 				aria-label="Submit code"
 			>→</button>
 		</div>
-		{#if codeError}
+		{#if codeSuccess}
+			<p class="code-success">✓ Linked! Labels synced.</p>
+		{:else if codeError}
 			<p class="code-error">{codeError}</p>
 		{/if}
 
@@ -412,11 +427,21 @@
 		cursor: not-allowed;
 	}
 
-	/* Code error */
+	/* Code feedback */
 	.code-error {
 		margin: 0;
 		font-size: 0.7rem;
 		color: #f59e0b;
+	}
+
+	.code-success {
+		margin: 0;
+		font-size: 0.7rem;
+		color: #4ade80;
+	}
+
+	:global([data-theme="light"]) .code-success {
+		color: #16a34a;
 	}
 
 	/* Reset link */

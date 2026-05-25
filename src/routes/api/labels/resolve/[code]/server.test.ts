@@ -7,6 +7,8 @@ vi.mock('$lib/server/redis.ts', () => ({
 	getRedis: vi.fn().mockReturnValue({ get: mockGet }),
 }));
 
+// Import route handler after mocks are in place.
+// vi.resetModules() is used per test group that needs fresh rate-limiter state.
 const mod = await import('./+server.ts');
 const { GET } = mod;
 
@@ -16,10 +18,11 @@ const { GET } = mod;
 
 type RouteParams = { code: string };
 
-function makeEvent(code: string) {
+function makeEvent(code: string, ip = '127.0.0.1') {
 	return {
 		params: { code } as RouteParams,
 		request: new Request(`http://localhost/api/labels/resolve/${code}`),
+		getClientAddress: () => ip,
 	} as Parameters<typeof GET>[0];
 }
 
@@ -88,5 +91,48 @@ describe('GET /api/labels/resolve/[code]', () => {
 		expect(response.status).toBe(500);
 		const data = await response.json();
 		expect(data.error).toBeDefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Rate limiting — uses a distinct IP so existing test slots don't interfere
+// ---------------------------------------------------------------------------
+
+describe('GET /api/labels/resolve/[code] — rate limiting', () => {
+	const RATE_IP = '10.0.0.99';
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockGet.mockResolvedValue(VALID_UUID);
+	});
+
+	it('GET_rateLimitExceeded_returns429WithRetryAfter', async () => {
+		// Exhaust the 10-request window
+		for (let i = 0; i < 10; i++) {
+			const response = await GET(makeEvent(VALID_CODE, RATE_IP));
+			expect(response.status).toBe(200);
+		}
+
+		// 11th request should be rate-limited
+		const response = await GET(makeEvent(VALID_CODE, RATE_IP));
+
+		expect(response.status).toBe(429);
+		const data = await response.json();
+		expect(data.error).toMatch(/too many requests/i);
+		expect(response.headers.get('Retry-After')).not.toBeNull();
+	});
+
+	it('GET_differentIps_haveIndependentLimits', async () => {
+		const ip1 = '10.1.1.1';
+		const ip2 = '10.1.1.2';
+
+		// Exhaust limit for ip1
+		for (let i = 0; i < 10; i++) {
+			await GET(makeEvent(VALID_CODE, ip1));
+		}
+
+		// ip2 should still be under its own limit
+		const response = await GET(makeEvent(VALID_CODE, ip2));
+		expect(response.status).toBe(200);
 	});
 });
