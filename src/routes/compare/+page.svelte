@@ -19,6 +19,7 @@
 	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
+	import '../map-panel.css';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -208,6 +209,10 @@
 	/** Distance in metres from map hover → drives strip chart crosshair */
 	let mapStripHoveredDistance = $state<number | null>(null);
 
+	// Note: unlike handleChartHoverDistance / handleMapHoverDistance (which are
+	// gated on $xAxisMode === 'distance'), these strip handlers are NOT gated.
+	// The strip chart always uses distance mode via forceDistanceAxis={true}, so
+	// strip↔map hover sync is valid regardless of the global xAxisMode setting.
 	function handleStripHoverDistance(distMetres: number | null) {
 		stripHoveredDistance = distMetres;
 	}
@@ -644,33 +649,7 @@
 		overflow: hidden;
 	}
 
-	/* When a metric is selected, reserve ~70% for the map */
-	.map-wrap--has-strip {
-		flex: 7;
-	}
-
-	/* Strip chart panel — ~30% of available height */
-	.strip-wrap {
-		flex: 3;
-		min-height: 0;
-		overflow: hidden;
-		border-top: 1px solid var(--color-border);
-		background: var(--color-card);
-		display: flex;
-		flex-direction: column;
-	}
-
-	@media (max-width: 480px) { /* --bp-phone */
-		.strip-wrap {
-			max-height: 100px;
-		}
-	}
-
-	@media (max-height: 480px) { /* landscape phone */
-		.strip-wrap {
-			max-height: 90px;
-		}
-	}
+	/* .map-wrap--has-strip and .strip-wrap styles are in src/routes/map-panel.css */
 
 	.cards-scroll {
 		flex: 1;

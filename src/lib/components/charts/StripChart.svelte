@@ -4,7 +4,7 @@
 	import TimeSeriesChart from './TimeSeriesChart.svelte';
 	import StripToggle from './StripToggle.svelte';
 	import type { SeriesInput } from './TimeSeriesChart.utils';
-	import { shouldShowGradient } from './StripChart.utils';
+	import { shouldShowGradient, GRADIENT_COLOUR_TOKEN } from './StripChart.utils';
 
 	let {
 		channel,
@@ -37,7 +37,7 @@
 	 */
 	const effectiveSeriesInputs = $derived(
 		showGradient
-			? seriesInputs.map(s => ({ ...s, colour: '__gradient__' }))
+			? seriesInputs.map(s => ({ ...s, colour: GRADIENT_COLOUR_TOKEN }))
 			: seriesInputs,
 	);
 
