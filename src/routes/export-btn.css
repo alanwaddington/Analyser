@@ -1,0 +1,53 @@
+/**
+ * Shared styles for the Export Data button and its loading spinner.
+ * Used by both /compare and /event pages.
+ *
+ * Import in any route that renders an Export Data button:
+ *   import './export-btn.css';
+ */
+
+.export-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	margin-left: auto;
+	align-self: center;
+	padding: 4px 10px;
+	font-size: 0.75rem;
+	font-weight: 500;
+	border: 1px solid var(--color-border);
+	border-radius: 4px;
+	background: none;
+	color: var(--color-muted);
+	cursor: pointer;
+	white-space: nowrap;
+	flex-shrink: 0;
+	transition: background 0.15s, color 0.15s, border-color 0.15s;
+	line-height: 1;
+}
+
+.export-btn:hover:not(:disabled) {
+	background: var(--color-hover);
+	color: var(--color-text);
+	border-color: var(--color-text);
+}
+
+.export-btn:focus-visible {
+	outline: 2px solid #3b82f6;
+	outline-offset: 2px;
+}
+
+.export-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	pointer-events: none; /* M1: prevents double-click firing before reactive :disabled flush */
+}
+
+.export-spinner {
+	animation: spin 0.8s linear infinite;
+	flex-shrink: 0;
+}
+
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}

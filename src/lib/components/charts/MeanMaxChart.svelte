@@ -7,6 +7,7 @@
 	import { isDark } from '$lib/stores/theme';
 	import type { MeanMaxSeriesInput } from './MeanMaxChart.utils.ts';
 	import { downloadPng } from '$lib/export/download';
+	import './png-btn.css';
 
 	let {
 		seriesInputs,
@@ -193,45 +194,6 @@
 		font-size: 0.875rem;
 		font-weight: 600;
 		color: var(--color-text);
-	}
-
-	.png-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 3px 8px;
-		font-size: 0.7rem;
-		font-weight: 500;
-		letter-spacing: 0.02em;
-		border: 1px solid var(--color-border);
-		border-radius: 4px;
-		background: none;
-		color: var(--color-muted);
-		cursor: pointer;
-		flex-shrink: 0;
-		transition: background 0.15s, color 0.15s, border-color 0.15s;
-		line-height: 1;
-	}
-
-	.png-btn:hover {
-		background: var(--color-hover);
-		color: var(--color-text);
-		border-color: var(--color-text);
-	}
-
-	.png-btn:focus-visible {
-		outline: 2px solid #3b82f6;
-		outline-offset: 2px;
-	}
-
-	.png-btn:active {
-		opacity: 0.7;
-	}
-
-	@media (max-width: 320px) {
-		.png-btn-label {
-			display: none;
-		}
 	}
 
 	.chart-canvas {

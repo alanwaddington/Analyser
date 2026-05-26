@@ -19,8 +19,9 @@
 	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
-	import { triggerDownload } from '$lib/export/download';
+	import { exportActivities } from '$lib/export/exportActivities';
 	import '../map-panel.css';
+	import '../export-btn.css';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -217,14 +218,7 @@
 		if ($activities.length === 0 || exporting) return;
 		exporting = true;
 		try {
-			const { buildWorkbook } = await import('$lib/export/excel');
-			const buf = buildWorkbook($activities);
-			const date = new Date().toISOString().slice(0, 10);
-			triggerDownload(
-				buf,
-				`analyser-export-${date}.xlsx`,
-				'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-			);
+			await exportActivities($activities);
 		} catch (err) {
 			console.error('[Export] Failed to generate workbook:', err);
 			alert('Export failed. Please try again.');
@@ -514,51 +508,6 @@
 		outline: 2px solid #3b82f6;
 		outline-offset: -2px;
 		border-radius: 2px;
-	}
-
-	.export-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		margin-left: auto;
-		align-self: center;
-		padding: 4px 10px;
-		font-size: 0.75rem;
-		font-weight: 500;
-		border: 1px solid var(--color-border);
-		border-radius: 4px;
-		background: none;
-		color: var(--color-muted);
-		cursor: pointer;
-		white-space: nowrap;
-		flex-shrink: 0;
-		transition: background 0.15s, color 0.15s, border-color 0.15s;
-		line-height: 1;
-	}
-
-	.export-btn:hover:not(:disabled) {
-		background: var(--color-hover);
-		color: var(--color-text);
-		border-color: var(--color-text);
-	}
-
-	.export-btn:focus-visible {
-		outline: 2px solid #3b82f6;
-		outline-offset: 2px;
-	}
-
-	.export-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.export-spinner {
-		animation: spin 0.8s linear infinite;
-		flex-shrink: 0;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
 	}
 
 	/* breakpoints: --bp-tablet (768px) / --bp-phone (480px) in layout.css */
