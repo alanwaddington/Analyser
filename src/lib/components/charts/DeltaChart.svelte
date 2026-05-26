@@ -7,6 +7,7 @@
 	import { isDark } from '$lib/stores/theme';
 	import { getClipDistance, buildZeroLine, buildDeltaData } from './DeltaChart.utils.ts';
 	import type { DeltaSeriesInput } from './DeltaChart.utils.ts';
+	import { downloadPng } from '$lib/export/download';
 
 	let {
 		seriesInputs,
@@ -138,6 +139,22 @@
 		chart?.dispose();
 	});
 
+	/** Exposed for parent access via bind:this; also used by the inline PNG button. */
+	export function getChartDataURL(): string | null {
+		return chart?.getDataURL({
+			type: 'png',
+			pixelRatio: 2,
+			backgroundColor: $isDark ? '#0f172a' : '#ffffff',
+		}) ?? null;
+	}
+
+	function handlePngDownload() {
+		const url = getChartDataURL();
+		if (!url) return;
+		const date = new Date().toISOString().slice(0, 10);
+		downloadPng(url, `time-delta-${date}.png`);
+	}
+
 	$effect(() => {
 		void $isDark;
 		void $xAxisMode;
@@ -149,10 +166,27 @@
 
 <div class="chart-card">
 	<div class="chart-header">
-		<span class="chart-title">Time Delta vs Reference</span>
-		{#if seriesInputs[referenceIndex]}
-			<span class="chart-subtitle">{seriesInputs[referenceIndex].activity.filename}</span>
-		{/if}
+		<span class="chart-header-left">
+			<span class="chart-title">Time Delta vs Reference</span>
+			{#if seriesInputs[referenceIndex]}
+				<span class="chart-subtitle">{seriesInputs[referenceIndex].activity.filename}</span>
+			{/if}
+		</span>
+		<button
+			class="png-btn"
+			onclick={handlePngDownload}
+			aria-label="Download time delta chart as PNG"
+			title="Download as PNG"
+			type="button"
+		>
+			<svg width="11" height="11" viewBox="0 0 11 11" fill="none"
+				aria-hidden="true" focusable="false">
+				<path d="M5.5 1v6M2.5 4.5l3 3 3-3M1 9.5h9"
+					stroke="currentColor" stroke-width="1.4"
+					stroke-linecap="round" stroke-linejoin="round"/>
+			</svg>
+			<span class="png-btn-label">PNG</span>
+		</button>
 	</div>
 
 	<div bind:this={container} class="chart-canvas"></div>
@@ -189,8 +223,16 @@
 	.chart-header {
 		padding: 10px 16px 0;
 		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+
+	.chart-header-left {
+		display: flex;
 		align-items: baseline;
 		gap: 8px;
+		min-width: 0;
 	}
 
 	.chart-title {
@@ -202,6 +244,48 @@
 	.chart-subtitle {
 		font-size: 0.75rem;
 		color: var(--color-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.png-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 8px;
+		font-size: 0.7rem;
+		font-weight: 500;
+		letter-spacing: 0.02em;
+		border: 1px solid var(--color-border);
+		border-radius: 4px;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: background 0.15s, color 0.15s, border-color 0.15s;
+		line-height: 1;
+	}
+
+	.png-btn:hover {
+		background: var(--color-hover);
+		color: var(--color-text);
+		border-color: var(--color-text);
+	}
+
+	.png-btn:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 2px;
+	}
+
+	.png-btn:active {
+		opacity: 0.7;
+	}
+
+	@media (max-width: 320px) {
+		.png-btn-label {
+			display: none;
+		}
 	}
 
 	.chart-canvas {

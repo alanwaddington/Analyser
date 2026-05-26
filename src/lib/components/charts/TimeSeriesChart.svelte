@@ -10,6 +10,7 @@
 	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis } from '$lib/align/distance';
+	import { downloadPng } from '$lib/export/download';
 
 	let {
 		channel,
@@ -241,6 +242,23 @@
 		chart?.dispose();
 	});
 
+	/** Exposed for parent access via bind:this; also used by the inline PNG button. */
+	export function getChartDataURL(): string | null {
+		return chart?.getDataURL({
+			type: 'png',
+			pixelRatio: 2,
+			backgroundColor: $isDark ? '#0f172a' : '#ffffff',
+		}) ?? null;
+	}
+
+	function handlePngDownload() {
+		const url = getChartDataURL();
+		if (!url) return;
+		const slug = channel.replace(/([A-Z])/g, '-$1').toLowerCase();
+		const date = new Date().toISOString().slice(0, 10);
+		downloadPng(url, `${slug}-${date}.png`);
+	}
+
 	$effect(() => {
 		void $isDark;
 		void $smoothing;
@@ -280,6 +298,21 @@
 			{CHANNEL_META[channel].label}
 			<span class="chart-unit">({CHANNEL_META[channel].unit})</span>
 		</span>
+		<button
+			class="png-btn"
+			onclick={handlePngDownload}
+			aria-label="Download {CHANNEL_META[channel].label} chart as PNG"
+			title="Download as PNG"
+			type="button"
+		>
+			<svg width="11" height="11" viewBox="0 0 11 11" fill="none"
+				aria-hidden="true" focusable="false">
+				<path d="M5.5 1v6M2.5 4.5l3 3 3-3M1 9.5h9"
+					stroke="currentColor" stroke-width="1.4"
+					stroke-linecap="round" stroke-linejoin="round"/>
+			</svg>
+			<span class="png-btn-label">PNG</span>
+		</button>
 	</div>
 
 	<div bind:this={container} class="chart-canvas"></div>
@@ -320,6 +353,10 @@
 
 	.chart-header {
 		padding: 10px 16px 0;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
 	}
 
 	.chart-title {
@@ -332,6 +369,45 @@
 		font-weight: 400;
 		font-size: 0.875rem;
 		color: var(--color-muted);
+	}
+
+	.png-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 8px;
+		font-size: 0.7rem;
+		font-weight: 500;
+		letter-spacing: 0.02em;
+		border: 1px solid var(--color-border);
+		border-radius: 4px;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: background 0.15s, color 0.15s, border-color 0.15s;
+		line-height: 1;
+	}
+
+	.png-btn:hover {
+		background: var(--color-hover);
+		color: var(--color-text);
+		border-color: var(--color-text);
+	}
+
+	.png-btn:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 2px;
+	}
+
+	.png-btn:active {
+		opacity: 0.7;
+	}
+
+	@media (max-width: 320px) {
+		.png-btn-label {
+			display: none;
+		}
 	}
 
 	.chart-canvas {
