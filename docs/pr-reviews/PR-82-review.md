@@ -11,10 +11,10 @@
 
 | Item | Result |
 |------|--------|
-| Overall Assessment | Pass with comments ⚠️ |
+| Overall Assessment | Pass ✅ |
 | Risk Level | Low |
-| Test Coverage | Adequate — pure utility functions tested; Svelte component integration tested via Playwright |
-| Acceptance Criteria | 17/18 Met |
+| Test Coverage | Adequate — pure utility functions + ActivityMap component (jsdom) tested; runtime verified via Playwright |
+| Acceptance Criteria | 18/18 Met |
 
 ---
 
@@ -229,10 +229,13 @@ _None._
 
 ## Action Items
 
-### Post-merge improvements
-- [ ] m1: Extract shared strip-wrap CSS if the pattern appears in a third location
-- [ ] m2: Extract `'__gradient__'` to a named constant in StripChart.utils.ts
-- [ ] M1: Add unit test for `onMetricChannelChange` callback in ActivityMap.test.ts (if vitest Leaflet mounting is feasible)
+All findings resolved. No post-merge improvements required.
+
+> **Findings resolved** (commit `1f152c1` on `feature/81-map-metric-strip-chart`):
+> - **M1** — `ActivityMap.component.test.ts` added with 4 tests covering `onMetricChannelChange` callback (jsdom + `@testing-library/svelte`). `vite.config.ts` updated with mode-conditional `resolve.conditions` to support jsdom component tests without breaking the Leaflet production build.
+> - **m1** — `src/routes/map-panel.css` extracted; `.map-wrap--has-strip` and `.strip-wrap` styles removed from both page files and imported from the shared file.
+> - **m2** — `GRADIENT_COLOUR_TOKEN` constant exported from `StripChart.utils.ts`; magic string replaced in `StripChart.svelte`.
+> - **S1** — Inline comment added before strip hover handlers in both `compare/+page.svelte` and `event/+page.svelte` explaining the intentional absence of `xAxisMode` gate.
 
 ---
 
