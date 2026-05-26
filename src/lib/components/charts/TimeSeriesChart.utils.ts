@@ -22,6 +22,18 @@ export function isDashed(seriesIndex: number, referenceIndex: number | undefined
 	return seriesIndex === referenceIndex;
 }
 
+/**
+ * Returns the effective x-axis mode for a chart.
+ * When forceDistanceAxis is true, always returns 'distance' regardless of the
+ * global xAxisMode store value (used by strip charts that always use distance).
+ */
+export function effectiveAxisMode(
+	storeMode: 'time' | 'distance',
+	forceDistanceAxis?: boolean,
+): 'time' | 'distance' {
+	return forceDistanceAxis ? 'distance' : storeMode;
+}
+
 export function paceFormat(decimalMinutes: number): string {
 	const totalSeconds = Math.round(decimalMinutes * 60);
 	const m = Math.floor(totalSeconds / 60);

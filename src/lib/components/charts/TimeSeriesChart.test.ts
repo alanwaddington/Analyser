@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractChannel, buildXValues, isDashed } from './TimeSeriesChart.utils.ts';
+import { extractChannel, buildXValues, isDashed, effectiveAxisMode } from './TimeSeriesChart.utils.ts';
 import type { ActivityRecord } from '$lib/types';
 
 function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
@@ -113,5 +113,34 @@ describe('isDashed', () => {
 
 	it('isDashed_eventMode_firstSeriesSolidWhenRefIsSecond', () => {
 		expect(isDashed(0, 1)).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// effectiveAxisMode
+// ---------------------------------------------------------------------------
+describe('effectiveAxisMode', () => {
+	it('effectiveAxisMode_forceTrue_alwaysReturnsDistance', () => {
+		expect(effectiveAxisMode('time', true)).toBe('distance');
+	});
+
+	it('effectiveAxisMode_forceTrue_distanceModeStillReturnsDistance', () => {
+		expect(effectiveAxisMode('distance', true)).toBe('distance');
+	});
+
+	it('effectiveAxisMode_forceFalse_returnsStoreModeTime', () => {
+		expect(effectiveAxisMode('time', false)).toBe('time');
+	});
+
+	it('effectiveAxisMode_forceFalse_returnsStoreModeDistance', () => {
+		expect(effectiveAxisMode('distance', false)).toBe('distance');
+	});
+
+	it('effectiveAxisMode_forceUndefined_returnsStoreModeTime', () => {
+		expect(effectiveAxisMode('time', undefined)).toBe('time');
+	});
+
+	it('effectiveAxisMode_forceUndefined_returnsStoreModeDistance', () => {
+		expect(effectiveAxisMode('distance', undefined)).toBe('distance');
 	});
 });
