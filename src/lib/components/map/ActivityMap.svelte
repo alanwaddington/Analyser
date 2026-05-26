@@ -22,6 +22,7 @@
 		hoveredDistance,
 		onHoverDistance = undefined,
 		availableChannels = [],
+		onMetricChannelChange = undefined,
 	}: {
 		activities: Activity[];
 		referenceIndex?: number;
@@ -30,6 +31,8 @@
 		onHoverDistance?: (distanceMetres: number | null) => void;
 		/** Channels with data in at least one loaded activity, for the metric selector */
 		availableChannels?: ChannelKey[];
+		/** Emits the selected metric channel whenever it changes (or null when deselected) */
+		onMetricChannelChange?: (channel: ChannelKey | null) => void;
 	} = $props();
 
 	const gpsCache = $derived(activities.map(a => extractGpsPoints(a)));
@@ -174,6 +177,11 @@
 		if (metricChannel && !availableChannels.includes(metricChannel)) {
 			metricChannel = null;
 		}
+	});
+
+	// ── Emit metricChannel to parent whenever it changes ────────────────────
+	$effect(() => {
+		onMetricChannelChange?.(metricChannel);
 	});
 
 	// ── Close picker on pointerdown outside it (only wired while open) ───────
