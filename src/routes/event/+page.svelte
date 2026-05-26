@@ -470,7 +470,17 @@
 		overflow: hidden;
 	}
 
-	/* .map-wrap--has-strip and .strip-wrap styles are in src/routes/map-panel.css */
+	/* 70/30 flex split: map gets ~70%, strip gets ~30%.
+	 * Defined here (scoped) so these rules beat the .map-wrap { flex: 1 }
+	 * rule above — scoped selectors have higher specificity than the
+	 * global map-panel.css rules that share the same class names. */
+	.map-wrap--has-strip {
+		flex: 7;
+	}
+
+	.strip-wrap {
+		flex: 3;
+	}
 
 	.cards-scroll {
 		flex: 1;

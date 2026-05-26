@@ -9,17 +9,12 @@
  *   import './map-panel.css';
  */
 
-/* When a metric is selected, shrink the map to ~30% of available height.
- * Uses the combined selector (.map-wrap.map-wrap--has-strip) for higher
- * specificity than the page-level .map-wrap { flex: 1 } rule, ensuring this
- * override wins regardless of import order. */
-.map-wrap.map-wrap--has-strip {
-	flex: 3;
-}
-
-/* Strip chart panel — ~70% of available height */
+/* Strip chart panel non-flex styles.
+ * The flex split (map 70% / strip 30%) is defined in each page's scoped
+ * <style> block so the scoped selector wins over the page's own .map-wrap rule.
+ * See compare/+page.svelte and event/+page.svelte for .map-wrap--has-strip
+ * and .strip-wrap flex values. */
 .strip-wrap {
-	flex: 7;
 	min-height: 0;
 	overflow: hidden;
 	border-top: 1px solid var(--color-border);
