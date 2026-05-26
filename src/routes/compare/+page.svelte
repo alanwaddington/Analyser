@@ -12,6 +12,7 @@
 	import TimeSeriesChart from '$lib/components/charts/TimeSeriesChart.svelte';
 	import MeanMaxChart from '$lib/components/charts/MeanMaxChart.svelte';
 	import ActivityMap from '$lib/components/map/ActivityMap.svelte';
+	import StripChart from '$lib/components/charts/StripChart.svelte';
 	import DeviceToggleBar from '$lib/components/ui/DeviceToggleBar.svelte';
 	import TimeOffsetControl from '$lib/components/ui/TimeOffsetControl.svelte';
 	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
@@ -195,6 +196,31 @@
 			mapHoveredDistance = null;
 		}
 	});
+
+	// ── Map tab strip chart ───────────────────────────────────────────────────
+
+	/** The metric channel currently selected in the Colour by picker (null = None) */
+	let mapMetricChannel = $state<ChannelKey | null>(null);
+
+	/** Distance in metres from strip chart hover → shown as position marker on map */
+	let stripHoveredDistance = $state<number | null>(null);
+
+	/** Distance in metres from map hover → drives strip chart crosshair */
+	let mapStripHoveredDistance = $state<number | null>(null);
+
+	function handleStripHoverDistance(distMetres: number | null) {
+		stripHoveredDistance = distMetres;
+	}
+
+	function handleMapStripHoverDistance(distMetres: number | null) {
+		mapStripHoveredDistance = distMetres;
+	}
+
+	/** Series inputs for the strip chart — one per file, using the same buildSeriesForChannel logic */
+	const stripSeriesInputs = $derived.by(() => {
+		if (!mapMetricChannel) return [];
+		return buildSeriesForChannel(mapMetricChannel);
+	});
 </script>
 
 <div class="page">
@@ -293,14 +319,28 @@
 
 		<!-- Map panel — always in DOM so Leaflet map survives tab switches -->
 		<div class="map-panel" class:tab-hidden={activeTab !== 'map'}>
-			<div class="map-wrap">
+			<div class="map-wrap" class:map-wrap--has-strip={mapMetricChannel !== null}>
 				<ActivityMap
 					activities={$activities}
 					availableChannels={mapAvailableChannels}
-					hoveredDistance={chartHoveredDistance}
-					onHoverDistance={handleMapHoverDistance}
+					hoveredDistance={stripHoveredDistance ?? chartHoveredDistance}
+					onHoverDistance={(d) => { handleMapStripHoverDistance(d); handleMapHoverDistance(d); }}
+					onMetricChannelChange={(ch) => { mapMetricChannel = ch; }}
 				/>
 			</div>
+			{#if mapMetricChannel !== null && stripSeriesInputs.length > 0}
+				<div class="strip-wrap">
+					<CollapsiblePanel title="Metric Chart">
+						<StripChart
+							channel={mapMetricChannel}
+							seriesInputs={stripSeriesInputs}
+							{lapMarkers}
+							onHoverDistance={handleStripHoverDistance}
+							externalHoverDistance={mapStripHoveredDistance}
+						/>
+					</CollapsiblePanel>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Other tabs — conditional rendering (no hover sync required) -->
@@ -600,7 +640,36 @@
 
 	.map-wrap {
 		flex: 1;
+		min-height: 0;
 		overflow: hidden;
+	}
+
+	/* When a metric is selected, reserve ~70% for the map */
+	.map-wrap--has-strip {
+		flex: 7;
+	}
+
+	/* Strip chart panel — ~30% of available height */
+	.strip-wrap {
+		flex: 3;
+		min-height: 0;
+		overflow: hidden;
+		border-top: 1px solid var(--color-border);
+		background: var(--color-card);
+		display: flex;
+		flex-direction: column;
+	}
+
+	@media (max-width: 480px) { /* --bp-phone */
+		.strip-wrap {
+			max-height: 100px;
+		}
+	}
+
+	@media (max-height: 480px) { /* landscape phone */
+		.strip-wrap {
+			max-height: 90px;
+		}
 	}
 
 	.cards-scroll {
