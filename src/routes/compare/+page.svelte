@@ -19,6 +19,7 @@
 	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
+	import { triggerDownload } from '$lib/export/download';
 	import '../map-panel.css';
 
 	const TABS = [
@@ -209,6 +210,29 @@
 	/** Distance in metres from map hover → drives strip chart crosshair */
 	let mapStripHoveredDistance = $state<number | null>(null);
 
+	/** True while the Excel workbook is being generated/downloaded */
+	let exporting = $state(false);
+
+	async function handleExport() {
+		if ($activities.length === 0 || exporting) return;
+		exporting = true;
+		try {
+			const { buildWorkbook } = await import('$lib/export/excel');
+			const buf = buildWorkbook($activities);
+			const date = new Date().toISOString().slice(0, 10);
+			triggerDownload(
+				buf,
+				`analyser-export-${date}.xlsx`,
+				'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			);
+		} catch (err) {
+			console.error('[Export] Failed to generate workbook:', err);
+			alert('Export failed. Please try again.');
+		} finally {
+			exporting = false;
+		}
+	}
+
 	// Note: unlike handleChartHoverDistance / handleMapHoverDistance (which are
 	// gated on $xAxisMode === 'distance'), these strip handlers are NOT gated.
 	// The strip chart always uses distance mode via forceDistanceAxis={true}, so
@@ -262,6 +286,32 @@
 				onkeydown={(e) => handleTabKey(e, tab.id)}
 			>{tab.label}</button>
 		{/each}
+		<button
+			class="export-btn"
+			onclick={handleExport}
+			disabled={$activities.length === 0 || exporting}
+			aria-label={exporting ? 'Exporting data, please wait' : 'Export activity data as Excel'}
+			aria-busy={exporting}
+			type="button"
+		>
+			{#if exporting}
+				<svg class="export-spinner" width="11" height="11" viewBox="0 0 11 11"
+					aria-hidden="true" focusable="false">
+					<circle cx="5.5" cy="5.5" r="4" fill="none"
+						stroke="currentColor" stroke-width="1.4"
+						stroke-dasharray="16 8" stroke-linecap="round"/>
+				</svg>
+				<span>Exporting…</span>
+			{:else}
+				<svg width="11" height="11" viewBox="0 0 11 11" fill="none"
+					aria-hidden="true" focusable="false">
+					<path d="M5.5 1v6M2.5 4.5l3 3 3-3M1 9.5h9"
+						stroke="currentColor" stroke-width="1.4"
+						stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+				<span>Export Data</span>
+			{/if}
+		</button>
 	</div>
 
 	<div
@@ -464,6 +514,51 @@
 		outline: 2px solid #3b82f6;
 		outline-offset: -2px;
 		border-radius: 2px;
+	}
+
+	.export-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		margin-left: auto;
+		align-self: center;
+		padding: 4px 10px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		border: 1px solid var(--color-border);
+		border-radius: 4px;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+		white-space: nowrap;
+		flex-shrink: 0;
+		transition: background 0.15s, color 0.15s, border-color 0.15s;
+		line-height: 1;
+	}
+
+	.export-btn:hover:not(:disabled) {
+		background: var(--color-hover);
+		color: var(--color-text);
+		border-color: var(--color-text);
+	}
+
+	.export-btn:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 2px;
+	}
+
+	.export-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.export-spinner {
+		animation: spin 0.8s linear infinite;
+		flex-shrink: 0;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 
 	/* breakpoints: --bp-tablet (768px) / --bp-phone (480px) in layout.css */
