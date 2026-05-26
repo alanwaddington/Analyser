@@ -45,11 +45,24 @@
 	// Metric colouring state
 	let metricChannel = $state<ChannelKey | null>(null);
 
-	// DOM refs held to update Leaflet control content without recreating controls
-	// Custom dropdown refs (replace native <select> to escape Leaflet's overflow:hidden)
-	let selectorValueEl: HTMLSpanElement | undefined;       // trigger label span
-	let selectorListEl: HTMLUListElement | undefined;       // <ul> appended to body
-	let selectorCleanup: (() => void) | undefined;          // removes body list + doc listener
+	// Colour-by picker — rendered as a position:fixed Svelte overlay so it is
+	// never clipped by any overflow:hidden ancestor in the page layout.
+	let pickerOpen    = $state(false);
+	let pickerVisible = $state(false);   // false when map tab is hidden (display:none)
+	let pickerTop     = $state(10);      // viewport px, updated by updatePickerPosition()
+	let pickerRight   = $state(10);      // viewport px (distance from right edge)
+	let pickerEl = $state<HTMLDivElement | undefined>(undefined);
+
+	function updatePickerPosition() {
+		if (!container) return;
+		const rect = container.getBoundingClientRect();
+		if (rect.width === 0 || rect.height === 0) { pickerVisible = false; return; }
+		pickerTop   = rect.top + 10;
+		pickerRight = window.innerWidth - rect.right + 10;
+		pickerVisible = true;
+	}
+
+	// DOM refs for the Leaflet legend control (still Leaflet-managed)
 	let legendControlEl: HTMLDivElement | undefined;
 	let legendLabelEl: HTMLDivElement | undefined;
 	let legendMinEl: HTMLSpanElement | undefined;
@@ -115,108 +128,6 @@
 		// always visible — no hover required for discoverability.
 		L.control.layers(baseLayers, {}, { position: 'topleft', collapsed: false }).addTo(map);
 
-		// ── Metric selector control (top-right) ─────────────────────────────
-		// Uses a custom div-based dropdown whose list is appended to document.body
-		// with position:fixed — this escapes Leaflet's overflow:hidden on the map
-		// container, which would otherwise clip a native <select> popup.
-		const SelectorControl = L.Control.extend({
-			onAdd() {
-				const div = L!.DomUtil.create('div', 'metric-selector-control');
-				L!.DomEvent.disableClickPropagation(div);
-				L!.DomEvent.disableScrollPropagation(div);
-
-				const label = L!.DomUtil.create('label', 'metric-selector-label', div);
-				label.textContent = 'Colour by';
-
-				// Trigger button — lives inside the Leaflet control
-				const wrapper = L!.DomUtil.create('div', 'metric-dropdown-wrapper', div) as HTMLDivElement;
-				const trigger = document.createElement('button');
-				trigger.type = 'button';
-				trigger.className = 'metric-dropdown-trigger';
-				const valueSpan = document.createElement('span');
-				valueSpan.className = 'metric-dropdown-value-text';
-				valueSpan.textContent = 'None';
-				const arrowSpan = document.createElement('span');
-				arrowSpan.className = 'metric-dropdown-arrow';
-				arrowSpan.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="#9ca3af" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-				trigger.appendChild(valueSpan);
-				trigger.appendChild(arrowSpan);
-				wrapper.appendChild(trigger);
-				selectorValueEl = valueSpan;
-
-				// Dropdown list — appended to body so it is never clipped by Leaflet.
-				// All critical styles applied directly via .style so this works regardless
-				// of when/whether Svelte injects the component stylesheet.
-				const listEl = document.createElement('ul');
-				listEl.className = 'metric-dropdown-list';
-				listEl.setAttribute('role', 'listbox');
-				// Apply styles directly — don't rely on CSS class injection timing
-				Object.assign(listEl.style, {
-					display:         'none',
-					position:        'fixed',
-					zIndex:          '99999',
-					listStyle:       'none',
-					margin:          '0',
-					padding:         '3px 0',
-					maxHeight:       '260px',
-					overflowY:       'auto',
-					borderRadius:    '5px',
-					boxShadow:       '0 4px 16px rgba(0,0,0,0.45)',
-					border:          '1px solid rgba(255,255,255,0.18)',
-					background:      'color-mix(in srgb, var(--color-card, #1e1e2e) 97%, transparent)',
-					backdropFilter:  'blur(6px)',
-					fontFamily:      'inherit',
-				});
-				document.body.appendChild(listEl);
-				selectorListEl = listEl;
-
-				let dropdownOpen = false;
-
-				function positionList() {
-					const rect = trigger.getBoundingClientRect();
-					listEl.style.left     = `${rect.left}px`;
-					listEl.style.top      = `${rect.bottom + 4}px`;
-					listEl.style.minWidth = `${Math.max(rect.width, 140)}px`;
-				}
-
-				function openList() {
-					positionList();
-					listEl.style.display = 'block';
-					dropdownOpen = true;
-				}
-
-				function closeList() {
-					listEl.style.display = 'none';
-					dropdownOpen = false;
-				}
-
-				// Toggle on trigger click
-				trigger.addEventListener('click', () => {
-					dropdownOpen ? closeList() : openList();
-				});
-
-				// Close on any pointerdown outside the trigger or list.
-				// capture:true fires before any element handler and cannot be
-				// blocked by stopPropagation further down the tree.
-				const docPointerDown = (e: PointerEvent) => {
-					if (!wrapper.contains(e.target as Node) && !listEl.contains(e.target as Node)) {
-						closeList();
-					}
-				};
-				document.addEventListener('pointerdown', docPointerDown, { capture: true });
-
-				// Store cleanup so onDestroy can tidy up
-				selectorCleanup = () => {
-					document.removeEventListener('pointerdown', docPointerDown, { capture: true });
-					listEl.remove();
-				};
-
-				return div;
-			},
-		});
-
-		new SelectorControl({ position: 'topright' }).addTo(map);
-
 		// ── Colour scale legend control (bottom-right) ───────────────────────
 		const LegendControl = L.Control.extend({
 			onAdd() {
@@ -244,82 +155,37 @@
 		// Invalidate Leaflet's size whenever the container changes dimensions.
 		// This handles tab switches where the container goes from display:none
 		// to display:flex — without this, the map renders grey tiles.
+		// Also reposition the colour-by picker overlay on every resize / tab reveal.
 		resizeObserver = new ResizeObserver(() => {
 			map?.invalidateSize();
+			updatePickerPosition();
 		});
 		resizeObserver.observe(container);
+		updatePickerPosition(); // set initial position after Leaflet init
 	});
 
 	onDestroy(() => {
 		resizeObserver?.disconnect();
 		map?.remove();
-		selectorCleanup?.();  // remove body-appended dropdown list and doc click listener
 	});
 
-	// ── Rebuild dropdown <li> list when availableChannels changes ────────────
+	// ── Reset metricChannel if the chosen channel disappears (e.g. different file loaded)
 	$effect(() => {
-		if (!selectorListEl || !selectorValueEl) return;
-
-		const currentValue = metricChannel ?? '';
-
-		// Helper: create one list item and wire up selection
-		function addItem(value: string, itemLabel: string) {
-			const li = document.createElement('li');
-			li.setAttribute('role', 'option');
-			li.dataset.value = value;
-			li.textContent = itemLabel;
-			// Inline base styles — independent of Svelte CSS injection
-			const isSelected = value === currentValue;
-			Object.assign(li.style, {
-				padding:         '5px 12px',
-				fontSize:        '0.775rem',
-				fontWeight:      '500',
-				color:           isSelected ? '#3b82f6' : 'var(--color-text, #f1f5f9)',
-				background:      isSelected ? 'rgba(59,130,246,0.1)' : 'transparent',
-				cursor:          'pointer',
-				whiteSpace:      'nowrap',
-			});
-			li.addEventListener('pointerenter', () => {
-				if (li.dataset.value !== (metricChannel ?? '')) {
-					li.style.background = 'rgba(255,255,255,0.08)';
-				}
-			});
-			li.addEventListener('pointerleave', () => {
-				li.style.background = li.dataset.value === (metricChannel ?? '')
-					? 'rgba(59,130,246,0.1)'
-					: 'transparent';
-			});
-			li.addEventListener('click', () => {
-				metricChannel = (value as ChannelKey) || null;
-				selectorValueEl!.textContent = itemLabel;
-				// Update highlight on all sibling items
-				selectorListEl!.querySelectorAll('li').forEach((el) => {
-					const liEl = el as HTMLLIElement;
-					const active = liEl.dataset.value === (value || '');
-					liEl.style.color      = active ? '#3b82f6' : 'var(--color-text, #f1f5f9)';
-					liEl.style.background = active ? 'rgba(59,130,246,0.1)' : 'transparent';
-				});
-				selectorListEl!.style.display = 'none'; // close via style, not class
-			});
-			selectorListEl!.appendChild(li);
+		if (metricChannel && !availableChannels.includes(metricChannel)) {
+			metricChannel = null;
 		}
+	});
 
-		selectorListEl.innerHTML = '';
-		addItem('', 'None');
-		for (const ch of availableChannels) {
-			addItem(ch, CHANNEL_META[ch].label);
-		}
-
-		// Sync trigger label with current selection
-		if (currentValue && availableChannels.includes(currentValue as ChannelKey)) {
-			selectorValueEl.textContent = CHANNEL_META[currentValue as ChannelKey].label;
-		} else {
-			selectorValueEl.textContent = 'None';
-			// Reset metricChannel if the previously-selected channel is no longer available
-			if (metricChannel && !availableChannels.includes(metricChannel)) {
-				metricChannel = null;
+	// ── Close picker on pointerdown outside it (only wired while open) ───────
+	$effect(() => {
+		if (!pickerOpen) return;
+		const handleOutside = (e: PointerEvent) => {
+			if (pickerEl && !pickerEl.contains(e.target as Node)) {
+				pickerOpen = false;
 			}
-		}
+		};
+		document.addEventListener('pointerdown', handleOutside, { capture: true });
+		return () => document.removeEventListener('pointerdown', handleOutside, { capture: true });
 	});
 
 	// ── Update legend content from shared metricComputation ─────────────────
@@ -567,6 +433,57 @@
 	aria-label="GPS route map"
 ></div>
 
+<!-- Colour-by picker — position:fixed overlay so it is never clipped by
+     any overflow:hidden ancestor (map-wrap, map-panel, tab-content, etc.).
+     Coordinates are kept in sync with the map container via ResizeObserver. -->
+{#if availableChannels.length > 0 && pickerVisible}
+<div
+	class="colour-picker"
+	bind:this={pickerEl}
+	style:top="{pickerTop}px"
+	style:right="{pickerRight}px"
+>
+	<span class="picker-label">Colour by</span>
+	<div class="picker-wrapper">
+		<button
+			class="picker-trigger"
+			type="button"
+			onclick={() => pickerOpen = !pickerOpen}
+		>
+			<span class="picker-value">
+				{metricChannel ? CHANNEL_META[metricChannel].label : 'None'}
+			</span>
+			<!-- chevron arrow -->
+			<svg class="picker-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+				<path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+			</svg>
+		</button>
+		{#if pickerOpen}
+		<ul class="picker-list" role="listbox">
+			<li
+				role="option"
+				tabindex="0"
+				aria-selected={metricChannel === null}
+				class:selected={metricChannel === null}
+				onclick={() => { metricChannel = null; pickerOpen = false; }}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { metricChannel = null; pickerOpen = false; } }}
+			>None</li>
+			{#each availableChannels as ch}
+			<li
+				role="option"
+				tabindex="0"
+				aria-selected={metricChannel === ch}
+				class:selected={metricChannel === ch}
+				onclick={() => { metricChannel = ch; pickerOpen = false; }}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { metricChannel = ch; pickerOpen = false; } }}
+			>{CHANNEL_META[ch].label}</li>
+			{/each}
+		</ul>
+		{/if}
+	</div>
+</div>
+{/if}
+
 <style>
 	.map-container {
 		height: 100%;
@@ -582,29 +499,31 @@
 		transition: cx 0.08s ease-out, cy 0.08s ease-out;
 	}
 
-	/* ── Shared control shell ────────────────────────────────────────────── */
-	:global(.metric-selector-control),
-	:global(.metric-legend-control) {
+	/* ── Colour-by picker overlay (position:fixed Svelte element) ──────── */
+
+	/* The picker floats above the map as a fixed-position element whose
+	   top/right are set inline by updatePickerPosition(). It is never a
+	   child of the Leaflet container and is unaffected by overflow:hidden
+	   on any ancestor in the page layout. */
+	.colour-picker {
+		position: fixed;
+		z-index: 1001;          /* above Leaflet controls (1000) */
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		padding: 7px 10px;
 		background: color-mix(in srgb, var(--color-card, #1e1e2e) 88%, transparent);
 		backdrop-filter: blur(6px);
 		-webkit-backdrop-filter: blur(6px);
 		border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
 		border-radius: 6px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-		padding: 7px 10px;
 		font-family: inherit;
 		pointer-events: auto;
-	}
-
-	/* ── Metric selector ─────────────────────────────────────────────────── */
-	:global(.metric-selector-control) {
-		display: flex;
-		align-items: center;
-		gap: 7px;
 		white-space: nowrap;
 	}
 
-	:global(.metric-selector-label) {
+	.picker-label {
 		font-size: 0.7rem;
 		font-weight: 500;
 		color: var(--color-muted, #9ca3af);
@@ -614,12 +533,11 @@
 		cursor: default;
 	}
 
-	/* Trigger button — shown inside the Leaflet control */
-	:global(.metric-dropdown-wrapper) {
+	.picker-wrapper {
 		position: relative;
 	}
 
-	:global(.metric-dropdown-trigger) {
+	.picker-trigger {
 		display: flex;
 		align-items: center;
 		gap: 6px;
@@ -639,32 +557,68 @@
 		transition: border-color 0.15s;
 	}
 
-	:global(.metric-dropdown-trigger:hover) {
+	.picker-trigger:hover {
 		border-color: var(--color-text, #f1f5f9);
 	}
 
-	:global(.metric-dropdown-trigger:focus-visible) {
+	.picker-trigger:focus-visible {
 		border-color: #3b82f6;
 		box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
 	}
 
-	:global(.metric-dropdown-value-text) {
+	.picker-value {
 		flex: 1;
 		text-align: left;
 	}
 
-	:global(.metric-dropdown-arrow) {
+	.picker-arrow {
 		flex-shrink: 0;
-		display: flex;
-		align-items: center;
 		opacity: 0.7;
+		color: var(--color-muted, #9ca3af);
 	}
 
-	/* The dropdown list (.metric-dropdown-list) is appended to document.body and
-	   has all styles applied inline via JS so it works regardless of CSS injection
-	   timing. No CSS rules needed here for the list or items. */
+	/* Dropdown list — position:absolute relative to .picker-wrapper.
+	   Since .colour-picker is position:fixed, the list is also effectively
+	   viewport-positioned and will never be clipped by overflow:hidden. */
+	.picker-list {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		min-width: 160px;
+		z-index: 1;
+		list-style: none;
+		margin: 0;
+		padding: 3px 0;
+		max-height: 260px;
+		overflow-y: auto;
+		background: color-mix(in srgb, var(--color-card, #1e1e2e) 97%, transparent);
+		border: 1px solid var(--color-border, rgba(255, 255, 255, 0.18));
+		border-radius: 5px;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
+	}
 
-	/* ── Colour scale legend ─────────────────────────────────────────────── */
+	.picker-list li {
+		padding: 5px 12px;
+		font-size: 0.775rem;
+		font-weight: 500;
+		color: var(--color-text, #f1f5f9);
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background-color 0.1s;
+	}
+
+	.picker-list li:hover {
+		background-color: rgba(255, 255, 255, 0.08);
+	}
+
+	.picker-list li.selected {
+		color: #3b82f6;
+		background-color: rgba(59, 130, 246, 0.1);
+	}
+
+	/* ── Colour scale legend (still a Leaflet control) ───────────────── */
 	:global(.metric-legend-control) {
 		width: 160px;
 	}
