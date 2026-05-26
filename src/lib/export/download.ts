@@ -28,6 +28,17 @@ export function triggerDownload(data: ArrayBuffer | Blob, filename: string, mime
 }
 
 /**
+ * Return the current date in YYYY-MM-DD format using the user's **local** timezone.
+ *
+ * `new Date().toISOString()` returns UTC — for users in UTC−N timezones this
+ * rolls over to tomorrow's date before midnight local time.  This helper uses
+ * `toLocaleDateString('en-CA')` which produces the ISO-format local date.
+ */
+export function localDateString(): string {
+	return new Date().toLocaleDateString('en-CA'); // en-CA locale → YYYY-MM-DD
+}
+
+/**
  * Trigger a browser PNG download from an ECharts `getDataURL()` base64 string.
  *
  * @param dataUrl  The base64 PNG data URL returned by `chart.getDataURL()`.

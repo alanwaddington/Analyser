@@ -7,7 +7,7 @@
  */
 
 import type { Activity } from '$lib/types';
-import { triggerDownload } from './download';
+import { triggerDownload, localDateString } from './download';
 
 /**
  * Generate and download an Excel workbook for the given activities.
@@ -17,7 +17,7 @@ import { triggerDownload } from './download';
 export async function exportActivities(activities: Activity[]): Promise<void> {
 	const { buildWorkbook } = await import('./excel');
 	const buf = buildWorkbook(activities);
-	const date = new Date().toISOString().slice(0, 10);
+	const date = localDateString();
 	triggerDownload(
 		buf,
 		`analyser-export-${date}.xlsx`,

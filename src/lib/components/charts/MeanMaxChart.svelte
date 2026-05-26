@@ -6,7 +6,7 @@
 	import { buildMeanMaxData, formatDuration } from './MeanMaxChart.utils.ts';
 	import { isDark } from '$lib/stores/theme';
 	import type { MeanMaxSeriesInput } from './MeanMaxChart.utils.ts';
-	import { downloadPng } from '$lib/export/download';
+	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
 
 	let {
@@ -121,7 +121,7 @@
 	function handlePngDownload() {
 		const url = getChartDataURL();
 		if (!url) return;
-		const date = new Date().toISOString().slice(0, 10);
+		const date = localDateString();
 		downloadPng(url, `mean-max-${date}.png`);
 	}
 

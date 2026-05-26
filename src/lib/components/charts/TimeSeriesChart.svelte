@@ -10,7 +10,7 @@
 	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis } from '$lib/align/distance';
-	import { downloadPng } from '$lib/export/download';
+	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
 
 	let {
@@ -256,7 +256,7 @@
 		const url = getChartDataURL();
 		if (!url) return;
 		const slug = channel.replace(/([A-Z])/g, '-$1').toLowerCase();
-		const date = new Date().toISOString().slice(0, 10);
+		const date = localDateString();
 		downloadPng(url, `${slug}-${date}.png`);
 	}
 

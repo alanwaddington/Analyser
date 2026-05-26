@@ -7,7 +7,7 @@
 	import { isDark } from '$lib/stores/theme';
 	import { getClipDistance, buildZeroLine, buildDeltaData } from './DeltaChart.utils.ts';
 	import type { DeltaSeriesInput } from './DeltaChart.utils.ts';
-	import { downloadPng } from '$lib/export/download';
+	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
 
 	let {
@@ -152,7 +152,7 @@
 	function handlePngDownload() {
 		const url = getChartDataURL();
 		if (!url) return;
-		const date = new Date().toISOString().slice(0, 10);
+		const date = localDateString();
 		downloadPng(url, `time-delta-${date}.png`);
 	}
 
