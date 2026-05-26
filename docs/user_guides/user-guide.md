@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.6 · **Last updated:** May 2026
+> **Version:** 1.7 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -22,12 +22,15 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 4.3 [Multi-File Device Bar](#43-multi-file-device-bar)
    - 4.4 [Fine-Tuning Timing](#44-fine-tuning-timing)
 5. [Event Comparison](#5-event-comparison)
-6. [Syncing Device Labels Across Devices](#6-syncing-device-labels-across-devices)
-   - 6.1 [How Sync Works](#61-how-sync-works)
-   - 6.2 [Linking a Second Device](#62-linking-a-second-device)
-   - 6.3 [Sync Status and Errors](#63-sync-status-and-errors)
-   - 6.4 [Resetting Your Sync Identity](#64-resetting-your-sync-identity)
-7. [Reference](#7-reference)
+6. [Exporting Data](#6-exporting-data)
+   - 6.1 [Excel Export](#61-excel-export)
+   - 6.2 [PNG Chart Export](#62-png-chart-export)
+7. [Syncing Device Labels Across Devices](#7-syncing-device-labels-across-devices)
+   - 7.1 [How Sync Works](#71-how-sync-works)
+   - 7.2 [Linking a Second Device](#72-linking-a-second-device)
+   - 7.3 [Sync Status and Errors](#73-sync-status-and-errors)
+   - 7.4 [Resetting Your Sync Identity](#74-resetting-your-sync-identity)
+8. [Reference](#8-reference)
 
 ---
 
@@ -309,13 +312,57 @@ Load two or more `.fit` files, then switch to the Event Comparison tab. The view
 
 ---
 
-## 6. Syncing Device Labels Across Devices
+## 6. Exporting Data
+
+Analyser can export your loaded activity data in two formats: an Excel workbook containing all numeric records, and PNG screenshots of individual charts.
+
+---
+
+### 6.1 Excel Export
+
+The **Export Data** button appears in the tab bar on both the Device Comparison and Event Comparison pages. Clicking it builds an `.xlsx` workbook and downloads it immediately — no server involved.
+
+**Workbook structure:**
+
+| Sheet | Contents |
+|-------|---------|
+| **Summary** | One row per loaded file: filename, sport, start time, total distance (km), and elapsed time |
+| **Per-activity sheets** | One sheet per file, named after the filename (truncated to 31 characters; duplicates are suffixed `(2)`, `(3)`, etc.) |
+
+**Per-activity sheet columns:**
+
+Each activity sheet contains one row per recorded data point with the following columns:
+
+- **Timestamp** — wall-clock date and time of the sample (Excel datetime format)
+- **Elapsed (s)** — seconds since the activity start
+- **Distance (m)** — cumulative distance in metres
+- One column per channel that has at least one non-null value: Heart Rate (bpm), Power (W), Left Power (W), Right Power (W), Cadence (rpm), Speed (km/h), Pace (min/km), Altitude (m), Temperature (°C), Core Temperature (°C), Skin Temperature (°C), Vertical Oscillation (mm), Ground Contact Time (ms), Stride Length (m)
+
+Channels with no data at all in a given file are omitted from that file's sheet. Pace values are formatted as **M:SS strings** (e.g. `5:15`) rather than decimal numbers.
+
+**Downloaded filename:** `analyser-export-YYYY-MM-DD.xlsx` using your local date.
+
+---
+
+### 6.2 PNG Chart Export
+
+Every chart card has a **⬇ PNG** download button in its header row. Clicking it downloads a PNG screenshot of that chart at **2× pixel density** for sharp rendering on high-DPI displays.
+
+The PNG uses the chart's current theme (light or dark) as the background, so what you see is what you get.
+
+**Downloaded filenames** follow the pattern `channel-name-YYYY-MM-DD.png` (e.g. `heart-rate-2026-05-26.png`).
+
+PNG export is available for all four chart types: Time Series, Mean/Max, Time Delta, and Segment Bar.
+
+---
+
+## 7. Syncing Device Labels Across Devices
 
 Device labels you create (by double-clicking a sensor pill) are saved in your browser's local storage. The **Sync** feature lets you share those labels across multiple browsers or devices — for example, so your phone and laptop both show "Polar H10" instead of "Device 1".
 
 Sync is **automatic and account-free**. No sign-in is required. Each browser is assigned a private sync identity (a UUID stored in local storage) the first time it loads Analyser.
 
-### 6.1 How Sync Works
+### 7.1 How Sync Works
 
 1. On first load, Analyser generates a unique sync identity (UUID) for your browser and pushes your current labels to a cloud key-value store under that identity.
 2. On every subsequent load, Analyser pulls the latest labels from the cloud and applies them locally — the cloud is the source of truth.
@@ -324,7 +371,7 @@ Sync is **automatic and account-free**. No sign-in is required. Each browser is 
 
 > **Privacy note:** Labels are stored in Upstash Redis and expire automatically after **90 days** of inactivity. No personal information is stored — only the device labels you assign (e.g. "Polar H10", "Assioma Duo") keyed by a randomly generated UUID.
 
-### 6.2 Linking a Second Device
+### 7.2 Linking a Second Device
 
 To share your labels with a second browser or device:
 
@@ -341,7 +388,7 @@ After linking, both devices share the same sync identity and labels stay in sync
 
 > **Tip:** The QR code and copy-link methods are the most convenient. Use the short code when typing a URL isn't practical.
 
-### 6.3 Sync Status and Errors
+### 7.3 Sync Status and Errors
 
 The Sync panel shows a status line:
 
@@ -353,7 +400,7 @@ The Sync panel shows a status line:
 
 Network errors are non-fatal — if a push fails, your local labels are unchanged and the error is shown in the panel. Analyser will retry automatically on the next label change.
 
-### 6.4 Resetting Your Sync Identity
+### 7.4 Resetting Your Sync Identity
 
 If you want to **break the link** between devices (e.g. after lending your laptop to someone):
 
@@ -366,7 +413,7 @@ A new UUID is generated and your current labels are pushed under the new identit
 
 ---
 
-## 7. Reference
+## 8. Reference
 
 ### Sync — Quick Reference
 

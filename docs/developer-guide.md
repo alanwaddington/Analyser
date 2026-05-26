@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.1 · **Last updated:** May 2026
+> **Version:** 1.2 · **Last updated:** May 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -23,6 +23,7 @@ This guide covers the technical internals of the Analyser application for contri
    - 3.10 [Environment Variables](#310-environment-variables)
    - 3.11 [Local Development Setup](#311-local-development-setup)
 3a. [Map Tab — Metric Strip Chart](#3a-map-tab--metric-strip-chart)
+3b. [Data Export](#3b-data-export)
 4. [Responsive Layout](#4-responsive-layout)
 5. [FIT Parsing](#5-fit-parsing)
 6. [Testing](#6-testing)
@@ -52,11 +53,16 @@ src/
 │   ├── align/        # Activity alignment (timestamp sync, distance interpolation)
 │   ├── analytics/    # Smoothing, mean/max curves, summary statistics
 │   ├── compare/      # Delta computation, segment analysis
+│   ├── export/       # Client-side data export
+│   │   ├── excel.ts           # buildWorkbook(activities) → ArrayBuffer (.xlsx via SheetJS)
+│   │   ├── exportActivities.ts # exportActivities(activities): lazy-loads excel.ts, triggers download
+│   │   └── download.ts        # triggerDownload(), downloadPng(), localDateString()
 │   ├── components/
 │   │   ├── charts/   # ECharts wrappers
 │   │   │             # - StripChart.svelte: metric strip chart wrapper (map tab)
 │   │   │             # - StripToggle.svelte: line/gradient pill toggle
 │   │   │             # - StripChart.utils.ts: shouldShowGradient(), GRADIENT_COLOUR_TOKEN
+│   │   │             # - png-btn.css: shared PNG download button styles
 │   │   ├── map/      # Leaflet map + ActivityMap.component.test.ts (jsdom)
 │   │   └── ui/       # Layout components, controls, SyncPanel
 │   ├── server/
@@ -74,6 +80,7 @@ src/
     │   └── labels/
     │       ├── [uuid]/+server.ts          # GET / PUT label store
     │       └── resolve/[code]/+server.ts  # GET short-code resolver
+    ├── export-btn.css   # Shared CSS for the Export Data button in tab bars
     ├── map-panel.css    # Shared CSS for Map tab layout (.map-wrap--has-strip, .strip-wrap)
     ├── +layout.svelte   # App shell, initSync, ?sync= param
     ├── +page.svelte     # Landing / drop zone
@@ -307,6 +314,45 @@ The strip chart uses a **second, independent hover loop** (`stripHoveredDistance
 ### `ActivityMap` — `onMetricChannelChange` callback
 
 `ActivityMap.svelte` accepts an optional `onMetricChannelChange?: (channel: ChannelKey | null) => void` prop. It fires via a `$effect` whenever the internal `metricChannel` state changes (on picker selection and on file change/reset). Existing callers that do not pass this prop are unaffected.
+
+---
+
+## 3b. Data Export
+
+PR #83 added two export paths to the app: an Excel workbook download and per-chart PNG downloads.
+
+### Module layout
+
+| File | Responsibility |
+|------|---------------|
+| `src/lib/export/excel.ts` | `buildWorkbook(activities)` — builds a SheetJS workbook in memory and returns it as an `ArrayBuffer` |
+| `src/lib/export/exportActivities.ts` | `exportActivities(activities)` — async entry point: lazy-imports `excel.ts`, calls `buildWorkbook`, then calls `triggerDownload` |
+| `src/lib/export/download.ts` | `triggerDownload(data, filename, mime)`, `downloadPng(dataUrl, filename)`, `localDateString()` |
+
+`excel.ts` is lazy-imported in `exportActivities.ts` so that SheetJS (the `xlsx` package) is only bundled into a dynamically loaded chunk, keeping the main bundle lighter.
+
+### Excel workbook structure
+
+`buildWorkbook` produces:
+
+1. **Summary sheet** — one row per activity with filename, sport, start time (Excel datetime), distance (km), and elapsed time (H:MM:SS or M:SS).
+2. **Per-activity sheets** — one row per `ActivityRecord`. Sheet names are taken from `activity.filename`, truncated to 31 characters (Excel limit), and de-duplicated with ` (N)` suffixes if needed.
+
+Column selection is dynamic: `presentChannels()` filters `CHANNEL_KEYS` to only those with at least one non-null value in the activity, keeping sheets clean for activities that lack certain sensors.
+
+Pace is formatted as an `"M:SS"` string by `formatPace()` rather than stored as a decimal, since Excel has no built-in pace format and decimal values are not human-readable.
+
+Timestamps use JavaScript `Date` objects with `cellDates: true` in the SheetJS write options, with `yyyy-mm-dd hh:mm:ss` cell format applied to datetime columns.
+
+### PNG download
+
+Each chart component calls `chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: bgColour })` on its ECharts instance, then passes the resulting base64 data URL to `downloadPng()`. `downloadPng` decodes the base64 string to a `Uint8Array`, wraps it in a `Blob`, and calls `triggerDownload` to initiate the browser download.
+
+The background colour is read from the CSS custom property `--color-bg-primary` at download time so that the PNG matches the user's current theme.
+
+### `localDateString()`
+
+`new Date().toISOString()` returns UTC, which rolls over to the next day before midnight for users in UTC− timezones. `localDateString()` uses `toLocaleDateString('en-CA')` instead, which produces an ISO-format (`YYYY-MM-DD`) date in the user's local timezone.
 
 ---
 
