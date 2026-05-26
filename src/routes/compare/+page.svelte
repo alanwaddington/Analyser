@@ -12,12 +12,14 @@
 	import TimeSeriesChart from '$lib/components/charts/TimeSeriesChart.svelte';
 	import MeanMaxChart from '$lib/components/charts/MeanMaxChart.svelte';
 	import ActivityMap from '$lib/components/map/ActivityMap.svelte';
+	import StripChart from '$lib/components/charts/StripChart.svelte';
 	import DeviceToggleBar from '$lib/components/ui/DeviceToggleBar.svelte';
 	import TimeOffsetControl from '$lib/components/ui/TimeOffsetControl.svelte';
 	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
 	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
+	import '../map-panel.css';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -195,6 +197,35 @@
 			mapHoveredDistance = null;
 		}
 	});
+
+	// ── Map tab strip chart ───────────────────────────────────────────────────
+
+	/** The metric channel currently selected in the Colour by picker (null = None) */
+	let mapMetricChannel = $state<ChannelKey | null>(null);
+
+	/** Distance in metres from strip chart hover → shown as position marker on map */
+	let stripHoveredDistance = $state<number | null>(null);
+
+	/** Distance in metres from map hover → drives strip chart crosshair */
+	let mapStripHoveredDistance = $state<number | null>(null);
+
+	// Note: unlike handleChartHoverDistance / handleMapHoverDistance (which are
+	// gated on $xAxisMode === 'distance'), these strip handlers are NOT gated.
+	// The strip chart always uses distance mode via forceDistanceAxis={true}, so
+	// strip↔map hover sync is valid regardless of the global xAxisMode setting.
+	function handleStripHoverDistance(distMetres: number | null) {
+		stripHoveredDistance = distMetres;
+	}
+
+	function handleMapStripHoverDistance(distMetres: number | null) {
+		mapStripHoveredDistance = distMetres;
+	}
+
+	/** Series inputs for the strip chart — one per file, using the same buildSeriesForChannel logic */
+	const stripSeriesInputs = $derived.by(() => {
+		if (!mapMetricChannel) return [];
+		return buildSeriesForChannel(mapMetricChannel);
+	});
 </script>
 
 <div class="page">
@@ -293,14 +324,28 @@
 
 		<!-- Map panel — always in DOM so Leaflet map survives tab switches -->
 		<div class="map-panel" class:tab-hidden={activeTab !== 'map'}>
-			<div class="map-wrap">
+			<div class="map-wrap" class:map-wrap--has-strip={mapMetricChannel !== null}>
 				<ActivityMap
 					activities={$activities}
 					availableChannels={mapAvailableChannels}
-					hoveredDistance={chartHoveredDistance}
-					onHoverDistance={handleMapHoverDistance}
+					hoveredDistance={stripHoveredDistance ?? chartHoveredDistance}
+					onHoverDistance={(d) => { handleMapStripHoverDistance(d); handleMapHoverDistance(d); }}
+					onMetricChannelChange={(ch) => { mapMetricChannel = ch; }}
 				/>
 			</div>
+			{#if mapMetricChannel !== null && stripSeriesInputs.length > 0}
+				<div class="strip-wrap">
+					<CollapsiblePanel title="Metric Chart">
+						<StripChart
+							channel={mapMetricChannel}
+							seriesInputs={stripSeriesInputs}
+							{lapMarkers}
+							onHoverDistance={handleStripHoverDistance}
+							externalHoverDistance={mapStripHoveredDistance}
+						/>
+					</CollapsiblePanel>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Other tabs — conditional rendering (no hover sync required) -->
@@ -600,8 +645,11 @@
 
 	.map-wrap {
 		flex: 1;
+		min-height: 0;
 		overflow: hidden;
 	}
+
+	/* .map-wrap--has-strip and .strip-wrap styles are in src/routes/map-panel.css */
 
 	.cards-scroll {
 		flex: 1;

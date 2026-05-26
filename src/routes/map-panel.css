@@ -1,0 +1,37 @@
+/**
+ * Shared styles for the Map tab layout — used by both /compare and /event pages.
+ *
+ * Defines the flex-based 70/30 split between the map canvas and the metric
+ * strip chart, along with the strip-wrap container and its mobile height caps.
+ *
+ * Import this file in any route that renders an ActivityMap with a strip chart:
+ *   import './map-panel.css';
+ */
+
+/* When a metric is selected, reserve ~70% of available height for the map. */
+.map-wrap--has-strip {
+	flex: 7;
+}
+
+/* Strip chart panel — ~30% of available height */
+.strip-wrap {
+	flex: 3;
+	min-height: 0;
+	overflow: hidden;
+	border-top: 1px solid var(--color-border);
+	background: var(--color-card);
+	display: flex;
+	flex-direction: column;
+}
+
+@media (max-width: 480px) { /* --bp-phone */
+	.strip-wrap {
+		max-height: 100px;
+	}
+}
+
+@media (max-height: 480px) { /* landscape phone */
+	.strip-wrap {
+		max-height: 90px;
+	}
+}

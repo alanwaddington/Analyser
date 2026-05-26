@@ -7,7 +7,7 @@
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
-	import { extractChannel, buildXValues, isDashed, paceFormat } from './TimeSeriesChart.utils.ts';
+	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis } from '$lib/align/distance';
 
@@ -19,6 +19,7 @@
 		groupId,
 		onHoverDistance = undefined,
 		externalHoverDistance = undefined,
+		forceDistanceAxis = false,
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
@@ -29,6 +30,8 @@
 		onHoverDistance?: (distanceMetres: number | null) => void;
 		/** When set, drives the chart crosshair to this distance in metres (map→chart sync) */
 		externalHoverDistance?: number | null;
+		/** When true, always uses distance mode for x-axis regardless of the global xAxisMode store */
+		forceDistanceAxis?: boolean;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -44,18 +47,20 @@
 	const tooltipText = () => $isDark ? '#e2e8f0' : '#0f172a';
 
 	function buildAltitudeData(activity: Activity, timeOffset = 0): [number, number | null][] {
-		if ($xAxisMode === 'distance') {
+		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
+		if (axisMode === 'distance') {
 			const aligned = interpolateToDistanceAxis(activity);
 			const altData = aligned.channels.get('altitude') ?? [];
 			return aligned.axis.map((d, i) => [d / 1000, altData[i]]);
 		}
 		const raw = extractChannel(activity.records, 'altitude');
-		const xValues = buildXValues(activity.records, $xAxisMode);
+		const xValues = buildXValues(activity.records, axisMode);
 		return xValues.map((x, i) => [x + timeOffset, raw[i]]);
 	}
 
 	function buildData(activity: Activity, timeOffset = 0): [number, number | null][] {
-		if ($xAxisMode === 'distance') {
+		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
+		if (axisMode === 'distance') {
 			const aligned = interpolateToDistanceAxis(activity);
 			const channelData = aligned.channels.get(channel) ?? [];
 			const smoothed = smooth(channelData, $smoothing);
@@ -63,7 +68,7 @@
 		}
 		const raw = extractChannel(activity.records, channel);
 		const smoothed = smooth(raw, $smoothing);
-		const xValues = buildXValues(activity.records, $xAxisMode);
+		const xValues = buildXValues(activity.records, axisMode);
 		return xValues.map((x, i) => [x + timeOffset, smoothed[i]]);
 	}
 
@@ -85,7 +90,7 @@
 			grid: { top: 20, right: 16, bottom: 30, left: 55 },
 			xAxis: {
 				type: 'value',
-				name: $xAxisMode === 'time' ? 's' : 'km',
+				name: effectiveAxisMode($xAxisMode, forceDistanceAxis) === 'time' ? 's' : 'km',
 				nameTextStyle: { color: tc, fontSize: 10 },
 				axisLabel: { color: tc, fontSize: 11 },
 				axisLine: { lineStyle: { color: gc } },
@@ -122,7 +127,7 @@
 					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					const items = params as any as Array<{ seriesName: string; value: [number, number | null]; color: string }>;
 					const x = items[0]?.value[0];
-					const xLabel = $xAxisMode === 'time'
+					const xLabel = effectiveAxisMode($xAxisMode, forceDistanceAxis) === 'time'
 						? `${Math.round(x ?? 0)}s`
 						: `${(x ?? 0).toFixed(2)} km`;
 					const rows = items
@@ -214,7 +219,7 @@
 			chart.on('updateAxisPointer', (event: any) => {
 				// Only emit in distance mode — in time mode axisInfo.value is seconds,
 				// not km, so converting it would produce meaningless distance values.
-				if ($xAxisMode !== 'distance') return;
+				if (effectiveAxisMode($xAxisMode, forceDistanceAxis) !== 'distance') return;
 				const axisInfo = event?.axesInfo?.[0];
 				if (axisInfo != null) {
 					// x-axis value is in km (distance mode) — convert to metres
@@ -240,6 +245,7 @@
 		void $isDark;
 		void $smoothing;
 		void $xAxisMode;
+		void forceDistanceAxis;
 		void seriesInputs;
 		void referenceIndex;
 		chart?.setOption(buildOption(), { notMerge: true });
