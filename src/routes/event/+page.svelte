@@ -19,7 +19,9 @@
 	import ChannelToggleBar from '$lib/components/ui/ChannelToggleBar.svelte';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import type { ChannelKey } from '$lib/types';
+	import { exportActivities } from '$lib/export/exportActivities';
 	import '../map-panel.css';
+	import '../export-btn.css';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -122,6 +124,22 @@
 	/** Distance in metres from map hover → drives strip chart crosshair */
 	let mapStripHoveredDistance = $state<number | null>(null);
 
+	/** True while the Excel workbook is being generated/downloaded */
+	let exporting = $state(false);
+
+	async function handleExport() {
+		if ($activities.length === 0 || exporting) return;
+		exporting = true;
+		try {
+			await exportActivities($activities);
+		} catch (err) {
+			console.error('[Export] Failed to generate workbook:', err);
+			alert('Export failed. Please try again.');
+		} finally {
+			exporting = false;
+		}
+	}
+
 	// Note: unlike handleChartHoverDistance / handleMapHoverDistance (which are
 	// gated on $xAxisMode === 'distance'), these strip handlers are NOT gated.
 	// The strip chart always uses distance mode via forceDistanceAxis={true}, so
@@ -181,6 +199,32 @@
 				onkeydown={(e) => handleTabKey(e, tab.id)}
 			>{tab.label}</button>
 		{/each}
+		<button
+			class="export-btn"
+			onclick={handleExport}
+			disabled={$activities.length === 0 || exporting}
+			aria-label={exporting ? 'Exporting data, please wait' : 'Export activity data as Excel'}
+			aria-busy={exporting}
+			type="button"
+		>
+			{#if exporting}
+				<svg class="export-spinner" width="11" height="11" viewBox="0 0 11 11"
+					aria-hidden="true" focusable="false">
+					<circle cx="5.5" cy="5.5" r="4" fill="none"
+						stroke="currentColor" stroke-width="1.4"
+						stroke-dasharray="16 8" stroke-linecap="round"/>
+				</svg>
+				<span>Exporting…</span>
+			{:else}
+				<svg width="11" height="11" viewBox="0 0 11 11" fill="none"
+					aria-hidden="true" focusable="false">
+					<path d="M5.5 1v6M2.5 4.5l3 3 3-3M1 9.5h9"
+						stroke="currentColor" stroke-width="1.4"
+						stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+				<span>Export Data</span>
+			{/if}
+		</button>
 	</div>
 
 	<div
