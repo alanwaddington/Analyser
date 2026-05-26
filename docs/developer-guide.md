@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.0 · **Last updated:** May 2026
+> **Version:** 1.1 · **Last updated:** May 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -22,6 +22,7 @@ This guide covers the technical internals of the Analyser application for contri
    - 3.9 [Validation](#39-validation)
    - 3.10 [Environment Variables](#310-environment-variables)
    - 3.11 [Local Development Setup](#311-local-development-setup)
+3a. [Map Tab — Metric Strip Chart](#3a-map-tab--metric-strip-chart)
 4. [Responsive Layout](#4-responsive-layout)
 5. [FIT Parsing](#5-fit-parsing)
 6. [Testing](#6-testing)
@@ -53,7 +54,10 @@ src/
 │   ├── compare/      # Delta computation, segment analysis
 │   ├── components/
 │   │   ├── charts/   # ECharts wrappers
-│   │   ├── map/      # Leaflet map
+│   │   │             # - StripChart.svelte: metric strip chart wrapper (map tab)
+│   │   │             # - StripToggle.svelte: line/gradient pill toggle
+│   │   │             # - StripChart.utils.ts: shouldShowGradient(), GRADIENT_COLOUR_TOKEN
+│   │   ├── map/      # Leaflet map + ActivityMap.component.test.ts (jsdom)
 │   │   └── ui/       # Layout components, controls, SyncPanel
 │   ├── server/
 │   │   └── redis.ts  # Upstash Redis singleton (server-only)
@@ -70,6 +74,7 @@ src/
     │   └── labels/
     │       ├── [uuid]/+server.ts          # GET / PUT label store
     │       └── resolve/[code]/+server.ts  # GET short-code resolver
+    ├── map-panel.css    # Shared CSS for Map tab layout (.map-wrap--has-strip, .strip-wrap)
     ├── +layout.svelte   # App shell, initSync, ?sync= param
     ├── +page.svelte     # Landing / drop zone
     ├── compare/+page.svelte
@@ -257,6 +262,54 @@ UPSTASH_REDIS_REST_TOKEN=your-token-here
 
 ---
 
+## 3a. Map Tab — Metric Strip Chart
+
+PR #82 added a co-visible metric strip chart to the Map tab on both `/compare` and `/event` pages. When the user selects a metric in the **Colour by** picker, a chart for that channel slides in below the map with full bidirectional hover sync.
+
+### Component hierarchy
+
+```
+compare/+page.svelte (or event/+page.svelte)
+  └── .map-panel  (flex column)
+        ├── .map-wrap  (flex: 7)
+        │     └── <ActivityMap
+        │           onMetricChannelChange={ch => mapMetricChannel = ch}
+        │           hoveredDistance={stripHoveredDistance}
+        │         />
+        └── .strip-wrap  (flex: 3, shown only when mapMetricChannel !== null)
+              └── <CollapsiblePanel>  (collapses on tablet/phone)
+                    └── <StripChart
+                          channel={mapMetricChannel}
+                          seriesInputs={stripSeriesInputs}
+                          lapMarkers={...}
+                          onHoverDistance={handleStripHoverDistance}
+                          externalHoverDistance={mapStripHoveredDistance}
+                        />
+```
+
+### Hover sync
+
+The strip chart uses a **second, independent hover loop** (`stripHoveredDistance` / `mapStripHoveredDistance`), completely separate from the existing Charts-tab ↔ Map loop (`chartHoveredDistance` / `mapHoveredDistance`). This separation is intentional:
+
+- The existing loop is **gated on `$xAxisMode === 'distance'`** — it only fires when the Charts tab is in distance mode.
+- The strip loop is **never gated** — the strip chart always operates in distance mode (`forceDistanceAxis={true}`), so the sync is always valid regardless of the global x-axis setting.
+
+### Key design points
+
+| Concern | Approach |
+|---------|---------|
+| Strip always uses distance axis | `forceDistanceAxis={true}` prop on `TimeSeriesChart` inside `StripChart` |
+| Isolated zoom/pan | `groupId="map-strip"` — separate ECharts connect group from `"compare-charts"` / `"event-charts"` |
+| Gradient mode | `shouldShowGradient()` utility in `StripChart.utils.ts`; single-file only (multi-file stays as lines) |
+| Shared layout CSS | `.map-wrap--has-strip` and `.strip-wrap` styles extracted to `src/routes/map-panel.css` and imported in both pages |
+| Magic-string safety | Gradient sentinel value is `GRADIENT_COLOUR_TOKEN = '__gradient__'` (exported constant, not inline string) |
+
+### `ActivityMap` — `onMetricChannelChange` callback
+
+`ActivityMap.svelte` accepts an optional `onMetricChannelChange?: (channel: ChannelKey | null) => void` prop. It fires via a `$effect` whenever the internal `metricChannel` state changes (on picker selection and on file change/reset). Existing callers that do not pass this prop are unaffected.
+
+---
+
 ## 4. Responsive Layout
 
 The app is fully responsive across three viewport tiers. Breakpoints are defined in two places that must stay in sync:
@@ -298,6 +351,43 @@ Unit tests use **Vitest**. Test files live alongside the modules they test (e.g.
 ```bash
 npm test           # run all tests
 npm run test:watch # watch mode
+```
+
+### Test environments
+
+Most tests run in the default **`node`** environment (pure utility functions with no DOM). Component tests that mount Svelte components require a DOM and use **`jsdom`**.
+
+To mark a test file as a component test, add this directive as the **first line** of the file:
+
+```typescript
+// @vitest-environment jsdom
+```
+
+**Why the `browser` resolve condition is needed for component tests:**
+
+Svelte 5 exports both a browser build (`index.js`) and a server build (`index-server.js`). In `node` environment, Vite resolves to the server build, which throws `"mount(...) is not available on the server"`. The `vite.config.ts` sets `resolve.conditions: ['browser']` **only when `mode === 'test'`** so that jsdom component tests use the browser build. The production build is unaffected (Vite's built-in defaults include `browser` for client bundles).
+
+```typescript
+// vite.config.ts — mode-conditional resolve
+export default defineConfig(({ mode }) => ({
+  ...(mode === 'test' ? { resolve: { conditions: ['browser'] } } : {}),
+  // ...
+}));
+```
+
+**Mocking Leaflet in component tests:**
+
+`ActivityMap.svelte` dynamically imports Leaflet in `onMount`. In jsdom, Leaflet's browser DOM APIs are unavailable. Mock Leaflet at the module level:
+
+```typescript
+vi.mock('leaflet', () => { /* minimal stubs for map, tileLayer, control, etc. */ });
+vi.mock('leaflet/dist/leaflet.css', () => ({}));
+```
+
+Also stub `ResizeObserver` (not implemented in jsdom):
+
+```typescript
+vi.stubGlobal('ResizeObserver', class { observe = vi.fn(); disconnect = vi.fn(); });
 ```
 
 There are no integration or end-to-end tests at present. The API routes for sync are exercised manually — see section 3.11 for local setup.

@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.5 · **Last updated:** May 2026
+> **Version:** 1.6 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -206,9 +206,25 @@ A **Map Layer** panel is always visible in the **top-left** corner of the map. C
 
 Use the **Colour by** dropdown in the **top-right** of the map to shade the route by a metric such as pace, heart rate, or power. The colour gradient runs from blue (low values) to red (high values). A legend appears in the bottom-right showing the value range.
 
-**Hover interaction:**
+**Metric strip chart:**
 
-Hovering over the map route shows a crosshair on all open charts, letting you pinpoint exactly what your metrics were at a specific GPS location.
+When you select a metric in the **Colour by** dropdown, a strip chart slides in below the map showing that channel's values plotted against **distance**. The strip chart occupies approximately 30% of the map panel height; the map retains the remaining 70%.
+
+- Select **None** in the dropdown to hide the strip chart and return the map to full height.
+- On **tablet and phone** the strip chart is collapsed by default — tap the **Metric Chart ▾** header to expand it.
+- A **line / gradient** toggle button in the strip chart header switches between a standard line and a spectral gradient style that matches the map route colouring (single-file only; gradient is disabled when multiple files are loaded).
+
+**Bidirectional hover sync:**
+
+The map and strip chart are linked in both directions:
+
+- Hover over the **map route** — a crosshair appears on the strip chart at the corresponding distance.
+- Hover over the **strip chart** — the position marker on the map moves to the corresponding GPS location on the route.
+- Move off either surface to clear the cursor on the other.
+
+**Hover interaction (Charts tab):**
+
+Hovering over the map route also shows a crosshair on all open Charts-tab charts, letting you pinpoint exactly what your metrics were at a specific GPS location.
 
 ---
 
