@@ -9,7 +9,7 @@
 	import { activitiesOverlap } from '$lib/align';
 	import { isDark, initTheme } from '$lib/stores/theme';
 	import { viewport } from '$lib/stores/viewport';
-	import { initSync, adoptSyncIdentity } from '$lib/stores/sync.ts';
+	import { initSync, adoptSyncIdentity } from '$lib/stores/sync';
 	import Sidebar from '$lib/components/ui/Sidebar.svelte';
 
 	let { children } = $props();

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
-import { getRedis } from '$lib/server/redis.ts';
-import { SHORT_CODE_REGEX } from '$lib/validation.ts';
+import { getRedis } from '$lib/server/redis';
+import { SHORT_CODE_REGEX } from '$lib/validation';
 
 // ---------------------------------------------------------------------------
 // In-memory rate limiter
@@ -45,7 +45,7 @@ export const GET: RequestHandler = async ({ params, getClientAddress }) => {
 		);
 	}
 
-	if (!SHORT_CODE_REGEX.test(code)) {
+	if (!code || !SHORT_CODE_REGEX.test(code)) {
 		return json({ error: 'Invalid sync code format — expected XXX-XXXXX (8 alphanumeric chars with dash)' }, { status: 400 });
 	}
 

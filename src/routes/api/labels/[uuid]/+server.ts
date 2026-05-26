@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
-import { getRedis } from '$lib/server/redis.ts';
-import { UUID_REGEX, SHORT_CODE_REGEX } from '$lib/validation.ts';
+import { getRedis } from '$lib/server/redis';
+import { UUID_REGEX, SHORT_CODE_REGEX } from '$lib/validation';
 
 const TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
@@ -20,7 +20,7 @@ function isLabelsBody(body: unknown): body is { labels: Record<string, string>; 
 export const GET: RequestHandler = async ({ params }) => {
 	const { uuid } = params;
 
-	if (!UUID_REGEX.test(uuid)) {
+	if (!uuid || !UUID_REGEX.test(uuid)) {
 		return json({ error: 'Invalid UUID format' }, { status: 400 });
 	}
 
@@ -45,7 +45,7 @@ export const GET: RequestHandler = async ({ params }) => {
 export const PUT: RequestHandler = async ({ params, request }) => {
 	const { uuid } = params;
 
-	if (!UUID_REGEX.test(uuid)) {
+	if (!uuid || !UUID_REGEX.test(uuid)) {
 		return json({ error: 'Invalid UUID format' }, { status: 400 });
 	}
 

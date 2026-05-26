@@ -7,8 +7,8 @@
 		resolveCode,
 		adoptSyncIdentity,
 		resetSyncIdentity,
-	} from '$lib/stores/sync.ts';
-	import { SHORT_CODE_REGEX } from '$lib/validation.ts';
+	} from '$lib/stores/sync';
+	import { SHORT_CODE_REGEX } from '$lib/validation';
 
 	// ---------------------------------------------------------------------------
 	// Local state

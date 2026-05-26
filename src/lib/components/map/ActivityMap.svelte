@@ -46,7 +46,10 @@
 	let metricChannel = $state<ChannelKey | null>(null);
 
 	// DOM refs held to update Leaflet control content without recreating controls
-	let selectorSelectEl: HTMLSelectElement | undefined;
+	// Custom dropdown refs (replace native <select> to escape Leaflet's overflow:hidden)
+	let selectorValueEl: HTMLSpanElement | undefined;       // trigger label span
+	let selectorListEl: HTMLUListElement | undefined;       // <ul> appended to body
+	let selectorCleanup: (() => void) | undefined;          // removes body list + doc listener
 	let legendControlEl: HTMLDivElement | undefined;
 	let legendLabelEl: HTMLDivElement | undefined;
 	let legendMinEl: HTMLSpanElement | undefined;
@@ -113,6 +116,9 @@
 		L.control.layers(baseLayers, {}, { position: 'topleft', collapsed: false }).addTo(map);
 
 		// ── Metric selector control (top-right) ─────────────────────────────
+		// Uses a custom div-based dropdown whose list is appended to document.body
+		// with position:fixed — this escapes Leaflet's overflow:hidden on the map
+		// container, which would otherwise clip a native <select> popup.
 		const SelectorControl = L.Control.extend({
 			onAdd() {
 				const div = L!.DomUtil.create('div', 'metric-selector-control');
@@ -120,20 +126,68 @@
 				L!.DomEvent.disableScrollPropagation(div);
 
 				const label = L!.DomUtil.create('label', 'metric-selector-label', div);
-				label.setAttribute('for', 'metric-selector-select');
 				label.textContent = 'Colour by';
 
-				const select = L!.DomUtil.create(
-					'select',
-					'metric-selector-select',
-					div,
-				) as HTMLSelectElement;
-				select.id = 'metric-selector-select';
-				selectorSelectEl = select;
+				// Trigger button — lives inside the Leaflet control
+				const wrapper = L!.DomUtil.create('div', 'metric-dropdown-wrapper', div) as HTMLDivElement;
+				const trigger = document.createElement('button');
+				trigger.type = 'button';
+				trigger.className = 'metric-dropdown-trigger';
+				const valueSpan = document.createElement('span');
+				valueSpan.className = 'metric-dropdown-value-text';
+				valueSpan.textContent = 'None';
+				const arrowSpan = document.createElement('span');
+				arrowSpan.className = 'metric-dropdown-arrow';
+				arrowSpan.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="#9ca3af" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+				trigger.appendChild(valueSpan);
+				trigger.appendChild(arrowSpan);
+				wrapper.appendChild(trigger);
+				selectorValueEl = valueSpan;
 
-				select.addEventListener('change', () => {
-					metricChannel = (select.value as ChannelKey) || null;
+				// Dropdown list — appended to body so it is never clipped by Leaflet
+				const listEl = document.createElement('ul');
+				listEl.className = 'metric-dropdown-list';
+				listEl.setAttribute('role', 'listbox');
+				document.body.appendChild(listEl);
+				selectorListEl = listEl;
+
+				let dropdownOpen = false;
+
+				function positionList() {
+					const rect = trigger.getBoundingClientRect();
+					listEl.style.left = `${rect.left}px`;
+					listEl.style.top = `${rect.bottom + 4}px`;
+					listEl.style.minWidth = `${Math.max(rect.width, 140)}px`;
+				}
+
+				function openList() {
+					positionList();
+					listEl.classList.add('open');
+					dropdownOpen = true;
+				}
+
+				function closeList() {
+					listEl.classList.remove('open');
+					dropdownOpen = false;
+				}
+
+				trigger.addEventListener('click', (e) => {
+					e.stopPropagation();
+					dropdownOpen ? closeList() : openList();
 				});
+
+				const docClick = (e: MouseEvent) => {
+					if (!wrapper.contains(e.target as Node) && !listEl.contains(e.target as Node)) {
+						closeList();
+					}
+				};
+				document.addEventListener('click', docClick);
+
+				// Store cleanup so onDestroy can tidy up
+				selectorCleanup = () => {
+					document.removeEventListener('click', docClick);
+					listEl.remove();
+				};
 
 				return div;
 			},
@@ -177,32 +231,45 @@
 	onDestroy(() => {
 		resizeObserver?.disconnect();
 		map?.remove();
+		selectorCleanup?.();  // remove body-appended dropdown list and doc click listener
 	});
 
-	// ── Rebuild selector <option> list when availableChannels changes ────────
+	// ── Rebuild dropdown <li> list when availableChannels changes ────────────
 	$effect(() => {
-		if (!selectorSelectEl) return;
+		if (!selectorListEl || !selectorValueEl) return;
 
 		const currentValue = metricChannel ?? '';
 
-		selectorSelectEl.innerHTML = '';
-		const noneOpt = document.createElement('option');
-		noneOpt.value = '';
-		noneOpt.textContent = 'None';
-		selectorSelectEl.appendChild(noneOpt);
-
-		for (const ch of availableChannels) {
-			const opt = document.createElement('option');
-			opt.value = ch;
-			opt.textContent = CHANNEL_META[ch].label;
-			selectorSelectEl.appendChild(opt);
+		// Helper: create one list item and wire up selection
+		function addItem(value: string, itemLabel: string) {
+			const li = document.createElement('li');
+			li.className = 'metric-dropdown-item' + (value === currentValue ? ' selected' : '');
+			li.setAttribute('role', 'option');
+			li.dataset.value = value;
+			li.textContent = itemLabel;
+			li.addEventListener('click', () => {
+				metricChannel = (value as ChannelKey) || null;
+				selectorValueEl!.textContent = itemLabel;
+				selectorListEl!.querySelectorAll('.metric-dropdown-item').forEach(el =>
+					el.classList.remove('selected'),
+				);
+				li.classList.add('selected');
+				selectorListEl!.classList.remove('open');
+			});
+			selectorListEl!.appendChild(li);
 		}
 
-		// Restore the previous selection if it's still available
+		selectorListEl.innerHTML = '';
+		addItem('', 'None');
+		for (const ch of availableChannels) {
+			addItem(ch, CHANNEL_META[ch].label);
+		}
+
+		// Sync trigger label with current selection
 		if (currentValue && availableChannels.includes(currentValue as ChannelKey)) {
-			selectorSelectEl.value = currentValue;
+			selectorValueEl.textContent = CHANNEL_META[currentValue as ChannelKey].label;
 		} else {
-			selectorSelectEl.value = '';
+			selectorValueEl.textContent = 'None';
 			// Reset metricChannel if the previously-selected channel is no longer available
 			if (metricChannel && !availableChannels.includes(metricChannel)) {
 				metricChannel = null;
@@ -502,33 +569,91 @@
 		cursor: default;
 	}
 
-	:global(.metric-selector-select) {
+	/* Trigger button — shown inside the Leaflet control */
+	:global(.metric-dropdown-wrapper) {
+		position: relative;
+	}
+
+	:global(.metric-dropdown-trigger) {
+		display: flex;
+		align-items: center;
+		gap: 6px;
 		font-size: 0.775rem;
 		font-weight: 500;
+		font-family: inherit;
 		color: var(--color-text, #f1f5f9);
 		background-color: color-mix(in srgb, var(--color-card, #1e1e2e) 60%, transparent);
 		border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
 		border-radius: 4px;
-		padding: 3px 22px 3px 7px;
+		padding: 3px 8px 3px 7px;
 		height: 26px;
+		min-width: 110px;
 		cursor: pointer;
 		outline: none;
-		appearance: none;
-		-webkit-appearance: none;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ca3af' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-		background-repeat: no-repeat;
-		background-position: right 6px center;
-		min-width: 110px;
+		white-space: nowrap;
 		transition: border-color 0.15s;
 	}
 
-	:global(.metric-selector-select:hover) {
+	:global(.metric-dropdown-trigger:hover) {
 		border-color: var(--color-text, #f1f5f9);
 	}
 
-	:global(.metric-selector-select:focus-visible) {
+	:global(.metric-dropdown-trigger:focus-visible) {
 		border-color: #3b82f6;
 		box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+	}
+
+	:global(.metric-dropdown-value-text) {
+		flex: 1;
+		text-align: left;
+	}
+
+	:global(.metric-dropdown-arrow) {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		opacity: 0.7;
+	}
+
+	/* Dropdown list — appended to <body>, position:fixed to escape overflow:hidden */
+	:global(.metric-dropdown-list) {
+		display: none;
+		position: fixed;
+		z-index: 99999;
+		background: color-mix(in srgb, var(--color-card, #1e1e2e) 97%, transparent);
+		border: 1px solid var(--color-border, rgba(255, 255, 255, 0.18));
+		border-radius: 5px;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+		list-style: none;
+		margin: 0;
+		padding: 3px 0;
+		max-height: 260px;
+		overflow-y: auto;
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
+	}
+
+	:global(.metric-dropdown-list.open) {
+		display: block;
+	}
+
+	:global(.metric-dropdown-item) {
+		padding: 5px 12px;
+		font-size: 0.775rem;
+		font-weight: 500;
+		color: var(--color-text, #f1f5f9);
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background-color 0.1s;
+	}
+
+	:global(.metric-dropdown-item:hover) {
+		background-color: rgba(255, 255, 255, 0.08);
+	}
+
+	:global(.metric-dropdown-item.selected) {
+		color: #3b82f6;
+		background-color: rgba(59, 130, 246, 0.1);
 	}
 
 	/* ── Colour scale legend ─────────────────────────────────────────────── */

@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { getAllLabels, replaceAllLabels, setOnLabelChange } from '$lib/stores/deviceLabels.ts';
+import { getAllLabels, replaceAllLabels, setOnLabelChange } from '$lib/stores/deviceLabels';
 
 // ---------------------------------------------------------------------------
 // Storage keys

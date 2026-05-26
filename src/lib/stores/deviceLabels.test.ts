@@ -154,7 +154,7 @@ describe('setDeviceLabel / removeDeviceLabel', () => {
 		// that setDeviceLabel with a pre-trimmed empty string stores '' and that
 		// applyLabels will not apply a falsy stored value to the device.
 		setDeviceLabel('serial:1', '');
-		const devices = [{ deviceIndex: 0, serialNumber: 1 }];
+		const devices: Device[] = [{ deviceIndex: 0, serialNumber: 1 }];
 		applyLabels(devices);
 		expect(devices[0].label).toBeUndefined(); // empty string is falsy — not applied
 	});
