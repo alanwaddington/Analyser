@@ -144,10 +144,29 @@
 				wrapper.appendChild(trigger);
 				selectorValueEl = valueSpan;
 
-				// Dropdown list — appended to body so it is never clipped by Leaflet
+				// Dropdown list — appended to body so it is never clipped by Leaflet.
+				// All critical styles applied directly via .style so this works regardless
+				// of when/whether Svelte injects the component stylesheet.
 				const listEl = document.createElement('ul');
 				listEl.className = 'metric-dropdown-list';
 				listEl.setAttribute('role', 'listbox');
+				// Apply styles directly — don't rely on CSS class injection timing
+				Object.assign(listEl.style, {
+					display:         'none',
+					position:        'fixed',
+					zIndex:          '99999',
+					listStyle:       'none',
+					margin:          '0',
+					padding:         '3px 0',
+					maxHeight:       '260px',
+					overflowY:       'auto',
+					borderRadius:    '5px',
+					boxShadow:       '0 4px 16px rgba(0,0,0,0.45)',
+					border:          '1px solid rgba(255,255,255,0.18)',
+					background:      'color-mix(in srgb, var(--color-card, #1e1e2e) 97%, transparent)',
+					backdropFilter:  'blur(6px)',
+					fontFamily:      'inherit',
+				});
 				document.body.appendChild(listEl);
 				selectorListEl = listEl;
 
@@ -155,37 +174,40 @@
 
 				function positionList() {
 					const rect = trigger.getBoundingClientRect();
-					listEl.style.left = `${rect.left}px`;
-					listEl.style.top = `${rect.bottom + 4}px`;
+					listEl.style.left     = `${rect.left}px`;
+					listEl.style.top      = `${rect.bottom + 4}px`;
 					listEl.style.minWidth = `${Math.max(rect.width, 140)}px`;
 				}
 
 				function openList() {
 					positionList();
-					listEl.classList.add('open');
+					listEl.style.display = 'block';
 					dropdownOpen = true;
 				}
 
 				function closeList() {
-					listEl.classList.remove('open');
+					listEl.style.display = 'none';
 					dropdownOpen = false;
 				}
 
-				trigger.addEventListener('click', (e) => {
-					e.stopPropagation();
+				// Toggle on trigger click
+				trigger.addEventListener('click', () => {
 					dropdownOpen ? closeList() : openList();
 				});
 
-				const docClick = (e: MouseEvent) => {
+				// Close on any pointerdown outside the trigger or list.
+				// capture:true fires before any element handler and cannot be
+				// blocked by stopPropagation further down the tree.
+				const docPointerDown = (e: PointerEvent) => {
 					if (!wrapper.contains(e.target as Node) && !listEl.contains(e.target as Node)) {
 						closeList();
 					}
 				};
-				document.addEventListener('click', docClick);
+				document.addEventListener('pointerdown', docPointerDown, { capture: true });
 
 				// Store cleanup so onDestroy can tidy up
 				selectorCleanup = () => {
-					document.removeEventListener('click', docClick);
+					document.removeEventListener('pointerdown', docPointerDown, { capture: true });
 					listEl.remove();
 				};
 
@@ -243,18 +265,41 @@
 		// Helper: create one list item and wire up selection
 		function addItem(value: string, itemLabel: string) {
 			const li = document.createElement('li');
-			li.className = 'metric-dropdown-item' + (value === currentValue ? ' selected' : '');
 			li.setAttribute('role', 'option');
 			li.dataset.value = value;
 			li.textContent = itemLabel;
+			// Inline base styles — independent of Svelte CSS injection
+			const isSelected = value === currentValue;
+			Object.assign(li.style, {
+				padding:         '5px 12px',
+				fontSize:        '0.775rem',
+				fontWeight:      '500',
+				color:           isSelected ? '#3b82f6' : 'var(--color-text, #f1f5f9)',
+				background:      isSelected ? 'rgba(59,130,246,0.1)' : 'transparent',
+				cursor:          'pointer',
+				whiteSpace:      'nowrap',
+			});
+			li.addEventListener('pointerenter', () => {
+				if (li.dataset.value !== (metricChannel ?? '')) {
+					li.style.background = 'rgba(255,255,255,0.08)';
+				}
+			});
+			li.addEventListener('pointerleave', () => {
+				li.style.background = li.dataset.value === (metricChannel ?? '')
+					? 'rgba(59,130,246,0.1)'
+					: 'transparent';
+			});
 			li.addEventListener('click', () => {
 				metricChannel = (value as ChannelKey) || null;
 				selectorValueEl!.textContent = itemLabel;
-				selectorListEl!.querySelectorAll('.metric-dropdown-item').forEach(el =>
-					el.classList.remove('selected'),
-				);
-				li.classList.add('selected');
-				selectorListEl!.classList.remove('open');
+				// Update highlight on all sibling items
+				selectorListEl!.querySelectorAll('li').forEach((el) => {
+					const liEl = el as HTMLLIElement;
+					const active = liEl.dataset.value === (value || '');
+					liEl.style.color      = active ? '#3b82f6' : 'var(--color-text, #f1f5f9)';
+					liEl.style.background = active ? 'rgba(59,130,246,0.1)' : 'transparent';
+				});
+				selectorListEl!.style.display = 'none'; // close via style, not class
 			});
 			selectorListEl!.appendChild(li);
 		}
@@ -615,46 +660,9 @@
 		opacity: 0.7;
 	}
 
-	/* Dropdown list — appended to <body>, position:fixed to escape overflow:hidden */
-	:global(.metric-dropdown-list) {
-		display: none;
-		position: fixed;
-		z-index: 99999;
-		background: color-mix(in srgb, var(--color-card, #1e1e2e) 97%, transparent);
-		border: 1px solid var(--color-border, rgba(255, 255, 255, 0.18));
-		border-radius: 5px;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-		list-style: none;
-		margin: 0;
-		padding: 3px 0;
-		max-height: 260px;
-		overflow-y: auto;
-		backdrop-filter: blur(6px);
-		-webkit-backdrop-filter: blur(6px);
-	}
-
-	:global(.metric-dropdown-list.open) {
-		display: block;
-	}
-
-	:global(.metric-dropdown-item) {
-		padding: 5px 12px;
-		font-size: 0.775rem;
-		font-weight: 500;
-		color: var(--color-text, #f1f5f9);
-		cursor: pointer;
-		white-space: nowrap;
-		transition: background-color 0.1s;
-	}
-
-	:global(.metric-dropdown-item:hover) {
-		background-color: rgba(255, 255, 255, 0.08);
-	}
-
-	:global(.metric-dropdown-item.selected) {
-		color: #3b82f6;
-		background-color: rgba(59, 130, 246, 0.1);
-	}
+	/* The dropdown list (.metric-dropdown-list) is appended to document.body and
+	   has all styles applied inline via JS so it works regardless of CSS injection
+	   timing. No CSS rules needed here for the list or items. */
 
 	/* ── Colour scale legend ─────────────────────────────────────────────── */
 	:global(.metric-legend-control) {
