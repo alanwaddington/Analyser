@@ -8,8 +8,11 @@
  *   import './map-panel.css';
  */
 
-/* When a metric is selected, reserve ~70% of available height for the map. */
-.map-wrap--has-strip {
+/* When a metric is selected, reserve ~70% of available height for the map.
+ * Uses the combined selector (.map-wrap.map-wrap--has-strip) for higher
+ * specificity than the page-level .map-wrap { flex: 1 } rule, ensuring this
+ * override wins regardless of import order. */
+.map-wrap.map-wrap--has-strip {
 	flex: 7;
 }
 
