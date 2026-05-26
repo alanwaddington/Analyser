@@ -156,7 +156,7 @@
 | AC3 | Map hover → strip chart crosshair | `mapStripHoveredDistance` → `externalHoverDistance` on StripChart → TimeSeriesChart `showTip` dispatch | Playwright ✅ | ✅ Met |
 | AC4 | Strip chart hover → map dot marker | `stripHoveredDistance` → `hoveredDistance` on ActivityMap → circle marker positioned via `positionFromPoints` | Playwright ✅ | ✅ Met |
 | AC5 | Mouseout clears cursor on other surface | TimeSeriesChart `globalout` handler calls `onHoverDistance!(null)` which clears `stripHoveredDistance`; ActivityMap `mouseout` calls `onHoverDistance?.(null)` which clears `mapStripHoveredDistance` | Code verified ✅ | ✅ Met |
-| AC6 | Multi-file: one series per file using FILE_COLOURS | Compare: `buildSeriesForChannel` returns per-device series with `FILE_COLOURS[actIndex]`. Event: `$activities.map((a,i) => ({colourIndex: i}))` | No multi-file test | ⚠️ Partially Met |
+| AC6 | Multi-file: one series per file using FILE_COLOURS | Compare: `buildSeriesForChannel` (`compare/+page.svelte:132,155`) sets `colour: FILE_COLOURS[actIndex%FILE_COLOURS.length]` — same function used for main charts. Event: `colourIndex: i` resolved by TimeSeriesChart as `FILE_COLOURS[i%FILE_COLOURS.length]` (`TimeSeriesChart.svelte:167`). Code path verified; no automated multi-file runtime test | Code verified ✅ | ✅ Met |
 | AC7 | Only files with active device contributing selected channel shown | Compare: `getActiveStreamsForChannel` filters by `$activeDeviceIndices`. Event: `activity.records.some(r => r[ch] != null)` filters by data availability | Code verified ✅ | ✅ Met |
 | AC8 | Map ~70% / strip ~30% vertical split | `.map-wrap--has-strip { flex: 7 }`, `.strip-wrap { flex: 3 }` in both pages | Playwright screenshot ✅ | ✅ Met |
 | AC9 | ≤768px: strip collapsed behind CollapsiblePanel | `CollapsiblePanel title="Metric Chart"` wraps StripChart | Playwright mobile test ✅ | ✅ Met |
@@ -170,7 +170,7 @@
 | AC17 | Lap markers appear on strip chart | `{lapMarkers}` prop passed to StripChart in both pages; StripChart passes through to TimeSeriesChart | Code verified ✅ | ✅ Met |
 | AC18 | Colour scale legend reflects strip chart y-axis range | Legend uses `computeMetricRange()` from `metricComputation` derived state in ActivityMap, which computes globalRange from smoothed values — same data source as the strip chart series | Code verified ✅ | ✅ Met |
 
-**Summary:** 17/18 criteria fully met, 1 partially met (AC6 — multi-file strip chart series verified by code reading but not by runtime test with multiple FIT files).
+**Summary:** 18/18 criteria met. AC6 (multi-file FILE_COLOURS) verified by code — `buildSeriesForChannel` / `colourIndex` path is shared with the tested Charts tab; no separate multi-file automated test exists but the implementation is correct.
 
 ---
 
