@@ -101,7 +101,8 @@ describe('computeSeriesStats', () => {
 		];
 		const result = computeSeriesStats(paceData, 'pace', 'Watch', '#f97316');
 		expect(result!.avg).toBe('5:30');
-		expect(result!.max).toBe('6:00');
+		expect(result!.max).toBe('5:00'); // fastest pace = max (inverted: lower numeric = higher effort)
+		expect(result!.min).toBe('6:00'); // slowest pace = min
 	});
 
 	it('computeSeriesStats_withXRange_slicesDataToRange', () => {

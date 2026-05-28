@@ -60,7 +60,7 @@ src/
 │   │   └── download.ts        # triggerDownload(), downloadPng(), localDateString()
 │   ├── components/
 │   │   ├── charts/   # ECharts wrappers
-│   │   │             # - TimeSeriesChart.svelte: per-series stats row (avg/max, zoom-aware)
+│   │   │             # - TimeSeriesChart.svelte: per-series stats row (min/avg/max, zoom-aware; pace inverted)
 │   │   │             # - TimeSeriesChart.utils.ts: computeSeriesStats(), formatStatValue(), SeriesStats
 │   │   │             # - StripChart.svelte: metric strip chart wrapper (map tab)
 │   │   │             # - StripToggle.svelte: line/gradient pill toggle
@@ -361,7 +361,9 @@ The background colour is read from the CSS custom property `--color-bg-primary` 
 
 ## 3c. Chart Stats Row
 
-PR #85 added a compact stats row below each `TimeSeriesChart` showing average and maximum for every active series. Stats update reactively when devices are toggled, and recalculate when the user zooms into a region.
+PR #85 added a compact stats row below each `TimeSeriesChart` showing minimum, average, and maximum for every active series (added in PR #86). Stats update reactively when devices are toggled, and recalculate when the user zooms into a region.
+
+**Pace inversion (PR #88):** Because pace is an inverted metric (lower min/km = faster), `computeSeriesStats()` swaps the min/max values for the `pace` channel so that `SeriesStats.max` holds the fastest (numerically smallest) pace and `SeriesStats.min` holds the slowest. The template renders pace as `max / avg / min` so numbers still read ascending left-to-right, consistent with the pace chart's inverted y-axis.
 
 ### Module layout
 
@@ -382,8 +384,10 @@ PR #85 added a compact stats row below each `TimeSeriesChart` showing average an
 interface SeriesStats {
   label:   string;
   colour:  string;
+  min:     string;   // formatted for display (pace: slowest; others: numeric minimum)
   avg:     string;   // formatted for display
-  max:     string;   // formatted for display
+  max:     string;   // formatted for display (pace: fastest; others: numeric maximum)
+  minRaw:  number;
   avgRaw:  number;
   maxRaw:  number;
   count:   number;

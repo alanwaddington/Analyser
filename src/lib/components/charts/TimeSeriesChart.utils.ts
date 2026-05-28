@@ -39,8 +39,10 @@ export function effectiveAxisMode(
 export interface SeriesStats {
 	label: string;
 	colour: string;
+	min: string;
 	avg: string;
 	max: string;
+	minRaw: number;
 	avgRaw: number;
 	maxRaw: number;
 	count: number;
@@ -73,13 +75,20 @@ export function computeSeriesStats(
 	const yValues = points.map(([, y]) => y);
 	const s = summarise(yValues);
 	if (!s) return null;
+	// Pace is inverted: numerically lower = faster. Swap min/max so that
+	// "max" means fastest pace and "min" means slowest, matching the
+	// inverted y-axis convention used in the pace chart.
+	const statMin = channel === 'pace' ? s.max : s.min;
+	const statMax = channel === 'pace' ? s.min : s.max;
 	return {
 		label,
 		colour,
+		min: formatStatValue(statMin, channel),
 		avg: formatStatValue(s.avg, channel),
-		max: formatStatValue(s.max, channel),
+		max: formatStatValue(statMax, channel),
+		minRaw: statMin,
 		avgRaw: s.avg,
-		maxRaw: s.max,
+		maxRaw: statMax,
 		count: yValues.filter((v): v is number => v !== null).length,
 		xMin: xRange?.min ?? points[0][0],
 		xMax: xRange?.max ?? points[points.length - 1][0],

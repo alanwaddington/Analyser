@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractChannel, buildXValues, isDashed, effectiveAxisMode } from './TimeSeriesChart.utils.ts';
+import { extractChannel, buildXValues, isDashed, effectiveAxisMode, computeSeriesStats, formatStatValue } from './TimeSeriesChart.utils.ts';
 import type { ActivityRecord } from '$lib/types';
 
 function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
@@ -142,5 +142,115 @@ describe('effectiveAxisMode', () => {
 
 	it('effectiveAxisMode_forceUndefined_returnsStoreModeDistance', () => {
 		expect(effectiveAxisMode('distance', undefined)).toBe('distance');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// formatStatValue
+// ---------------------------------------------------------------------------
+describe('formatStatValue', () => {
+	it('formatStatValue_paceChannel_returnsMSSFormat', () => {
+		expect(formatStatValue(5.5, 'pace')).toBe('5:30');
+	});
+
+	it('formatStatValue_paceChannel_roundsToNearestSecond', () => {
+		expect(formatStatValue(4.25, 'pace')).toBe('4:15');
+	});
+
+	it('formatStatValue_heartRateChannel_returnsWholeNumber', () => {
+		expect(formatStatValue(142.7, 'heartRate')).toBe('143');
+	});
+
+	it('formatStatValue_powerChannel_returnsWholeNumber', () => {
+		expect(formatStatValue(250.9, 'power')).toBe('251');
+	});
+
+	it('formatStatValue_speedChannel_returnsOneDecimal', () => {
+		expect(formatStatValue(12.34, 'speed')).toBe('12.3');
+	});
+
+	it('formatStatValue_temperatureChannel_returnsOneDecimal', () => {
+		expect(formatStatValue(36.678, 'temperature')).toBe('36.7');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// computeSeriesStats
+// ---------------------------------------------------------------------------
+describe('computeSeriesStats', () => {
+	const heartRateData: [number, number | null][] = [
+		[0, 120], [1, 130], [2, 140], [3, 150], [4, 160],
+	];
+	const paceData: [number, number | null][] = [
+		[0, 4.0], [1, 4.5], [2, 5.0], [3, 5.5], [4, 6.0],
+	];
+	const speedData: [number, number | null][] = [
+		[0, 10.1], [1, 12.3], [2, 15.7],
+	];
+
+	it('computeSeriesStats_heartRate_returnsFormattedMin', () => {
+		const result = computeSeriesStats(heartRateData, 'heartRate', 'HR', '#ff0000');
+		expect(result).not.toBeNull();
+		expect(result!.min).toBe('120');
+	});
+
+	it('computeSeriesStats_heartRate_returnsCorrectMinRaw', () => {
+		const result = computeSeriesStats(heartRateData, 'heartRate', 'HR', '#ff0000');
+		expect(result!.minRaw).toBe(120);
+	});
+
+	it('computeSeriesStats_pace_minIsSlowestPace', () => {
+		// paceData: [4.0, 4.5, 5.0, 5.5, 6.0] — 6.0 is slowest (highest numeric = min effort)
+		const result = computeSeriesStats(paceData, 'pace', 'Pace', '#0000ff');
+		expect(result).not.toBeNull();
+		expect(result!.min).toBe('6:00');
+		expect(result!.minRaw).toBe(6.0);
+	});
+
+	it('computeSeriesStats_pace_maxIsFastestPace', () => {
+		// paceData: [4.0, 4.5, 5.0, 5.5, 6.0] — 4.0 is fastest (lowest numeric = max effort)
+		const result = computeSeriesStats(paceData, 'pace', 'Pace', '#0000ff');
+		expect(result).not.toBeNull();
+		expect(result!.max).toBe('4:00');
+		expect(result!.maxRaw).toBe(4.0);
+	});
+
+	it('computeSeriesStats_pace_avgIsUnchanged', () => {
+		const result = computeSeriesStats(paceData, 'pace', 'Pace', '#0000ff');
+		expect(result).not.toBeNull();
+		expect(result!.avg).toBe('5:00');
+	});
+
+	it('computeSeriesStats_speed_returnsFormattedMinOneDecimal', () => {
+		const result = computeSeriesStats(speedData, 'speed', 'Speed', '#00ff00');
+		expect(result).not.toBeNull();
+		expect(result!.min).toBe('10.1');
+	});
+
+	it('computeSeriesStats_withXRange_filtersBeforeComputingMin', () => {
+		// Only points with x in [1, 3] — values 130, 140, 150 → min 130
+		const result = computeSeriesStats(heartRateData, 'heartRate', 'HR', '#ff0000', { min: 1, max: 3 });
+		expect(result).not.toBeNull();
+		expect(result!.min).toBe('130');
+		expect(result!.minRaw).toBe(130);
+	});
+
+	it('computeSeriesStats_allNull_returnsNull', () => {
+		const nullData: [number, number | null][] = [[0, null], [1, null], [2, null]];
+		const result = computeSeriesStats(nullData, 'heartRate', 'HR', '#ff0000');
+		expect(result).toBeNull();
+	});
+
+	it('computeSeriesStats_withNullValues_ignoresNullsForMin', () => {
+		const mixedData: [number, number | null][] = [[0, null], [1, 100], [2, 150], [3, null]];
+		const result = computeSeriesStats(mixedData, 'heartRate', 'HR', '#ff0000');
+		expect(result).not.toBeNull();
+		expect(result!.min).toBe('100');
+	});
+
+	it('computeSeriesStats_heartRate_returnsAvgAndMax', () => {
+		const result = computeSeriesStats(heartRateData, 'heartRate', 'HR', '#ff0000');
+		expect(result!.avg).toBe('140');
+		expect(result!.max).toBe('160');
 	});
 });

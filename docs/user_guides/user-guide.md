@@ -148,10 +148,10 @@ The Charts tab displays time-series data for every active channel.
 
 **Per-series statistics:**
 
-Below each chart, a compact stats row shows the **average** and **maximum** for every active device series:
+Below each chart, a compact stats row shows the **minimum**, **average**, and **maximum** for every active device series:
 
 - Each entry is colour-coded with a dot matching the chart line so you can immediately associate the number with the series.
-- Pace averages are formatted as M:SS.
+- Pace values are formatted as M:SS. Because pace is an inverted metric (lower min/km = faster), the labels are reversed: **max** shows the fastest pace and **min** shows the slowest, displayed as `max / avg / min`. Numbers still read ascending left-to-right.
 - Hover any entry to see the exact sample count and x-axis range it covers.
 - **Zoom-aware:** when you zoom into a region, the stats recalculate using only the visible data. Zoom back out (or double-click) to see full-activity stats.
 
