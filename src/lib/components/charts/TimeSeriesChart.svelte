@@ -7,8 +7,8 @@
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
-	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode } from './TimeSeriesChart.utils.ts';
-	import type { SeriesInput } from './TimeSeriesChart.utils.ts';
+	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats } from './TimeSeriesChart.utils.ts';
+	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis } from '$lib/align/distance';
 	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
@@ -39,8 +39,22 @@
 	let container: HTMLDivElement;
 	let chart: ECharts | undefined;
 	let hiddenSeries = $state(new Set<number>());
+	let zoomRange = $state<{ min: number; max: number } | undefined>(undefined);
 
 	let resizeObserver: ResizeObserver | undefined;
+
+	const seriesStats = $derived.by<SeriesStats[]>(() => {
+		void $smoothing; void $xAxisMode; void forceDistanceAxis; void zoomRange;
+		return seriesInputs
+			.filter((_, i) => !hiddenSeries.has(i))
+			.map((s) => {
+				const data = buildData(s.activity, s.timeOffset ?? 0);
+				const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
+				const label = s.label ?? s.activity.filename;
+				return computeSeriesStats(data, channel, label, colour, zoomRange);
+			})
+			.filter((s): s is SeriesStats => s !== null);
+	});
 
 	// Theme colour helpers — reactive via isDark store
 	const textColour = () => $isDark ? '#94a3b8' : '#64748b';
@@ -234,6 +248,19 @@
 			});
 		}
 
+		// Zoom → stats sync: capture the visible x-axis extent after any dataZoom event.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.on('dataZoom', () => {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const xAxisModel = (chart as any).getModel().getComponent('xAxis', 0);
+			const extent: [number, number] | undefined = xAxisModel?.axis?.scale?.getExtent?.();
+			if (extent && extent[1] - extent[0] > 0) {
+				zoomRange = { min: extent[0], max: extent[1] };
+			} else {
+				zoomRange = undefined;
+			}
+		});
+
 		resizeObserver = new ResizeObserver(() => chart?.resize());
 		resizeObserver.observe(container);
 	});
@@ -267,6 +294,7 @@
 		void forceDistanceAxis;
 		void seriesInputs;
 		void referenceIndex;
+		zoomRange = undefined;
 		chart?.setOption(buildOption(), { notMerge: true });
 	});
 
@@ -342,6 +370,21 @@
 			</button>
 		{/each}
 	</div>
+
+	{#if seriesStats.length > 0}
+		<div class="chart-stats">
+			{#each seriesStats as stat}
+				<span
+					class="stat-entry"
+					title="{stat.count.toLocaleString()} samples · {stat.xMin.toFixed(1)}–{stat.xMax.toFixed(1)} {effectiveAxisMode($xAxisMode, forceDistanceAxis) === 'time' ? 's' : 'km'}"
+				>
+					<span class="stat-dot" style="background:{stat.colour}"></span>
+					<span class="stat-label">{stat.label}</span>
+					<span class="stat-values">avg {stat.avg} / max {stat.max} <span class="stat-unit">{stat.unit}</span></span>
+				</span>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -436,5 +479,49 @@
 		max-width: 160px;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.chart-stats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 16px;
+		padding: 6px 16px 8px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.stat-entry {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		cursor: default;
+		min-width: 0;
+	}
+
+	.stat-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.stat-label {
+		font-size: 0.6875rem;
+		color: var(--color-muted);
+		max-width: 90px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.stat-values {
+		font-size: 0.6875rem;
+		font-family: ui-monospace, 'Cascadia Code', monospace;
+		color: var(--color-text);
+		white-space: nowrap;
+	}
+
+	.stat-unit {
+		font-size: 0.625rem;
+		color: var(--color-muted);
 	}
 </style>
