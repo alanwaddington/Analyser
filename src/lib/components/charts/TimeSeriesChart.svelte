@@ -484,13 +484,14 @@
 	.chart-stats {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 16px;
+		flex-direction: column;
+		gap: 3px;
 		padding: 6px 16px 8px;
 		border-top: 1px solid var(--color-border);
 	}
 
 	.stat-entry {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		gap: 5px;
 		cursor: default;
