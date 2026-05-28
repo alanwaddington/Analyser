@@ -53,6 +53,10 @@ function lerp(records: ActivityRecord[], targetDist: number, key: ChannelKey): n
 
 	if (aVal == null || bVal == null) return null;
 
-	const t = (targetDist - a.distance) / (b.distance - a.distance);
+	const span = b.distance - a.distance;
+	// Guard: two consecutive records share the same distance (e.g. indoor trainer
+	// stopped at end of session). Interpolation would produce Infinity × 0 = NaN.
+	if (span === 0) return aVal;
+	const t = (targetDist - a.distance) / span;
 	return aVal + t * (bVal - aVal);
 }
