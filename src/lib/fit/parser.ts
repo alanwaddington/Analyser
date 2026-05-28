@@ -22,8 +22,14 @@ export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Act
 
 // ---- raw FIT types (minimal, extend as needed) ----
 
+interface FitSport {
+	sport?: string;
+	sub_sport?: string;
+}
+
 interface FitData {
 	sessions?: FitSession[];
+	sports?: FitSport[];
 	records?: FitRecord[];
 	laps?: FitLap[];
 	device_infos?: FitDeviceInfo[];
@@ -250,14 +256,17 @@ export function removeCyclingPace(records: ActivityRecord[]): void {
 
 function normalise(data: FitData, filename: string): Activity {
 	const session = data.sessions?.[0] ?? {};
+	// fit-file-parser puts sport on data.sports[0], not data.sessions[0].
+	// Fall back to session.sport for files that do populate it.
+	const sport = data.sports?.[0]?.sport ?? session.sport;
 	const rawRecords = data.records ?? [];
 
 	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
 
-	if (session.sport === 'running') {
+	if (sport === 'running') {
 		applyRunningCadenceDoubling(records);
 	}
-	if (session.sport === 'cycling') {
+	if (sport === 'cycling') {
 		removeCyclingPace(records);
 	}
 
@@ -281,7 +290,7 @@ function normalise(data: FitData, filename: string): Activity {
 	return {
 		id: crypto.randomUUID(),
 		filename,
-		sport: session.sport,
+		sport,
 		startTime: session.start_time ?? records[0]?.timestamp ?? new Date(0),
 		totalDistance: session.total_distance ?? records.at(-1)?.distance ?? 0,
 		totalElapsedTime: session.total_elapsed_time ?? records.at(-1)?.elapsedSeconds ?? 0,
