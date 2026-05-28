@@ -39,8 +39,10 @@ export function effectiveAxisMode(
 export interface SeriesStats {
 	label: string;
 	colour: string;
+	min: string;
 	avg: string;
 	max: string;
+	minRaw: number;
 	avgRaw: number;
 	maxRaw: number;
 	count: number;
@@ -76,8 +78,10 @@ export function computeSeriesStats(
 	return {
 		label,
 		colour,
+		min: formatStatValue(s.min, channel),
 		avg: formatStatValue(s.avg, channel),
 		max: formatStatValue(s.max, channel),
+		minRaw: s.min,
 		avgRaw: s.avg,
 		maxRaw: s.max,
 		count: yValues.filter((v): v is number => v !== null).length,
