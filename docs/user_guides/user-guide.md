@@ -133,7 +133,7 @@ The Charts tab displays time-series data for every active channel.
 - Each chart plots one channel (e.g. Heart Rate, Power, Pace).
 - The **X axis** is either elapsed time or distance — toggle between them with the **Time / Distance** buttons at the top.
 - Multiple devices contributing to the same channel each appear as a separate line.
-- **Pace** uses an inverted Y axis — faster pace (lower min/km) appears higher on the chart, which matches the intuition of "going faster".
+- **Pace** uses an inverted Y axis — faster pace (lower min/km) appears higher on the chart, which matches the intuition of "going faster". Pace is only shown for running activities; it is suppressed for cycling files where it is not meaningful.
 
 **Interacting with the charts:**
 
@@ -145,6 +145,17 @@ The Charts tab displays time-series data for every active channel.
 | Scroll wheel | Zoom in/out (all charts stay synchronised) |
 
 **Lap markers** appear as faint vertical lines across all charts. Hover a marker to see the lap number and split time.
+
+**Per-series statistics:**
+
+Below each chart, a compact stats row shows the **average** and **maximum** for every active device series:
+
+- Each entry is colour-coded with a dot matching the chart line so you can immediately associate the number with the series.
+- Pace averages are formatted as M:SS.
+- Hover any entry to see the exact sample count and x-axis range it covers.
+- **Zoom-aware:** when you zoom into a region, the stats recalculate using only the visible data. Zoom back out (or double-click) to see full-activity stats.
+
+> **Note:** Stats in this row reflect the current smoothing and axis mode (distance or time) and may differ slightly from the Summary tab, which uses the raw unsmoothed data from the original file.
 
 **Smoothing:**
 

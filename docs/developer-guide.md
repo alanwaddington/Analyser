@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.2 · **Last updated:** May 2026
+> **Version:** 1.3 · **Last updated:** May 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -24,6 +24,7 @@ This guide covers the technical internals of the Analyser application for contri
    - 3.11 [Local Development Setup](#311-local-development-setup)
 3a. [Map Tab — Metric Strip Chart](#3a-map-tab--metric-strip-chart)
 3b. [Data Export](#3b-data-export)
+3c. [Chart Stats Row](#3c-chart-stats-row)
 4. [Responsive Layout](#4-responsive-layout)
 5. [FIT Parsing](#5-fit-parsing)
 6. [Testing](#6-testing)
@@ -59,6 +60,8 @@ src/
 │   │   └── download.ts        # triggerDownload(), downloadPng(), localDateString()
 │   ├── components/
 │   │   ├── charts/   # ECharts wrappers
+│   │   │             # - TimeSeriesChart.svelte: per-series stats row (avg/max, zoom-aware)
+│   │   │             # - TimeSeriesChart.utils.ts: computeSeriesStats(), formatStatValue(), SeriesStats
 │   │   │             # - StripChart.svelte: metric strip chart wrapper (map tab)
 │   │   │             # - StripToggle.svelte: line/gradient pill toggle
 │   │   │             # - StripChart.utils.ts: shouldShowGradient(), GRADIENT_COLOUR_TOKEN
@@ -356,6 +359,59 @@ The background colour is read from the CSS custom property `--color-bg-primary` 
 
 ---
 
+## 3c. Chart Stats Row
+
+PR #85 added a compact stats row below each `TimeSeriesChart` showing average and maximum for every active series. Stats update reactively when devices are toggled, and recalculate when the user zooms into a region.
+
+### Module layout
+
+| File | Responsibility |
+|------|---------------|
+| `src/lib/components/charts/TimeSeriesChart.utils.ts` | `computeSeriesStats()`, `formatStatValue()`, `SeriesStats` interface |
+| `src/lib/components/charts/TimeSeriesChart.svelte` | `zoomRange` state, `seriesStats` derived value, `.chart-stats` HTML/CSS |
+
+### Key functions
+
+**`formatStatValue(value, channel)`** — formats a raw number for display. Pace channels use `paceFormat()` (M:SS); integer channels (heartRate, power, cadence) round to zero decimal places; float channels (speed, temperature) show one decimal.
+
+**`computeSeriesStats(data, channel, label, colour, xRange?)`** — slices `data` to the optional `xRange` window, passes y-values to `summarise()`, and returns a `SeriesStats` object (or `null` if no data). The `xRange` is provided by the zoom handler.
+
+**`SeriesStats` interface:**
+
+```ts
+interface SeriesStats {
+  label:   string;
+  colour:  string;
+  avg:     string;   // formatted for display
+  max:     string;   // formatted for display
+  avgRaw:  number;
+  maxRaw:  number;
+  count:   number;
+  xMin:    number;
+  xMax:    number;
+  unit:    string;
+}
+```
+
+### Zoom integration
+
+`TimeSeriesChart.svelte` listens to ECharts' `dataZoom` event. When a zoom is active, the x-axis extent is read from ECharts' internal model via `chart.getModel().getComponent('xAxis', 0)` and stored in `zoomRange`. The `seriesStats` derived value re-runs whenever `zoomRange` changes, slicing each series' data to the visible window.
+
+`zoomRange` is reset to `undefined` on every chart rebuild (new data, smoothing change, axis mode change), so stats always reflect the full dataset after a rebuild.
+
+### Data source vs Summary tab
+
+The stats row and the Summary tab use the same `summarise()` function but different data sources:
+
+| Surface | Data source | Notes |
+|---------|-------------|-------|
+| Stats row | `buildData()` | Smoothed; distance-axis interpolated when in distance mode |
+| Summary tab | `extractChannel(activity.records, ch)` | Raw unsmoothed records |
+
+When smoothing is 1 s and the axis is time, the two surfaces agree closely. In distance mode or with smoothing > 1 s, values may differ. Both surfaces carry a `title` tooltip explaining the difference.
+
+---
+
 ## 4. Responsive Layout
 
 The app is fully responsive across three viewport tiers. Breakpoints are defined in two places that must stay in sync:
@@ -387,6 +443,15 @@ Key parsing details:
 - Two-pass channel allocation: external sensors (known ANT+ types) claim channels first; the watch claims remaining channels; any still-unclaimed channels are merged into the first device as a safety net.
 - Enhanced fields: `enhanced_speed` and `enhanced_altitude` are preferred over `speed` and `altitude`.
 - Stryd developer fields: `Power` (capital P), `stance_time`, `step_length` are mapped to standard channel keys.
+
+**Sport-specific post-processing** is applied after record normalisation:
+
+| Sport | Function | Reason |
+|-------|----------|--------|
+| `running` | `applyRunningCadenceDoubling(records)` | FIT cadence is single-leg (one foot per minute). Doubles to get conventional spm (steps per minute). |
+| `cycling` | `removeCyclingPace(records)` | Pace (min/km) is not a meaningful cycling metric. Clears all `pace` values so the channel is excluded from device streams and charts entirely. |
+
+Both functions are exported from `parser.ts` for unit testing.
 
 ---
 
