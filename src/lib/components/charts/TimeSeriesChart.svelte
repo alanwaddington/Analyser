@@ -372,7 +372,7 @@
 	</div>
 
 	{#if seriesStats.length > 0}
-		<div class="chart-stats">
+		<div class="chart-stats" title="Chart view statistics — reflects current smoothing and axis mode. May differ from the Summary tab.">
 			{#each seriesStats as stat}
 				<span
 					class="stat-entry"

@@ -431,7 +431,10 @@
 							<tr class="row-subheader">
 								<td class="cell-label cell-label--subheader">Channel</td>
 								{#each activeCrossFileStreams as _cfs}
-									<td class="cell-stat cell-stat--subheader">avg / max / min</td>
+									<td
+										class="cell-stat cell-stat--subheader"
+										title="Raw file statistics — time-weighted, unsmoothed. May differ from the chart stats row when smoothing or distance mode is active."
+									>avg / max / min</td>
 								{/each}
 							</tr>
 							{#each activeChannels as ch, rowIdx}

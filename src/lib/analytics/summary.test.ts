@@ -12,7 +12,7 @@ describe('summarise', () => {
 	it('summarise_withNulls_ignoresNulls', () => {
 		const result = summarise([100, null, 300]);
 		expect(result?.avg).toBe(200);
-		expect(result?.count).toBeUndefined(); // count not part of interface
+		expect((result as unknown as Record<string, unknown>)?.['count']).toBeUndefined(); // count not part of interface
 		expect(result?.max).toBe(300);
 	});
 
