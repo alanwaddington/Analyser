@@ -233,11 +233,24 @@ export function buildDeviceStreams(
 	return streams;
 }
 
+// Running cadence in FIT files is single-leg (one foot per minute).
+// Double it so the displayed value matches the conventional spm (steps per minute).
+// Cycling cadence is full revolutions — no adjustment needed.
+export function applyRunningCadenceDoubling(records: ActivityRecord[]): void {
+	for (const r of records) {
+		if (r.cadence != null) r.cadence = r.cadence * 2;
+	}
+}
+
 function normalise(data: FitData, filename: string): Activity {
 	const session = data.sessions?.[0] ?? {};
 	const rawRecords = data.records ?? [];
 
 	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
+
+	if (session.sport === 'running') {
+		applyRunningCadenceDoubling(records);
+	}
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -243,5 +243,32 @@ describe('buildDeviceStreams', () => {
 		expect(channelStream).toBeDefined();
 		expect(channelStream?.channels).toContain('heartRate');
 		expect(channelStream?.channels).toContain('speed');
+	});
+});
+
+describe('applyRunningCadenceDoubling', () => {
+	function makeRecord(cadence?: number): ActivityRecord {
+		return { timestamp: new Date(), elapsedSeconds: 0, distance: 0, cadence } as ActivityRecord;
+	}
+
+	it('applyRunningCadenceDoubling_withCadence_doublesValue', () => {
+		const records = [makeRecord(85), makeRecord(90)];
+		applyRunningCadenceDoubling(records);
+		expect(records[0].cadence).toBe(170);
+		expect(records[1].cadence).toBe(180);
+	});
+
+	it('applyRunningCadenceDoubling_nullCadence_leavesUndefined', () => {
+		const records = [makeRecord(undefined)];
+		applyRunningCadenceDoubling(records);
+		expect(records[0].cadence).toBeUndefined();
+	});
+
+	it('applyRunningCadenceDoubling_mixedRecords_onlyDoublesNonNull', () => {
+		const records = [makeRecord(85), makeRecord(undefined), makeRecord(90)];
+		applyRunningCadenceDoubling(records);
+		expect(records[0].cadence).toBe(170);
+		expect(records[1].cadence).toBeUndefined();
+		expect(records[2].cadence).toBe(180);
 	});
 });

@@ -13,7 +13,7 @@ export interface ActivityRecord {
 	power?: number; // watts
 	powerLeft?: number;
 	powerRight?: number;
-	cadence?: number; // rpm
+	cadence?: number; // rpm (cycling) or spm (running, already doubled by parser)
 	altitude?: number; // metres
 	temperature?: number; // °C
 	coreTemperature?: number; // °C
