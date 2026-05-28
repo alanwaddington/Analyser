@@ -73,7 +73,6 @@ export function computeSeriesStats(
 	const yValues = points.map(([, y]) => y);
 	const s = summarise(yValues);
 	if (!s) return null;
-	const xValues = points.map(([x]) => x);
 	return {
 		label,
 		colour,
@@ -82,8 +81,8 @@ export function computeSeriesStats(
 		avgRaw: s.avg,
 		maxRaw: s.max,
 		count: yValues.filter((v): v is number => v !== null).length,
-		xMin: xRange?.min ?? Math.min(...xValues),
-		xMax: xRange?.max ?? Math.max(...xValues),
+		xMin: xRange?.min ?? points[0][0],
+		xMax: xRange?.max ?? points[points.length - 1][0],
 		unit: CHANNEL_META[channel].unit,
 	};
 }

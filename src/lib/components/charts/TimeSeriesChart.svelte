@@ -483,7 +483,6 @@
 
 	.chart-stats {
 		display: flex;
-		flex-wrap: wrap;
 		flex-direction: column;
 		gap: 3px;
 		padding: 6px 16px 8px;
