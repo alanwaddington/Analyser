@@ -242,6 +242,12 @@ export function applyRunningCadenceDoubling(records: ActivityRecord[]): void {
 	}
 }
 
+// Pace (min/km) is not a meaningful metric for cycling. Clear it so the pace
+// channel is excluded from device streams and charts for cycling activities.
+export function removeCyclingPace(records: ActivityRecord[]): void {
+	for (const r of records) r.pace = undefined;
+}
+
 function normalise(data: FitData, filename: string): Activity {
 	const session = data.sessions?.[0] ?? {};
 	const rawRecords = data.records ?? [];
@@ -250,6 +256,9 @@ function normalise(data: FitData, filename: string): Activity {
 
 	if (session.sport === 'running') {
 		applyRunningCadenceDoubling(records);
+	}
+	if (session.sport === 'cycling') {
+		removeCyclingPace(records);
 	}
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);

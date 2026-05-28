@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -270,5 +270,32 @@ describe('applyRunningCadenceDoubling', () => {
 		expect(records[0].cadence).toBe(170);
 		expect(records[1].cadence).toBeUndefined();
 		expect(records[2].cadence).toBe(180);
+	});
+});
+
+describe('removeCyclingPace', () => {
+	function makeRecord(pace?: number): ActivityRecord {
+		return { timestamp: new Date(), elapsedSeconds: 0, distance: 0, pace } as ActivityRecord;
+	}
+
+	it('removeCyclingPace_withPace_clearsPaceToUndefined', () => {
+		const records = [makeRecord(2.5), makeRecord(3.1)];
+		removeCyclingPace(records);
+		expect(records[0].pace).toBeUndefined();
+		expect(records[1].pace).toBeUndefined();
+	});
+
+	it('removeCyclingPace_noPace_remainsUndefined', () => {
+		const records = [makeRecord(undefined)];
+		removeCyclingPace(records);
+		expect(records[0].pace).toBeUndefined();
+	});
+
+	it('removeCyclingPace_mixedRecords_clearsAll', () => {
+		const records = [makeRecord(2.5), makeRecord(undefined), makeRecord(3.1)];
+		removeCyclingPace(records);
+		expect(records[0].pace).toBeUndefined();
+		expect(records[1].pace).toBeUndefined();
+		expect(records[2].pace).toBeUndefined();
 	});
 });
