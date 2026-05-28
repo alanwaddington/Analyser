@@ -199,7 +199,7 @@ describe('computeSeriesStats', () => {
 		expect(result!.minRaw).toBe(120);
 	});
 
-	it('computeSeriesStats_pace_minIsSlowstPace', () => {
+	it('computeSeriesStats_pace_minIsSlowestPace', () => {
 		// paceData: [4.0, 4.5, 5.0, 5.5, 6.0] — 6.0 is slowest (highest numeric = min effort)
 		const result = computeSeriesStats(paceData, 'pace', 'Pace', '#0000ff');
 		expect(result).not.toBeNull();
