@@ -380,7 +380,7 @@
 				>
 					<span class="stat-dot" style="background:{stat.colour}"></span>
 					<span class="stat-label">{stat.label}</span>
-					<span class="stat-values">min {stat.min} / avg {stat.avg} / max {stat.max} <span class="stat-unit">{stat.unit}</span></span>
+					<span class="stat-values">{#if channel === 'pace'}max {stat.max} / avg {stat.avg} / min {stat.min}{:else}min {stat.min} / avg {stat.avg} / max {stat.max}{/if} <span class="stat-unit">{stat.unit}</span></span>
 				</span>
 			{/each}
 		</div>

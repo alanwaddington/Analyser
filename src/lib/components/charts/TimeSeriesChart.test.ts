@@ -199,10 +199,26 @@ describe('computeSeriesStats', () => {
 		expect(result!.minRaw).toBe(120);
 	});
 
-	it('computeSeriesStats_pace_returnsFormattedMinAsMSS', () => {
+	it('computeSeriesStats_pace_minIsSlowestPace', () => {
+		// paceData: [4.0, 4.5, 5.0, 5.5, 6.0] — 6.0 is slowest (highest numeric = min effort)
 		const result = computeSeriesStats(paceData, 'pace', 'Pace', '#0000ff');
 		expect(result).not.toBeNull();
-		expect(result!.min).toBe('4:00');
+		expect(result!.min).toBe('6:00');
+		expect(result!.minRaw).toBe(6.0);
+	});
+
+	it('computeSeriesStats_pace_maxIsFastestPace', () => {
+		// paceData: [4.0, 4.5, 5.0, 5.5, 6.0] — 4.0 is fastest (lowest numeric = max effort)
+		const result = computeSeriesStats(paceData, 'pace', 'Pace', '#0000ff');
+		expect(result).not.toBeNull();
+		expect(result!.max).toBe('4:00');
+		expect(result!.maxRaw).toBe(4.0);
+	});
+
+	it('computeSeriesStats_pace_avgIsUnchanged', () => {
+		const result = computeSeriesStats(paceData, 'pace', 'Pace', '#0000ff');
+		expect(result).not.toBeNull();
+		expect(result!.avg).toBe('5:00');
 	});
 
 	it('computeSeriesStats_speed_returnsFormattedMinOneDecimal', () => {
