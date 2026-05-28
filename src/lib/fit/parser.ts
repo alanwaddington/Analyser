@@ -233,11 +233,33 @@ export function buildDeviceStreams(
 	return streams;
 }
 
+// Running cadence in FIT files is single-leg (one foot per minute).
+// Double it so the displayed value matches the conventional spm (steps per minute).
+// Cycling cadence is full revolutions — no adjustment needed.
+export function applyRunningCadenceDoubling(records: ActivityRecord[]): void {
+	for (const r of records) {
+		if (r.cadence != null) r.cadence = r.cadence * 2;
+	}
+}
+
+// Pace (min/km) is not a meaningful metric for cycling. Clear it so the pace
+// channel is excluded from device streams and charts for cycling activities.
+export function removeCyclingPace(records: ActivityRecord[]): void {
+	for (const r of records) r.pace = undefined;
+}
+
 function normalise(data: FitData, filename: string): Activity {
 	const session = data.sessions?.[0] ?? {};
 	const rawRecords = data.records ?? [];
 
 	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
+
+	if (session.sport === 'running') {
+		applyRunningCadenceDoubling(records);
+	}
+	if (session.sport === 'cycling') {
+		removeCyclingPace(records);
+	}
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
 

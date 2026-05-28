@@ -1,4 +1,6 @@
 import type { Activity, ActivityRecord, ChannelKey } from '$lib/types';
+import { CHANNEL_META } from '$lib/types';
+import { summarise } from '$lib/analytics/summary';
 
 export interface SeriesInput {
 	activity: Activity;
@@ -32,6 +34,57 @@ export function effectiveAxisMode(
 	forceDistanceAxis?: boolean,
 ): 'time' | 'distance' {
 	return forceDistanceAxis ? 'distance' : storeMode;
+}
+
+export interface SeriesStats {
+	label: string;
+	colour: string;
+	avg: string;
+	max: string;
+	avgRaw: number;
+	maxRaw: number;
+	count: number;
+	xMin: number;
+	xMax: number;
+	unit: string;
+}
+
+const INTEGER_CHANNELS = new Set<ChannelKey>([
+	'heartRate', 'power', 'powerLeft', 'powerRight', 'cadence',
+	'altitude', 'groundContactTime', 'strideLength',
+]);
+
+export function formatStatValue(value: number, channel: ChannelKey): string {
+	if (channel === 'pace') return paceFormat(value);
+	if (INTEGER_CHANNELS.has(channel)) return value.toFixed(0);
+	return value.toFixed(1);
+}
+
+export function computeSeriesStats(
+	data: [number, number | null][],
+	channel: ChannelKey,
+	label: string,
+	colour: string,
+	xRange?: { min: number; max: number },
+): SeriesStats | null {
+	const points = xRange
+		? data.filter(([x]) => x >= xRange.min && x <= xRange.max)
+		: data;
+	const yValues = points.map(([, y]) => y);
+	const s = summarise(yValues);
+	if (!s) return null;
+	return {
+		label,
+		colour,
+		avg: formatStatValue(s.avg, channel),
+		max: formatStatValue(s.max, channel),
+		avgRaw: s.avg,
+		maxRaw: s.max,
+		count: yValues.filter((v): v is number => v !== null).length,
+		xMin: xRange?.min ?? points[0][0],
+		xMax: xRange?.max ?? points[points.length - 1][0],
+		unit: CHANNEL_META[channel].unit,
+	};
 }
 
 export function paceFormat(decimalMinutes: number): string {

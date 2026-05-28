@@ -5,7 +5,7 @@ export interface ChannelSummary {
 }
 
 export function summarise(values: (number | null)[]): ChannelSummary | null {
-	const nums = values.filter((v): v is number => v != null);
+	const nums = values.filter((v): v is number => v != null && !Number.isNaN(v));
 	if (nums.length === 0) return null;
 	return {
 		avg: nums.reduce((a, b) => a + b, 0) / nums.length,
