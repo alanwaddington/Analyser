@@ -34,6 +34,11 @@ interface FitEvent {
 	timestamp?: Date;
 }
 
+interface FitWorkoutStep {
+	timestamp?: Date;
+	duration_value?: number;
+}
+
 interface FitData {
 	sessions?: FitSession[];
 	sports?: FitSport[];
@@ -41,10 +46,12 @@ interface FitData {
 	laps?: FitLap[];
 	device_infos?: FitDeviceInfo[];
 	events?: FitEvent[];
+	workout_steps?: FitWorkoutStep[];
 }
 
 interface FitSession {
 	sport?: string;
+	sub_sport?: string;
 	start_time?: Date;
 	total_distance?: number;
 	total_elapsed_time?: number;
@@ -275,6 +282,41 @@ export function extractTimerStartTime(events: any[]): Date | null {
 	return null;
 }
 
+/** Returns the index of the first record where speed > 0, power > 0, or cadence > 0, or null. */
+export function findFirstIndoorMovementIndex(records: ActivityRecord[]): number | null {
+	for (let i = 0; i < records.length; i++) {
+		const r = records[i];
+		if ((r.speed ?? 0) > 0 || (r.power ?? 0) > 0 || (r.cadence ?? 0) > 0) return i;
+	}
+	return null;
+}
+
+/** Returns the timestamp of the first workout_step message, or null. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function extractFirstWorkoutStepTime(steps: any[]): Date | null {
+	const first = steps[0];
+	if (first?.timestamp != null) return first.timestamp as Date;
+	return null;
+}
+
+const INDOOR_SUB_SPORTS = new Set([
+	'indoor_cycling', 'virtual_activity', 'spin', 'stationary_bike',
+	'treadmill', 'indoor_rowing', 'indoor_running', 'indoor_walking',
+	'virtual_ride', 'virtual_run',
+]);
+
+/**
+ * Returns true when the activity should be treated as indoor.
+ * Uses sub_sport as the primary signal; falls back to GPS-absence only when
+ * sub_sport is entirely absent (undefined), covering older devices that omit it.
+ */
+export function classifyIndoor(subSport: string | undefined, records: ActivityRecord[]): boolean {
+	if (subSport !== undefined) return INDOOR_SUB_SPORTS.has(subSport);
+	// GPS-absence fallback: only fires when sub_sport is missing AND there are records.
+	if (records.length === 0) return false;
+	return records.every(r => r.position == null);
+}
+
 // Running cadence in FIT files is single-leg (one foot per minute).
 // Double it so the displayed value matches the conventional spm (steps per minute).
 // Cycling cadence is full revolutions — no adjustment needed.
@@ -295,6 +337,7 @@ function normalise(data: FitData, filename: string): Activity {
 	// fit-file-parser puts sport on data.sports[0], not data.sessions[0].
 	// Fall back to session.sport for files that do populate it.
 	const sport = data.sports?.[0]?.sport ?? session.sport;
+	const subSport = data.sports?.[0]?.sub_sport ?? session.sub_sport;
 	const rawRecords = data.records ?? [];
 
 	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
@@ -326,15 +369,23 @@ function normalise(data: FitData, filename: string): Activity {
 	const startTime = session.start_time ?? records[0]?.timestamp ?? new Date(0);
 	const firstGpsFixIndex = findFirstGpsFixIndex(records);
 	const firstGpsMovementIndex = findFirstGpsMovementIndex(records);
+	const firstIndoorMovementIndex = findFirstIndoorMovementIndex(records);
 	const timerStartTime = extractTimerStartTime(data.events ?? []);
+	const firstWorkoutStepTime = extractFirstWorkoutStepTime(data.workout_steps ?? []);
+	const isIndoor = classifyIndoor(subSport, records);
 
-	// findAnchor only needs these five fields; safe to cast the partial object.
-	const anchor = findAnchor({ records, firstGpsFixIndex, firstGpsMovementIndex, timerStartTime, startTime } as Activity);
+	// findAnchor reads these fields from the Activity; safe to cast the partial object.
+	const anchor = findAnchor({
+		records, firstGpsFixIndex, firstGpsMovementIndex, firstIndoorMovementIndex,
+		timerStartTime, firstWorkoutStepTime, startTime, isIndoor,
+	} as Activity);
 
 	return {
 		id: crypto.randomUUID(),
 		filename,
 		sport,
+		subSport,
+		isIndoor,
 		startTime,
 		totalDistance: session.total_distance ?? records.at(-1)?.distance ?? 0,
 		totalElapsedTime: session.total_elapsed_time ?? records.at(-1)?.elapsedSeconds ?? 0,
@@ -344,6 +395,8 @@ function normalise(data: FitData, filename: string): Activity {
 		deviceStreams,
 		firstGpsFixIndex,
 		firstGpsMovementIndex,
+		firstIndoorMovementIndex,
+		firstWorkoutStepTime,
 		timerStartTime,
 		anchor,
 	};

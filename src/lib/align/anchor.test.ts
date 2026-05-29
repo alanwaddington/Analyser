@@ -25,6 +25,10 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
 		firstGpsFixIndex: null,
 		firstGpsMovementIndex: null,
 		timerStartTime: null,
+		firstIndoorMovementIndex: null,
+		firstWorkoutStepTime: null,
+		subSport: undefined,
+		isIndoor: false,
 		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
 		...overrides,
 	};
@@ -252,5 +256,119 @@ describe('GPS_PROXIMITY_THRESHOLD_M', () => {
 	it('GPS_PROXIMITY_THRESHOLD_M_isAtLeast15metres', () => {
 		// Must be generous enough to accommodate Parkrun crowd spread
 		expect(GPS_PROXIMITY_THRESHOLD_M).toBeGreaterThanOrEqual(15);
+	});
+});
+
+// ---- findAnchor: indoor hierarchy ----
+
+describe('findAnchor — indoor anchor hierarchy', () => {
+	const T0 = new Date('2025-01-01T10:00:00Z');
+	const T_TIMER = new Date('2025-01-01T10:00:05Z');
+	const T_WORKOUT = new Date('2025-01-01T10:00:10Z');
+
+	function makeIndoorActivity(overrides: Partial<Activity> = {}): Activity {
+		return makeActivity({ isIndoor: true, ...overrides });
+	}
+
+	it('findAnchor_indoor_timerPresent_usesTimer', () => {
+		const r0 = makeRecord({ timestamp: T0, elapsedSeconds: 0, distance: 0 });
+		const r1 = makeRecord({ timestamp: T_TIMER, elapsedSeconds: 5, distance: 0 });
+		const activity = makeIndoorActivity({
+			records: [r0, r1],
+			timerStartTime: T_TIMER,
+			firstWorkoutStepTime: T_WORKOUT,
+			firstIndoorMovementIndex: 1,
+		});
+		const anchor = findAnchor(activity);
+		expect(anchor.source).toBe('timer');
+		expect(anchor.recordIndex).toBe(1);
+	});
+
+	it('findAnchor_indoor_noTimer_workoutStepPresent_usesWorkoutStep', () => {
+		const r0 = makeRecord({ timestamp: T0, elapsedSeconds: 0, distance: 0 });
+		const r1 = makeRecord({ timestamp: T_WORKOUT, elapsedSeconds: 10, distance: 0, power: 100 });
+		const activity = makeIndoorActivity({
+			records: [r0, r1],
+			timerStartTime: null,
+			firstWorkoutStepTime: T_WORKOUT,
+			firstIndoorMovementIndex: 1,
+		});
+		const anchor = findAnchor(activity);
+		expect(anchor.source).toBe('workoutStep');
+		expect(anchor.recordIndex).toBe(1);
+	});
+
+	it('findAnchor_indoor_noTimerNoWorkout_movementPresent_usesIndoorMovement', () => {
+		const r0 = makeRecord({ timestamp: T0, elapsedSeconds: 0, distance: 0, power: 0 });
+		const r1 = makeRecord({ timestamp: T_WORKOUT, elapsedSeconds: 10, distance: 10, power: 150 });
+		const activity = makeIndoorActivity({
+			records: [r0, r1],
+			timerStartTime: null,
+			firstWorkoutStepTime: null,
+			firstIndoorMovementIndex: 1,
+		});
+		const anchor = findAnchor(activity);
+		expect(anchor.source).toBe('indoorMovement');
+		expect(anchor.recordIndex).toBe(1);
+	});
+
+	it('findAnchor_indoor_noSignals_usesFileStart', () => {
+		const r0 = makeRecord({ timestamp: T0, elapsedSeconds: 0, distance: 0 });
+		const activity = makeIndoorActivity({
+			records: [r0],
+			timerStartTime: null,
+			firstWorkoutStepTime: null,
+			firstIndoorMovementIndex: null,
+			startTime: T0,
+		});
+		const anchor = findAnchor(activity);
+		expect(anchor.source).toBe('fileStart');
+	});
+
+	it('findAnchor_indoor_doesNotUseGpsMovement', () => {
+		// Even when firstGpsMovementIndex is populated (fake GPS), indoor path ignores it
+		const r0 = makeRecord({ timestamp: T0, position: { lat: 51.5, lon: -0.1 } });
+		const r1 = makeRecord({ timestamp: T_TIMER, elapsedSeconds: 5, distance: 10, speed: 5, position: { lat: 51.501, lon: -0.1 } });
+		const activity = makeIndoorActivity({
+			records: [r0, r1],
+			firstGpsFixIndex: 0,
+			firstGpsMovementIndex: 1,
+			timerStartTime: null,
+			firstWorkoutStepTime: null,
+			firstIndoorMovementIndex: 1,
+		});
+		const anchor = findAnchor(activity);
+		expect(anchor.source).toBe('indoorMovement');
+	});
+
+	it('findAnchor_indoor_timerOutsideTolerance_fallsBackToWorkoutStep', () => {
+		const farTimer = new Date(T0.getTime() + 120_000); // 2 min after any record
+		const r0 = makeRecord({ timestamp: T0, elapsedSeconds: 0 });
+		const activity = makeIndoorActivity({
+			records: [r0],
+			timerStartTime: farTimer,
+			firstWorkoutStepTime: T_WORKOUT,
+			firstIndoorMovementIndex: null,
+		});
+		const anchor = findAnchor(activity);
+		// Timer is out of tolerance — should fall to workoutStep
+		expect(anchor.source).toBe('workoutStep');
+	});
+
+	it('findAnchor_outdoor_indoorFieldsPresent_stillUsesGpsMovement', () => {
+		// Outdoor activities should continue using GPS signals even if indoor fields are populated
+		const r0 = makeRecord({ timestamp: T0, distance: 0, position: { lat: 51.5, lon: -0.1 } });
+		const r1 = makeRecord({ timestamp: T_TIMER, elapsedSeconds: 5, distance: 10, speed: 5, position: { lat: 51.501, lon: -0.1 } });
+		const activity = makeActivity({
+			isIndoor: false,
+			records: [r0, r1],
+			firstGpsFixIndex: 0,
+			firstGpsMovementIndex: 1,
+			firstIndoorMovementIndex: 1,
+			timerStartTime: null,
+			firstWorkoutStepTime: null,
+		});
+		const anchor = findAnchor(activity);
+		expect(anchor.source).toBe('gpsMovement');
 	});
 });

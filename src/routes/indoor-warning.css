@@ -1,0 +1,26 @@
+/**
+ * Shared styles for indoor-session warning and info banners, and the disabled
+ * Distance axis button. Used by both /compare and /event pages.
+ *
+ * .indoor-info     — blue informational banner for all-indoor sessions
+ * .axis-btn:disabled — greyed-out state when distance mode is unavailable
+ */
+
+.indoor-info {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 16px;
+	background: rgba(59, 130, 246, 0.08);
+	border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+	flex-shrink: 0;
+}
+
+.indoor-info .warning-icon {
+	color: #60a5fa;
+}
+
+.axis-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}

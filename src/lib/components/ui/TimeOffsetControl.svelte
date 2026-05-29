@@ -1,27 +1,13 @@
 <script lang="ts">
 	import type { Activity, AnchorSource } from '$lib/types';
 	import { timeOffsets } from '$lib/stores/session';
-	import { nudgeOffset, parseOffset } from './TimeOffsetControl.utils.ts';
+	import { nudgeOffset, parseOffset, ANCHOR_LABELS, ANCHOR_TITLES } from './TimeOffsetControl.utils.ts';
 
 	let { activities, autoOffsets, anchorSources = new Map() }: {
 		activities: Activity[];
 		autoOffsets: Map<string, number>;
 		anchorSources?: Map<string, AnchorSource>;
 	} = $props();
-
-	const ANCHOR_LABELS: Record<AnchorSource, string> = {
-		timer:       'Timer',
-		gpsMovement: 'GPS move',
-		gpsFix:      'GPS fix',
-		fileStart:   'File start',
-	};
-
-	const ANCHOR_TITLES: Record<AnchorSource, string> = {
-		timer:       'Aligned by FIT timer start event',
-		gpsMovement: 'Aligned by first GPS movement',
-		gpsFix:      'Aligned by first GPS fix (stationary)',
-		fileStart:   'No GPS — aligned by file start time',
-	};
 
 	let expanded = $state(false);
 
@@ -347,5 +333,11 @@
 	.toc-anchor--fileStart {
 		background: color-mix(in srgb, var(--color-border) 40%, transparent);
 		color: var(--color-muted);
+	}
+
+	.toc-anchor--workoutStep,
+	.toc-anchor--indoorMovement {
+		background: rgba(34, 197, 94, 0.15);
+		color: #4ade80;
 	}
 </style>

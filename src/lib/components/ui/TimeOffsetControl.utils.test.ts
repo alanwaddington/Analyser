@@ -5,6 +5,8 @@ import {
 	parseOffset,
 	MIN_OFFSET_SECONDS,
 	MAX_OFFSET_SECONDS,
+	ANCHOR_LABELS,
+	ANCHOR_TITLES,
 } from './TimeOffsetControl.utils.ts';
 
 // ---- clamp ----
@@ -112,5 +114,60 @@ describe('parseOffset', () => {
 
 	it('parseOffset_negativeValue_returnsNegative', () => {
 		expect(parseOffset(-30)).toBe(-30);
+	});
+});
+
+// ---- ANCHOR_LABELS ----
+
+describe('ANCHOR_LABELS', () => {
+	it('ANCHOR_LABELS_timer_isTimer', () => {
+		expect(ANCHOR_LABELS.timer).toBe('Timer');
+	});
+
+	it('ANCHOR_LABELS_gpsMovement_isGpsMove', () => {
+		expect(ANCHOR_LABELS.gpsMovement).toBe('GPS move');
+	});
+
+	it('ANCHOR_LABELS_gpsFix_isGpsFix', () => {
+		expect(ANCHOR_LABELS.gpsFix).toBe('GPS fix');
+	});
+
+	it('ANCHOR_LABELS_fileStart_isFileStart', () => {
+		expect(ANCHOR_LABELS.fileStart).toBe('File start');
+	});
+
+	it('ANCHOR_LABELS_workoutStep_isWorkout', () => {
+		expect(ANCHOR_LABELS.workoutStep).toBe('Workout');
+	});
+
+	it('ANCHOR_LABELS_indoorMovement_isIndoor', () => {
+		expect(ANCHOR_LABELS.indoorMovement).toBe('Indoor');
+	});
+
+	it('ANCHOR_LABELS_allValuesFitBadgePill', () => {
+		// All labels must be ≤10 characters to fit the narrow TOC row
+		for (const [source, label] of Object.entries(ANCHOR_LABELS)) {
+			expect(label.length, `${source} label "${label}" exceeds 10 chars`).toBeLessThanOrEqual(10);
+		}
+	});
+});
+
+// ---- ANCHOR_TITLES ----
+
+describe('ANCHOR_TITLES', () => {
+	it('ANCHOR_TITLES_workoutStep_describesWorkoutStep', () => {
+		expect(ANCHOR_TITLES.workoutStep).toBe('Aligned by first workout step');
+	});
+
+	it('ANCHOR_TITLES_indoorMovement_describesIndoorMovement', () => {
+		expect(ANCHOR_TITLES.indoorMovement).toBe('Aligned by first indoor movement (speed/power/cadence)');
+	});
+
+	it('ANCHOR_TITLES_allSourcesCovered', () => {
+		const sources = ['timer', 'gpsMovement', 'gpsFix', 'fileStart', 'workoutStep', 'indoorMovement'];
+		for (const source of sources) {
+			expect(ANCHOR_TITLES).toHaveProperty(source);
+			expect(typeof ANCHOR_TITLES[source as keyof typeof ANCHOR_TITLES]).toBe('string');
+		}
 	});
 });
