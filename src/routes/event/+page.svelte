@@ -90,7 +90,22 @@
 
 	const locationMismatch = $derived($activities.length > 1 && anchorsAreDistant($activities));
 	let locationWarningDismissed = $state(false);
-	$effect(() => { void $activities; locationWarningDismissed = false; });
+
+	const hasMixedIndoorOutdoor = $derived(
+		$activities.length > 1 &&
+		$activities.some(a => a.isIndoor) &&
+		$activities.some(a => !a.isIndoor)
+	);
+	const allIndoor = $derived($activities.length > 0 && $activities.every(a => a.isIndoor));
+	let mixedWarningDismissed = $state(false);
+	let indoorInfoDismissed = $state(false);
+
+	$effect(() => { void $activities; locationWarningDismissed = false; mixedWarningDismissed = false; indoorInfoDismissed = false; });
+
+	// Force Time mode when a mixed session is detected
+	$effect(() => {
+		if (hasMixedIndoorOutdoor && $xAxisMode === 'distance') xAxisMode.set('time');
+	});
 
 	$effect(() => {
 		if ($activities.length === 0) goto('/');
@@ -258,10 +273,28 @@
 							class:axis-active={$xAxisMode === 'distance'}
 							onclick={() => xAxisMode.set('distance')}
 							aria-pressed={$xAxisMode === 'distance'}
+							disabled={hasMixedIndoorOutdoor}
+							title={hasMixedIndoorOutdoor ? 'Distance mode unavailable — indoor and outdoor files have incompatible distance axes' : undefined}
 						>Distance</button>
 					</div>
 				</div>
 			</CollapsiblePanel>
+
+			{#if hasMixedIndoorOutdoor && !mixedWarningDismissed}
+				<div class="location-warning" role="alert" aria-live="polite">
+					<span class="warning-icon" aria-hidden="true">⚠</span>
+					<span class="warning-text">Indoor and outdoor files loaded — distance axes are incompatible. Switch to Time mode for a meaningful comparison.</span>
+					<button class="warning-dismiss" onclick={() => mixedWarningDismissed = true} aria-label="Dismiss mixed session warning">✕</button>
+				</div>
+			{/if}
+
+			{#if allIndoor && !hasMixedIndoorOutdoor && !indoorInfoDismissed}
+				<div class="indoor-info" role="status" aria-live="polite">
+					<span class="warning-icon" aria-hidden="true">ℹ</span>
+					<span class="warning-text">All files are indoor activities — distance values are device-estimated, not GPS-measured.</span>
+					<button class="warning-dismiss" onclick={() => indoorInfoDismissed = true} aria-label="Dismiss indoor info">✕</button>
+				</div>
+			{/if}
 
 			{#if locationMismatch && !locationWarningDismissed}
 				<div class="location-warning" role="alert" aria-live="polite">
@@ -487,6 +520,11 @@
 		color: #fff;
 	}
 
+	.axis-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
 	.charts-scroll {
 		flex: 1;
 		overflow-y: auto;
@@ -656,6 +694,20 @@
 		background: rgba(245, 158, 11, 0.08);
 		border-bottom: 1px solid rgba(245, 158, 11, 0.25);
 		flex-shrink: 0;
+	}
+
+	.indoor-info {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 16px;
+		background: rgba(59, 130, 246, 0.08);
+		border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+		flex-shrink: 0;
+	}
+
+	.indoor-info .warning-icon {
+		color: #60a5fa;
 	}
 
 	.warning-icon {
