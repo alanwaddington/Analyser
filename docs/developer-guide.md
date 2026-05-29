@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.4 · **Last updated:** May 2026
+> **Version:** 1.5 · **Last updated:** May 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -417,50 +417,112 @@ When smoothing is 1 s and the axis is time, the two surfaces agree closely. In d
 
 ---
 
-## 3d. Activity Alignment — GPS Anchor
+## 3d. Activity Alignment — GPS Anchor and Indoor Detection
 
-PR #91 replaced raw start-time-difference alignment with GPS-anchor-based alignment. The goal is to synchronise multi-file charts to the point where each athlete was physically at the start position, not merely when the recording began.
+PR #91 replaced raw start-time-difference alignment with GPS-anchor-based alignment. PR #92 extended this to handle indoor activities (TrainerRoad, Zwift, treadmill) where GPS is absent or synthetic.
+
+### Indoor activity detection
+
+`classifyIndoor(subSport, records)` in `src/lib/fit/parser.ts` determines `activity.isIndoor` at parse time using two signals:
+
+1. **`sub_sport` field** (primary) — if the FIT session contains a recognised indoor sub_sport value, the activity is classified as indoor regardless of GPS presence. The full set is:
+
+   ```ts
+   const INDOOR_SUB_SPORTS = new Set([
+     'indoor_cycling', 'virtual_activity', 'spin', 'stationary_bike',
+     'treadmill', 'indoor_rowing', 'indoor_running', 'indoor_walking',
+     'virtual_ride', 'virtual_run',
+   ]);
+   ```
+
+   > **Key insight:** Both Zwift (`virtual_activity`) and TrainerRoad (`indoor_cycling`) embed fake GPS coordinates in every record (Zwift uses virtual-world positions; TrainerRoad uses a Central Park, NYC placeholder). GPS presence cannot be used as the indoor detector — `sub_sport` is authoritative.
+
+2. **GPS-absence fallback** — only fires when `sub_sport` is entirely absent (`undefined`) and all records lack a GPS position. Covers older devices that do not write `sub_sport`.
+
+`activity.subSport` stores the raw sub_sport string from the FIT session (or `undefined`). `activity.isIndoor: boolean` is always populated.
 
 ### Anchor hierarchy
 
-`findAnchor(activity)` in `src/lib/align/anchor.ts` selects the best synchronisation point for an activity using a priority chain:
+`findAnchor(activity)` in `src/lib/align/anchor.ts` branches on `activity.isIndoor`:
 
-| Priority | Source | Condition |
-|----------|--------|-----------|
-| 1 | **Timer event** | FIT timer-start event present and within 30 s of a record |
-| 2 | **GPS movement** | `firstGpsMovementIndex` — first record with GPS fix and speed > 0 |
-| 3 | **GPS fix** | `firstGpsFixIndex` — first record with GPS acquired (may be stationary) |
-| 4 | **File start** | `activity.startTime` — no GPS, fallback to clock time |
+**Outdoor path** (unchanged from #91):
 
-The result is an `AlignmentAnchor` stored on the `Activity` at parse time:
+| Priority | Source | `AnchorSource` |
+|----------|--------|----------------|
+| 1 | FIT timer-start event (within 30 s) | `'timer'` |
+| 2 | First GPS record with speed > 0 | `'gpsMovement'` |
+| 3 | First GPS record (stationary) | `'gpsFix'` |
+| 4 | File start | `'fileStart'` |
+
+**Indoor path** (added in #92 — GPS signals are skipped entirely):
+
+| Priority | Source | `AnchorSource` |
+|----------|--------|----------------|
+| 1 | FIT timer-start event (within 30 s) | `'timer'` |
+| 2 | First `workout_step` timestamp (within 30 s) | `'workoutStep'` |
+| 3 | First record with speed/power/cadence > 0 | `'indoorMovement'` |
+| 4 | File start | `'fileStart'` |
+
+The result is an `AlignmentAnchor` stored on `Activity` at parse time:
 
 ```ts
+type AnchorSource = 'timer' | 'gpsMovement' | 'gpsFix' | 'fileStart'
+                  | 'workoutStep' | 'indoorMovement';
+
 interface AlignmentAnchor {
-  recordIndex:    number;   // index into activity.records
-  distanceMetres: number;   // distance value at that record (for distance re-zeroing)
-  elapsedSeconds: number;   // elapsed time at that record
+  recordIndex:    number;
+  distanceMetres: number;
+  elapsedSeconds: number;
   timestamp:      Date;
-  source:         'timer' | 'gpsMovement' | 'gpsFix' | 'fileStart';
+  source:         AnchorSource;
 }
 ```
 
-`activity.anchor` is computed once in `parser.ts → normalise()` and is available to all downstream code without re-running `findAnchor`.
+`activity.anchor` is computed once in `parser.ts → normalise()` and available to all downstream code. The new `Activity` fields supporting indoor alignment are:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `subSport` | `string \| undefined` | Raw FIT `sub_sport` value |
+| `isIndoor` | `boolean` | Computed by `classifyIndoor()` at parse time |
+| `firstIndoorMovementIndex` | `number \| null` | First record with speed/power/cadence > 0 |
+| `firstWorkoutStepTime` | `Date \| null` | Timestamp of first `workout_step` FIT message |
 
 ### Time-axis alignment
 
-`computeAnchoredOffsets(activities)` in `src/lib/align/timestamp.ts` replaces the old `computeTimeOffsets`. It aligns files relative to the first loaded file's anchor timestamp rather than comparing raw `startTime` values, so pre-recording warm-up time does not affect alignment.
+`computeAnchoredOffsets(activities)` in `src/lib/align/timestamp.ts` aligns files relative to the first loaded file's anchor timestamp rather than raw `startTime` values.
 
-The per-file offset is exposed via the `TimeOffsetControl` component. Each file row shows a colour-coded **anchor source badge** (Timer · GPS move · GPS fix · File start) so the user can see the quality of alignment at a glance.
+The `TimeOffsetControl` component shows a colour-coded anchor badge per file. Labels and tooltips are defined in `TimeOffsetControl.utils.ts` as `ANCHOR_LABELS` and `ANCHOR_TITLES` (both typed as `Record<AnchorSource, string>` for compile-time completeness):
+
+| Badge | Colour | Anchor source |
+|-------|--------|---------------|
+| Timer | Blue | `'timer'` |
+| GPS move | Blue | `'gpsMovement'` |
+| GPS fix | Amber | `'gpsFix'` |
+| File start | Grey | `'fileStart'` |
+| Workout | Green | `'workoutStep'` |
+| Indoor | Green | `'indoorMovement'` |
 
 ### Distance-axis re-zeroing
 
-`interpolateToDistanceAxis(records, axis, distanceOffset)` accepts an optional `distanceOffset` parameter (default 0). When non-zero, the interpolated distance axis is shifted so that `distanceOffset` maps to 0 km — effectively re-zeroing the chart to the GPS anchor point and hiding any pre-start warm-up distance.
+`interpolateToDistanceAxis(records, axis, distanceOffset)` shifts the distance axis so that `distanceOffset` maps to 0 km. `activity.anchor.distanceMetres` is passed as `distanceOffset` in both Compare and Event pages.
 
-`activity.anchor.distanceMetres` is passed as `distanceOffset` in both the Compare and Event pages for all chart series and the strip chart.
+### Indoor/mixed session warnings — `createIndoorWarnings()`
+
+`src/lib/utils/indoorWarnings.svelte.ts` exports a Svelte 5 runes composable that encapsulates the shared indoor warning state used by both Compare and Event pages:
+
+```ts
+const indoor = createIndoorWarnings(() => $activities);
+// indoor.hasMixedIndoorOutdoor — any indoor + any outdoor file loaded
+// indoor.allIndoor             — all files are indoor (requires ≥2 files)
+// indoor.mixedWarningDismissed — dismissal state for amber banner
+// indoor.indoorInfoDismissed   — dismissal state for blue banner
+```
+
+The composable owns the dismissal reset `$effect` (fires on every `$activities` change). The page adds a separate `$effect` to auto-switch `xAxisMode` to `'time'` when a mixed session is detected, since that is page-level behaviour. CSS for the banners is in `src/routes/indoor-warning.css` (shared by both pages).
 
 ### Proximity warning
 
-`anchorsAreDistant(activities)` returns `true` when any two GPS-anchored activities have anchor positions more than `GPS_PROXIMITY_THRESHOLD_M` (50 m) apart. Both the Compare and Event pages show a dismissible amber banner when this condition is true, warning that files may be from different locations. The banner auto-resets when the file set changes.
+`anchorsAreDistant(activities)` returns `true` when any two GPS-anchored activities have anchor positions more than `GPS_PROXIMITY_THRESHOLD_M` (50 m) apart. Both pages show a dismissible amber banner. Indoor activities whose anchors have no GPS position are excluded from the comparison, so a pure-TR file (no GPS) paired with a Zwift file never triggers a false proximity warning.
 
 ---
 

@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.8 · **Last updated:** May 2026
+> **Version:** 1.9 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -311,11 +311,13 @@ Next to each filename in the expanded panel, a small coloured badge shows how An
 | Badge | Colour | Meaning |
 |-------|--------|---------|
 | **Timer** | Blue | Aligned to the FIT timer-start event — highest accuracy |
-| **GPS move** | Blue | Aligned to the first GPS record with movement — typical |
+| **GPS move** | Blue | Aligned to the first GPS record with movement — typical outdoor |
 | **GPS fix** | Amber | Aligned to the first GPS fix (stationary) — slightly less precise |
-| **File start** | Grey | No GPS data — aligned by file start time only |
+| **File start** | Grey | No GPS and no timer — aligned by file start time only |
+| **Workout** | Green | Aligned to the first structured workout step (indoor) |
+| **Indoor** | Green | Aligned to the first movement detected (speed/power/cadence) |
 
-Blue badges indicate the best-quality alignment. An amber or grey badge on one file while others are blue may explain a small residual offset — use the nudge buttons to correct it.
+Blue and green badges indicate good-quality alignment. An amber or grey badge on one file while others are blue or green may explain a small residual offset — use the nudge buttons to correct it.
 
 **Location mismatch warning:**
 
@@ -324,6 +326,17 @@ If Analyser detects that the GPS start points of the loaded files are more than 
 > ⚠ GPS anchor points are more than 50m apart — these files may be from different locations. Distance comparison may not reflect a shared course.
 
 This can occur if you accidentally loaded files from two different events. Dismiss the banner with the **✕** button, or remove the mismatched file from the sidebar.
+
+**Indoor and mixed-session warnings:**
+
+When Analyser detects that some or all of the loaded files are indoor activities (turbo trainer, treadmill, Zwift, TrainerRoad), it shows one of two banners:
+
+| Situation | Banner | Effect |
+|-----------|--------|--------|
+| Indoor + outdoor files loaded together | ⚠ Amber warning | Distance mode disabled — the Distance button is greyed out with a tooltip. The axis switches to Time automatically. |
+| All files are indoor (2+ files) | ℹ Blue info | Informational only — distance comparison still works but values are device-estimated, not GPS-measured. |
+
+Both banners are dismissible and reset automatically when you change the loaded files.
 
 ---
 
@@ -492,7 +505,9 @@ A new UUID is generated and your current labels are pushed under the new identit
 | Device Comparison shows "unavailable" panel | Files are from different sessions (start times >1 hour apart) | Use **Event Comparison** (🏃) to compare runs of the same course, or remove the out-of-session file |
 | Two same-session files don't align on the time axis | GPS clock drift between devices | Check the anchor source badges in Fine-tune timing (section 4.4); files with grey or amber badges may need a small manual nudge |
 | Location mismatch warning appears | Files are from different GPS locations (anchors >50 m apart) | Check the files loaded — you may have mixed files from different events; dismiss the banner or remove the mismatched file |
-| Map shows no route | FIT file has no GPS data | Some indoor activities (turbo trainer, treadmill) do not record GPS |
+| Map shows no route | FIT file has no GPS data | Some indoor activities (pure TrainerRoad, treadmill) do not record GPS. Zwift files do have a map (virtual route). |
+| Distance button greyed out | Indoor and outdoor files loaded together | Distance axes are incompatible — use Time mode for this comparison, or load only one type of activity |
+| "All files are indoor" banner appears | All loaded files are indoor activities | Informational only — distance comparison still works but is device-estimated. Dismiss or ignore. |
 | Pace chart looks upside-down | Expected — faster pace (lower min/km) is plotted higher | This is correct; it matches the intuition of "going faster = higher on chart" |
 | Device name shows as "Device N" | Device not yet labelled | Double-click the pill to rename it; the label is saved in your browser and restored for future sessions with any device of the same type |
 | Sync panel shows "⚠ Sync error" | Network error or server unavailable | Click **retry** in the Sync panel; your local labels are unaffected |
