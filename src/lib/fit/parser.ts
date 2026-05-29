@@ -402,19 +402,33 @@ function normalise(data: FitData, filename: string): Activity {
 	};
 }
 
-function buildLaps(fitLaps: FitLap[], records: ActivityRecord[]): Lap[] {
+export function buildLaps(fitLaps: FitLap[], records: ActivityRecord[]): Lap[] {
 	let cursor = 0;
+	let prevEndDist = 0;
 	return fitLaps.map((l) => {
-		const startDist = l.start_distance ?? 0;
-		const endDist = startDist + (l.total_distance ?? 0);
 		const startIndex = cursor;
-		while (cursor < records.length && records[cursor].distance < endDist) cursor++;
+		const startDist = prevEndDist;
+		const lapDistance = l.total_distance ?? 0;
+		if (lapDistance === 0) {
+			return {
+				startDistance: startDist,
+				endDistance: startDist,
+				elapsedSeconds: l.total_elapsed_time ?? 0,
+				startIndex,
+				endIndex: startIndex,
+			};
+		}
+		const targetDist = startDist + lapDistance;
+		while (cursor < records.length && records[cursor].distance <= targetDist) cursor++;
+		const endIndex = Math.max(startIndex, cursor - 1);
+		const endDist = records[endIndex]?.distance ?? targetDist;
+		prevEndDist = endDist;
 		return {
 			startDistance: startDist,
 			endDistance: endDist,
 			elapsedSeconds: l.total_elapsed_time ?? 0,
 			startIndex,
-			endIndex: cursor - 1
+			endIndex,
 		};
 	});
 }
