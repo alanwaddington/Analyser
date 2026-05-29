@@ -15,9 +15,11 @@ export function extractChannel(records: ActivityRecord[], channel: ChannelKey): 
 	return records.map(r => (r[channel] as number | undefined) ?? null);
 }
 
-export function buildXValues(records: ActivityRecord[], mode: 'time' | 'distance', distanceOffset = 0): number[] {
+export function buildXValues(records: ActivityRecord[], mode: 'time' | 'distance'): number[] {
 	if (mode === 'time') return records.map(r => r.elapsedSeconds);
-	return records.map(r => (r.distance - distanceOffset) / 1000);
+	// Distance mode: interpolateToDistanceAxis handles re-zeroing via distanceOffset;
+	// this path is only reached in time mode (kept for time-axis altitude backdrop).
+	return records.map(r => r.distance / 1000);
 }
 
 export function isDashed(seriesIndex: number, referenceIndex: number | undefined): boolean {

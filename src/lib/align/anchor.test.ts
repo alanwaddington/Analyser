@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findAnchor, haversineDistance, GPS_PROXIMITY_THRESHOLD_M } from './anchor.ts';
+import { findAnchor, haversineDistance, GPS_PROXIMITY_THRESHOLD_M, anchorsAreDistant } from './anchor.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
 
 function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
@@ -98,6 +98,40 @@ describe('findAnchor — anchor source hierarchy', () => {
 		expect(anchor.source).toBe('timer');
 	});
 
+	it('findAnchor_timerMoreThan30sFromAllRecords_fallsBackToGpsMovement', () => {
+		// Timer event is an hour before the first record — should be ignored
+		const timerTime = new Date('2025-01-01T09:00:00Z'); // 1 hour before records
+		const records = [
+			makeRecord({ timestamp: new Date('2025-01-01T10:00:00Z'), elapsedSeconds: 0, distance: 0, speed: 5, position: { lat: 51.5, lon: -0.1 } }),
+		];
+		const activity = makeActivity({
+			records,
+			firstGpsFixIndex: 0,
+			firstGpsMovementIndex: 0,
+			timerStartTime: timerTime,
+		});
+		const anchor = findAnchor(activity);
+		expect(anchor.source).toBe('gpsMovement');
+	});
+
+	it('findAnchor_timerWithin30sOfFirstRecord_usesTimer', () => {
+		// Timer event is 20s before the first record — within tolerance, should be used
+		const firstRecordTime = new Date('2025-01-01T10:00:20Z');
+		const timerTime   = new Date('2025-01-01T10:00:00Z'); // 20s before first record
+		const records = [
+			makeRecord({ timestamp: firstRecordTime, elapsedSeconds: 20, distance: 10, speed: 5, position: { lat: 51.5, lon: -0.1 } }),
+		];
+		const activity = makeActivity({
+			records,
+			firstGpsFixIndex: 0,
+			firstGpsMovementIndex: 0,
+			timerStartTime: timerTime,
+		});
+		const anchor = findAnchor(activity);
+		expect(anchor.source).toBe('timer');
+		expect(anchor.recordIndex).toBe(0);
+	});
+
 	it('findAnchor_emptyRecords_returnsFileStartAtIndexZero', () => {
 		const activity = makeActivity({ records: [] });
 		const anchor = findAnchor(activity);
@@ -157,6 +191,54 @@ describe('haversineDistance', () => {
 		const d = haversineDistance({ lat: 51.5074, lon: -0.1278 }, { lat: 48.8566, lon: 2.3522 });
 		expect(d).toBeGreaterThan(340_000);
 		expect(d).toBeLessThan(346_000);
+	});
+});
+
+// ---- anchorsAreDistant ----
+
+describe('anchorsAreDistant', () => {
+	function makeGpsActivity(lat: number, lon: number, source: 'gpsMovement' | 'gpsFix' = 'gpsMovement'): Activity {
+		const pos = { lat, lon };
+		const r = makeRecord({ speed: source === 'gpsMovement' ? 5 : 0, position: pos });
+		return makeActivity({
+			records: [r],
+			firstGpsFixIndex: 0,
+			firstGpsMovementIndex: source === 'gpsMovement' ? 0 : null,
+			anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(), source },
+		});
+	}
+
+	it('anchorsAreDistant_fewerThanTwoActivities_returnsFalse', () => {
+		expect(anchorsAreDistant([])).toBe(false);
+		const a = makeGpsActivity(51.5, -0.1);
+		expect(anchorsAreDistant([a])).toBe(false);
+	});
+
+	it('anchorsAreDistant_twoActivitiesCloseBy_returnsFalse', () => {
+		// Two points ~11m apart (well within 50m threshold)
+		const a = makeGpsActivity(51.5, -0.1);
+		const b = makeGpsActivity(51.50010, -0.1);
+		expect(anchorsAreDistant([a, b])).toBe(false);
+	});
+
+	it('anchorsAreDistant_twoActivitiesFarApart_returnsTrue', () => {
+		// Two points ~1km apart (well beyond 50m threshold)
+		const a = makeGpsActivity(51.5, -0.1);
+		const b = makeGpsActivity(51.510, -0.1);
+		expect(anchorsAreDistant([a, b])).toBe(true);
+	});
+
+	it('anchorsAreDistant_fileStartAnchorsIgnored_returnsFalse', () => {
+		// Activities with no GPS (fileStart) should not trigger the warning
+		const a = makeActivity({ anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(), source: 'fileStart' } });
+		const b = makeActivity({ anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(), source: 'fileStart' } });
+		expect(anchorsAreDistant([a, b])).toBe(false);
+	});
+
+	it('anchorsAreDistant_onlyOneGpsAnchoredActivity_returnsFalse', () => {
+		const gps = makeGpsActivity(51.5, -0.1);
+		const noGps = makeActivity({ anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(), source: 'fileStart' } });
+		expect(anchorsAreDistant([gps, noGps])).toBe(false);
 	});
 });
 

@@ -2,6 +2,9 @@ import type { Activity, AlignmentAnchor, ActivityRecord } from '$lib/types';
 
 export const GPS_PROXIMITY_THRESHOLD_M = 50;
 
+/** Timer events more than this many milliseconds from any record are ignored. */
+const TIMER_TOLERANCE_MS = 30_000;
+
 const EARTH_RADIUS_M = 6_371_000;
 
 /** Great-circle distance between two GPS points in metres (Haversine formula). */
@@ -29,11 +32,14 @@ export function haversineDistance(a: { lat: number; lon: number }, b: { lat: num
 export function findAnchor(activity: Activity): AlignmentAnchor {
 	const { records, timerStartTime, firstGpsMovementIndex, firstGpsFixIndex, startTime } = activity;
 
-	// 1. Timer event: find the record whose timestamp is closest to (and ≥) timerStartTime
+	// 1. Timer event: find the record closest to timerStartTime, but only if it is
+	//    within TIMER_TOLERANCE_MS. A timer event far outside the record timespan
+	//    (e.g. from a different session or a clock mismatch) is silently ignored
+	//    and the next signal in the hierarchy is used instead.
 	if (timerStartTime != null && records.length > 0) {
 		const timerMs = timerStartTime.getTime();
 		const idx = findClosestRecordIndex(records, timerMs);
-		if (idx !== null) {
+		if (idx !== null && Math.abs(records[idx].timestamp.getTime() - timerMs) <= TIMER_TOLERANCE_MS) {
 			return anchorFromRecord(records[idx], idx, 'timer');
 		}
 	}
@@ -58,6 +64,31 @@ export function findAnchor(activity: Activity): AlignmentAnchor {
 		timestamp: startTime,
 		source: 'fileStart',
 	};
+}
+
+/**
+ * Returns true when GPS anchors from two or more loaded activities are more than
+ * GPS_PROXIMITY_THRESHOLD_M apart — indicating the files may be from different
+ * locations rather than the same course.
+ *
+ * Only activities whose anchor has a GPS position (source !== 'fileStart') are
+ * compared. Returns false if fewer than two GPS-anchored activities are present.
+ */
+export function anchorsAreDistant(activities: Activity[]): boolean {
+	const gpsAnchored = activities.filter(a => {
+		const pos = a.records[a.anchor.recordIndex]?.position;
+		return pos != null && a.anchor.source !== 'fileStart';
+	});
+	if (gpsAnchored.length < 2) return false;
+
+	for (let i = 0; i < gpsAnchored.length - 1; i++) {
+		for (let j = i + 1; j < gpsAnchored.length; j++) {
+			const posA = gpsAnchored[i].records[gpsAnchored[i].anchor.recordIndex].position!;
+			const posB = gpsAnchored[j].records[gpsAnchored[j].anchor.recordIndex].position!;
+			if (haversineDistance(posA, posB) > GPS_PROXIMITY_THRESHOLD_M) return true;
+		}
+	}
+	return false;
 }
 
 function anchorFromRecord(r: ActivityRecord, index: number, source: AlignmentAnchor['source']): AlignmentAnchor {
