@@ -198,6 +198,11 @@
 		if (indoor.hasMixedIndoorOutdoor && $xAxisMode === 'distance') xAxisMode.set('time');
 	});
 
+	// Force Time mode when all activities are indoor — distance is device-estimated, not GPS
+	$effect(() => {
+		if (indoor.allIndoor && $xAxisMode === 'distance') xAxisMode.set('time');
+	});
+
 	$effect(() => {
 		if ($activities.length === 0) goto('/');
 	});
