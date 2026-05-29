@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -547,5 +547,114 @@ describe('classifyIndoor', () => {
 		// Known sub_sport takes precedence — GPS-absence fallback only runs when sub_sport is undefined
 		const records = [makeRecord(false)];
 		expect(classifyIndoor('generic', records)).toBe(false);
+	});
+});
+
+// ---- buildLaps ----
+
+describe('buildLaps', () => {
+	function makeRecord(distance: number, elapsed: number): ActivityRecord {
+		return { timestamp: new Date(), elapsedSeconds: elapsed, distance };
+	}
+
+	// Build a records array with evenly-spaced distance samples
+	function makeRecords(totalMetres: number, step = 10): ActivityRecord[] {
+		const records: ActivityRecord[] = [];
+		for (let d = 0; d <= totalMetres; d += step) {
+			records.push(makeRecord(d, d / 10)); // 10 m/s → 1 s per 10 m
+		}
+		return records;
+	}
+
+	it('buildLaps_allZeroStartDistance_producesMonotonicallyIncreasingStartDistances', () => {
+		// Reproduces the Garmin bug: every lap has start_distance = 0
+		const records = makeRecords(5000);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+		];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps).toHaveLength(5);
+		expect(laps[0].startDistance).toBe(0);
+		expect(laps[1].startDistance).toBeGreaterThan(laps[0].startDistance);
+		expect(laps[2].startDistance).toBeGreaterThan(laps[1].startDistance);
+		expect(laps[3].startDistance).toBeGreaterThan(laps[2].startDistance);
+		expect(laps[4].startDistance).toBeGreaterThan(laps[3].startDistance);
+	});
+
+	it('buildLaps_allZeroStartDistance_eachLapHasNonZeroSpan', () => {
+		const records = makeRecords(5000);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = Array.from({ length: 5 }, () => ({
+			start_distance: 0, total_distance: 1000, total_elapsed_time: 100,
+		}));
+		const laps = buildLaps(fitLaps, records);
+		for (const lap of laps) {
+			expect(lap.startIndex).toBeLessThanOrEqual(lap.endIndex);
+		}
+	});
+
+	it('buildLaps_cumulativeStartDistance_producesCorrectSpans', () => {
+		// Files that already write cumulative start_distance should produce same output
+		const records = makeRecords(3000);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [
+			{ start_distance: 0,    total_distance: 1000, total_elapsed_time: 100 },
+			{ start_distance: 1000, total_distance: 1000, total_elapsed_time: 100 },
+			{ start_distance: 2000, total_distance: 1000, total_elapsed_time: 100 },
+		];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps).toHaveLength(3);
+		expect(laps[0].startDistance).toBe(0);
+		expect(laps[1].startDistance).toBeCloseTo(1000, -1);
+		expect(laps[2].startDistance).toBeCloseTo(2000, -1);
+	});
+
+	it('buildLaps_emptyFitLaps_returnsEmptyArray', () => {
+		const records = makeRecords(1000);
+		expect(buildLaps([], records)).toHaveLength(0);
+	});
+
+	it('buildLaps_emptyRecords_returnsLapsWithFallbackDistances', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [{ start_distance: 0, total_distance: 500, total_elapsed_time: 50 }];
+		const laps = buildLaps(fitLaps, []);
+		expect(laps).toHaveLength(1);
+		// No crash — startDistance falls back to 0
+		expect(laps[0].startDistance).toBe(0);
+	});
+
+	it('buildLaps_singleLap_coversFullActivity', () => {
+		const records = makeRecords(1000);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 }];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps).toHaveLength(1);
+		expect(laps[0].startIndex).toBe(0);
+		expect(laps[0].endIndex).toBe(records.length - 1);
+	});
+
+	it('buildLaps_lapEndDistanceEqualsNextLapStartDistance', () => {
+		const records = makeRecords(2000);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+		];
+		const laps = buildLaps(fitLaps, records);
+		// Lap 1's end should be close to Lap 2's start
+		expect(laps[0].endDistance).toBeCloseTo(laps[1].startDistance, -1);
+	});
+
+	it('buildLaps_elapsedTimePreservedFromFitLap', () => {
+		const records = makeRecords(1000);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [{ start_distance: 0, total_distance: 1000, total_elapsed_time: 327 }];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps[0].elapsedSeconds).toBe(327);
 	});
 });
