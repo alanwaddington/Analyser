@@ -19,9 +19,9 @@ export function createIndoorWarnings(getActivities: () => Activity[]) {
 		getActivities().some(a => !a.isIndoor)
 	);
 
-	/** True when all loaded files are indoor activities (requires 2+ files). */
+	/** True when all loaded files are indoor activities (single file or more). */
 	const allIndoor = $derived(
-		getActivities().length > 1 &&
+		getActivities().length >= 1 &&
 		getActivities().every(a => a.isIndoor)
 	);
 
