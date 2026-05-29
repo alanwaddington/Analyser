@@ -68,7 +68,7 @@ export interface CrossFileStream {
 	key: string;
 }
 
-export type AnchorSource = 'timer' | 'gpsMovement' | 'gpsFix' | 'fileStart';
+export type AnchorSource = 'timer' | 'gpsMovement' | 'gpsFix' | 'fileStart' | 'workoutStep' | 'indoorMovement';
 
 export interface AlignmentAnchor {
 	recordIndex: number;
@@ -82,6 +82,8 @@ export interface Activity {
 	id: string; // derived from filename + timestamp
 	filename: string;
 	sport?: string;
+	subSport?: string;
+	isIndoor: boolean;
 	startTime: Date;
 	totalDistance: number; // metres
 	totalElapsedTime: number; // seconds
@@ -91,6 +93,8 @@ export interface Activity {
 	deviceStreams: DeviceStream[]; // per-device channel attribution (always populated)
 	firstGpsFixIndex: number | null;
 	firstGpsMovementIndex: number | null;
+	firstIndoorMovementIndex: number | null;
+	firstWorkoutStepTime: Date | null;
 	timerStartTime: Date | null;
 	anchor: AlignmentAnchor; // best alignment anchor for this activity, computed at parse time
 }

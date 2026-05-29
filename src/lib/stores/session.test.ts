@@ -30,6 +30,10 @@ function makeActivity(id: string): Activity {
 		firstGpsFixIndex: null,
 		firstGpsMovementIndex: null,
 		timerStartTime: null,
+		firstIndoorMovementIndex: null,
+		firstWorkoutStepTime: null,
+		subSport: undefined,
+		isIndoor: false,
 		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
 	};
 }

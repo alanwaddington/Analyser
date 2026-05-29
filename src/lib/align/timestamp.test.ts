@@ -17,6 +17,10 @@ function makeActivity(id: string, startTime: Date): Activity {
 		firstGpsFixIndex: null,
 		firstGpsMovementIndex: null,
 		timerStartTime: null,
+		firstIndoorMovementIndex: null,
+		firstWorkoutStepTime: null,
+		subSport: undefined,
+		isIndoor: false,
 		// No GPS/timer → fileStart anchor; timestamp must be startTime for fallback to work
 		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: startTime, source: 'fileStart' as const },
 	};
