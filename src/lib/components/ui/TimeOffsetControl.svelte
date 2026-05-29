@@ -10,17 +10,21 @@
 	} = $props();
 
 	const ANCHOR_LABELS: Record<AnchorSource, string> = {
-		timer:       'Timer',
-		gpsMovement: 'GPS move',
-		gpsFix:      'GPS fix',
-		fileStart:   'File start',
+		timer:          'Timer',
+		gpsMovement:    'GPS move',
+		gpsFix:         'GPS fix',
+		fileStart:      'File start',
+		workoutStep:    'Workout',
+		indoorMovement: 'Indoor',
 	};
 
 	const ANCHOR_TITLES: Record<AnchorSource, string> = {
-		timer:       'Aligned by FIT timer start event',
-		gpsMovement: 'Aligned by first GPS movement',
-		gpsFix:      'Aligned by first GPS fix (stationary)',
-		fileStart:   'No GPS — aligned by file start time',
+		timer:          'Aligned by FIT timer start event',
+		gpsMovement:    'Aligned by first GPS movement',
+		gpsFix:         'Aligned by first GPS fix (stationary)',
+		fileStart:      'No GPS — aligned by file start time',
+		workoutStep:    'Aligned by first workout step',
+		indoorMovement: 'Aligned by first indoor movement (speed/power/cadence)',
 	};
 
 	let expanded = $state(false);
@@ -347,5 +351,11 @@
 	.toc-anchor--fileStart {
 		background: color-mix(in srgb, var(--color-border) 40%, transparent);
 		color: var(--color-muted);
+	}
+
+	.toc-anchor--workoutStep,
+	.toc-anchor--indoorMovement {
+		background: rgba(34, 197, 94, 0.15);
+		color: #4ade80;
 	}
 </style>
