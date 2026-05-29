@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.3 · **Last updated:** May 2026
+> **Version:** 1.4 · **Last updated:** May 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -25,6 +25,7 @@ This guide covers the technical internals of the Analyser application for contri
 3a. [Map Tab — Metric Strip Chart](#3a-map-tab--metric-strip-chart)
 3b. [Data Export](#3b-data-export)
 3c. [Chart Stats Row](#3c-chart-stats-row)
+3d. [Activity Alignment — GPS Anchor](#3d-activity-alignment--gps-anchor)
 4. [Responsive Layout](#4-responsive-layout)
 5. [FIT Parsing](#5-fit-parsing)
 6. [Testing](#6-testing)
@@ -413,6 +414,53 @@ The stats row and the Summary tab use the same `summarise()` function but differ
 | Summary tab | `extractChannel(activity.records, ch)` | Raw unsmoothed records |
 
 When smoothing is 1 s and the axis is time, the two surfaces agree closely. In distance mode or with smoothing > 1 s, values may differ. Both surfaces carry a `title` tooltip explaining the difference.
+
+---
+
+## 3d. Activity Alignment — GPS Anchor
+
+PR #91 replaced raw start-time-difference alignment with GPS-anchor-based alignment. The goal is to synchronise multi-file charts to the point where each athlete was physically at the start position, not merely when the recording began.
+
+### Anchor hierarchy
+
+`findAnchor(activity)` in `src/lib/align/anchor.ts` selects the best synchronisation point for an activity using a priority chain:
+
+| Priority | Source | Condition |
+|----------|--------|-----------|
+| 1 | **Timer event** | FIT timer-start event present and within 30 s of a record |
+| 2 | **GPS movement** | `firstGpsMovementIndex` — first record with GPS fix and speed > 0 |
+| 3 | **GPS fix** | `firstGpsFixIndex` — first record with GPS acquired (may be stationary) |
+| 4 | **File start** | `activity.startTime` — no GPS, fallback to clock time |
+
+The result is an `AlignmentAnchor` stored on the `Activity` at parse time:
+
+```ts
+interface AlignmentAnchor {
+  recordIndex:    number;   // index into activity.records
+  distanceMetres: number;   // distance value at that record (for distance re-zeroing)
+  elapsedSeconds: number;   // elapsed time at that record
+  timestamp:      Date;
+  source:         'timer' | 'gpsMovement' | 'gpsFix' | 'fileStart';
+}
+```
+
+`activity.anchor` is computed once in `parser.ts → normalise()` and is available to all downstream code without re-running `findAnchor`.
+
+### Time-axis alignment
+
+`computeAnchoredOffsets(activities)` in `src/lib/align/timestamp.ts` replaces the old `computeTimeOffsets`. It aligns files relative to the first loaded file's anchor timestamp rather than comparing raw `startTime` values, so pre-recording warm-up time does not affect alignment.
+
+The per-file offset is exposed via the `TimeOffsetControl` component. Each file row shows a colour-coded **anchor source badge** (Timer · GPS move · GPS fix · File start) so the user can see the quality of alignment at a glance.
+
+### Distance-axis re-zeroing
+
+`interpolateToDistanceAxis(records, axis, distanceOffset)` accepts an optional `distanceOffset` parameter (default 0). When non-zero, the interpolated distance axis is shifted so that `distanceOffset` maps to 0 km — effectively re-zeroing the chart to the GPS anchor point and hiding any pre-start warm-up distance.
+
+`activity.anchor.distanceMetres` is passed as `distanceOffset` in both the Compare and Event pages for all chart series and the strip chart.
+
+### Proximity warning
+
+`anchorsAreDistant(activities)` returns `true` when any two GPS-anchored activities have anchor positions more than `GPS_PROXIMITY_THRESHOLD_M` (50 m) apart. Both the Compare and Event pages show a dismissible amber banner when this condition is true, warning that files may be from different locations. The banner auto-resets when the file set changes.
 
 ---
 
