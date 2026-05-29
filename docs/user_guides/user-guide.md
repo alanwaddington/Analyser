@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.7 · **Last updated:** May 2026
+> **Version:** 1.8 · **Last updated:** May 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -300,9 +300,30 @@ Click the **⏱ Fine-tune timing** button (below the Device Toggle Bar, visible 
 | **−10 / −1** buttons | Shift the file 10 s or 1 s earlier |
 | **+1 / +10** buttons | Shift the file 1 s or 10 s later |
 | **Numeric input** | Type an exact offset in seconds |
-| **↺** (Reset) | Return to the auto-computed offset |
+| **↺** (Reset) | Return to the GPS-anchored auto-computed offset |
 
 The first loaded file is always the **reference** (offset = 0). All other files are shifted relative to it. The offset is shown in the **N adjusted** badge on the toggle button.
+
+**Anchor source badge:**
+
+Next to each filename in the expanded panel, a small coloured badge shows how Analyser determined the auto alignment for that file:
+
+| Badge | Colour | Meaning |
+|-------|--------|---------|
+| **Timer** | Blue | Aligned to the FIT timer-start event — highest accuracy |
+| **GPS move** | Blue | Aligned to the first GPS record with movement — typical |
+| **GPS fix** | Amber | Aligned to the first GPS fix (stationary) — slightly less precise |
+| **File start** | Grey | No GPS data — aligned by file start time only |
+
+Blue badges indicate the best-quality alignment. An amber or grey badge on one file while others are blue may explain a small residual offset — use the nudge buttons to correct it.
+
+**Location mismatch warning:**
+
+If Analyser detects that the GPS start points of the loaded files are more than 50 m apart, an amber banner appears at the top of the charts area:
+
+> ⚠ GPS anchor points are more than 50m apart — these files may be from different locations. Distance comparison may not reflect a shared course.
+
+This can occur if you accidentally loaded files from two different events. Dismiss the banner with the **✕** button, or remove the mismatched file from the sidebar.
 
 ---
 
@@ -469,7 +490,8 @@ A new UUID is generated and your current labels are pushed under the new identit
 |---------|-------------|-----|
 | File loads but no charts appear | No sensor data in the file | Check the Device Toggle Bar — all devices may be deselected or no-data |
 | Device Comparison shows "unavailable" panel | Files are from different sessions (start times >1 hour apart) | Use **Event Comparison** (🏃) to compare runs of the same course, or remove the out-of-session file |
-| Two same-session files don't align on the time axis | GPS clock drift between devices | Adjust offsets using the Fine-tune timing panel (section 4.4) |
+| Two same-session files don't align on the time axis | GPS clock drift between devices | Check the anchor source badges in Fine-tune timing (section 4.4); files with grey or amber badges may need a small manual nudge |
+| Location mismatch warning appears | Files are from different GPS locations (anchors >50 m apart) | Check the files loaded — you may have mixed files from different events; dismiss the banner or remove the mismatched file |
 | Map shows no route | FIT file has no GPS data | Some indoor activities (turbo trainer, treadmill) do not record GPS |
 | Pace chart looks upside-down | Expected — faster pace (lower min/km) is plotted higher | This is correct; it matches the intuition of "going faster = higher on chart" |
 | Device name shows as "Device N" | Device not yet labelled | Double-click the pill to rename it; the label is saved in your browser and restored for future sessions with any device of the same type |

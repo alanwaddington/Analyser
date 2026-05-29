@@ -68,6 +68,16 @@ export interface CrossFileStream {
 	key: string;
 }
 
+export type AnchorSource = 'timer' | 'gpsMovement' | 'gpsFix' | 'fileStart';
+
+export interface AlignmentAnchor {
+	recordIndex: number;
+	distanceMetres: number;
+	elapsedSeconds: number;
+	timestamp: Date;
+	source: AnchorSource;
+}
+
 export interface Activity {
 	id: string; // derived from filename + timestamp
 	filename: string;
@@ -79,6 +89,10 @@ export interface Activity {
 	laps: Lap[];
 	devices: Device[];
 	deviceStreams: DeviceStream[]; // per-device channel attribution (always populated)
+	firstGpsFixIndex: number | null;
+	firstGpsMovementIndex: number | null;
+	timerStartTime: Date | null;
+	anchor: AlignmentAnchor; // best alignment anchor for this activity, computed at parse time
 }
 
 export interface AlignedSeries {

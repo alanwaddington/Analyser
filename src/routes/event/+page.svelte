@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import { activities, activeChannels, xAxisMode, referenceIndex } from '$lib/stores/session';
+	import { anchorsAreDistant } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
 	import { buildSegments } from '$lib/utils/segments';
@@ -67,7 +68,11 @@
 
 	const availableChannels = $derived(deriveAvailableChannels($activities));
 	const seriesInputs: SeriesInput[] = $derived(
-		$activities.map((a, i) => ({ activity: a, colourIndex: i })),
+		$activities.map((a, i) => ({
+			activity: a,
+			colourIndex: i,
+			distanceOffset: a.anchor.distanceMetres,
+		})),
 	);
 	const lapMarkers = $derived(buildLapMarkers($activities[$referenceIndex], $xAxisMode));
 	const segments = $derived(buildSegments($activities[$referenceIndex]));
@@ -82,6 +87,10 @@
 			activeChannels.set(availableChannels);
 		}
 	});
+
+	const locationMismatch = $derived($activities.length > 1 && anchorsAreDistant($activities));
+	let locationWarningDismissed = $state(false);
+	$effect(() => { void $activities; locationWarningDismissed = false; });
 
 	$effect(() => {
 		if ($activities.length === 0) goto('/');
@@ -153,16 +162,15 @@
 	}
 
 	/** Series inputs for the strip chart — one per activity */
-	const stripSeriesInputs = $derived.by(() => {
+	const stripSeriesInputs = $derived.by((): SeriesInput[] => {
 		if (!mapMetricChannel) return [];
 		const ch = mapMetricChannel;
 		return $activities
-			.map((activity, i) => {
+			.flatMap((activity, i) => {
 				const hasData = activity.records.some(r => r[ch] != null);
-				if (!hasData) return null;
-				return { activity, colourIndex: i };
-			})
-			.filter((s): s is SeriesInput => s !== null);
+				if (!hasData) return [];
+				return [{ activity, colourIndex: i, distanceOffset: activity.anchor.distanceMetres }];
+			});
 	});
 
 	function formatDate(d: Date): string {
@@ -254,6 +262,15 @@
 					</div>
 				</div>
 			</CollapsiblePanel>
+
+			{#if locationMismatch && !locationWarningDismissed}
+				<div class="location-warning" role="alert" aria-live="polite">
+					<span class="warning-icon" aria-hidden="true">⚠</span>
+					<span class="warning-text">GPS anchor points are more than 50m apart — these files may be from different locations. Distance comparison may not reflect a shared course.</span>
+					<button class="warning-dismiss" onclick={() => locationWarningDismissed = true} aria-label="Dismiss location warning">✕</button>
+				</div>
+			{/if}
+
 			<div class="charts-scroll">
 				<div class="card">
 					<DeltaChart
@@ -627,5 +644,49 @@
 	.row-reference td:first-child {
 		border-left: 3px solid #f59e0b;
 		padding-left: 9px;
+	}
+
+	/* ── Location mismatch warning banner ───────────────────────────── */
+
+	.location-warning {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 16px;
+		background: rgba(245, 158, 11, 0.08);
+		border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+		flex-shrink: 0;
+	}
+
+	.warning-icon {
+		color: #f59e0b;
+		font-size: 0.8rem;
+		flex-shrink: 0;
+	}
+
+	.warning-text {
+		font-size: 0.75rem;
+		color: var(--color-muted);
+		flex: 1;
+	}
+
+	.warning-dismiss {
+		background: none;
+		border: none;
+		color: var(--color-muted);
+		font-size: 0.7rem;
+		cursor: pointer;
+		padding: 2px 4px;
+		flex-shrink: 0;
+		line-height: 1;
+		border-radius: 3px;
+		transition: color 0.1s;
+	}
+
+	.warning-dismiss:hover { color: var(--color-text); }
+
+	.warning-dismiss:focus-visible {
+		outline: 2px solid #22c55e;
+		outline-offset: 1px;
 	}
 </style>

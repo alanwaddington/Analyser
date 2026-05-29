@@ -16,7 +16,8 @@
 	import DeviceToggleBar from '$lib/components/ui/DeviceToggleBar.svelte';
 	import TimeOffsetControl from '$lib/components/ui/TimeOffsetControl.svelte';
 	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
-	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
+	import { computeAnchoredOffsets, activitiesOverlap, anchorsAreDistant } from '$lib/align';
+	import type { AnchorSource } from '$lib/types';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import { exportActivities } from '$lib/export/exportActivities';
@@ -83,13 +84,23 @@
 		return result;
 	});
 
-	// Auto-computed time offsets (used as defaults and for reset in TimeOffsetControl)
-	const autoOffsets = $derived(computeTimeOffsets($activities));
+	// Auto-computed time offsets anchored to GPS movement / timer event (used as defaults and for reset)
+	const autoOffsets = $derived(computeAnchoredOffsets($activities));
+
+	// Per-file distance offsets for re-zeroing charts to the GPS anchor point
+	const distanceOffsets = $derived(
+		new Map($activities.map(a => [a.id, a.anchor.distanceMetres]))
+	);
+
+	// Per-file anchor sources for the alignment indicator in TimeOffsetControl
+	const anchorSources = $derived(
+		new Map<string, AnchorSource>($activities.map(a => [a.id, a.anchor.source]))
+	);
 
 	// Initialise the timeOffsets store whenever activities change.
 	// The store may then be overridden by TimeOffsetControl for manual fine-tuning.
 	$effect(() => {
-		timeOffsets.set(computeTimeOffsets($activities));
+		timeOffsets.set(computeAnchoredOffsets($activities));
 	});
 
 	// Auto-select all streams with data whenever the file set changes, so charts
@@ -134,6 +145,7 @@
 				colour: FILE_COLOURS[actIndex % FILE_COLOURS.length],
 				label: deriveDeviceLabel(cfs.stream.device),
 				timeOffset: $timeOffsets.get(cfs.activity.id) ?? 0,
+				distanceOffset: distanceOffsets.get(cfs.activity.id) ?? 0,
 			};
 		});
 	}
@@ -169,6 +181,13 @@
 	// True when 2+ files are loaded but their start times are >1 hour apart.
 	// In this state the tab UI is replaced by an explanation panel.
 	const differentSessions = $derived(!activitiesOverlap($activities));
+
+	// True when GPS anchors from different files are far apart (>50m), suggesting different locations
+	const locationMismatch = $derived($activities.length > 1 && anchorsAreDistant($activities));
+	let locationWarningDismissed = $state(false);
+
+	// Reset dismissal whenever the file set changes
+	$effect(() => { void $activities; locationWarningDismissed = false; });
 
 	$effect(() => {
 		if ($activities.length === 0) goto('/');
@@ -321,7 +340,7 @@
 					<DeviceToggleBar streams={crossFileStreams} {multiFile} />
 					{#if multiFile && $xAxisMode === 'time'}
 						<div class="toc-wrap">
-							<TimeOffsetControl activities={$activities} {autoOffsets} />
+							<TimeOffsetControl activities={$activities} {autoOffsets} {anchorSources} />
 						</div>
 					{/if}
 					<div class="axis-toggle" role="group" aria-label="X-axis mode">
@@ -340,6 +359,14 @@
 					</div>
 				</div>
 			</CollapsiblePanel>
+
+			{#if locationMismatch && !locationWarningDismissed}
+				<div class="location-warning" role="alert" aria-live="polite">
+					<span class="warning-icon" aria-hidden="true">⚠</span>
+					<span class="warning-text">GPS anchor points are more than 50m apart — these files may be from different locations.</span>
+					<button class="warning-dismiss" onclick={() => locationWarningDismissed = true} aria-label="Dismiss location warning">✕</button>
+				</div>
+			{/if}
 
 			<div class="charts-scroll">
 				{#if $activeDeviceIndices.size === 0}
@@ -858,5 +885,49 @@
 		font-weight: 400;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
+	}
+
+	/* ── Location mismatch warning banner ───────────────────────────── */
+
+	.location-warning {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 16px;
+		background: rgba(245, 158, 11, 0.08);
+		border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+		flex-shrink: 0;
+	}
+
+	.warning-icon {
+		color: #f59e0b;
+		font-size: 0.8rem;
+		flex-shrink: 0;
+	}
+
+	.warning-text {
+		font-size: 0.75rem;
+		color: var(--color-muted);
+		flex: 1;
+	}
+
+	.warning-dismiss {
+		background: none;
+		border: none;
+		color: var(--color-muted);
+		font-size: 0.7rem;
+		cursor: pointer;
+		padding: 2px 4px;
+		flex-shrink: 0;
+		line-height: 1;
+		border-radius: 3px;
+		transition: color 0.1s;
+	}
+
+	.warning-dismiss:hover { color: var(--color-text); }
+
+	.warning-dismiss:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 1px;
 	}
 </style>

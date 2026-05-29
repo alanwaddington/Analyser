@@ -35,14 +35,16 @@
 		const tc = textColour();
 		const gc = gridColour();
 		const allActivities = seriesInputs.map(s => s.activity);
-		const maxDist = allActivities.length > 0 ? getClipDistance(allActivities) : 0;
+		const distanceOffsets = new Map(seriesInputs.map(s => [s.activity.id, s.distanceOffset ?? 0]));
+		const maxDist = allActivities.length > 0 ? getClipDistance(allActivities, distanceOffsets) : 0;
 		const ref = seriesInputs[referenceIndex]?.activity;
+		const refOffset = seriesInputs[referenceIndex]?.distanceOffset ?? 0;
 
 		const candidateSeries = seriesInputs
 			.map((s, i) => {
 				if (i === referenceIndex) return null;
 				const colour = FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
-				const data = hiddenSeries.has(i) ? [] : buildDeltaData(ref, s.activity, maxDist, $xAxisMode);
+				const data = hiddenSeries.has(i) ? [] : buildDeltaData(ref, s.activity, maxDist, $xAxisMode, refOffset, s.distanceOffset ?? 0);
 				return {
 					type: 'line' as const,
 					name: s.activity.filename,

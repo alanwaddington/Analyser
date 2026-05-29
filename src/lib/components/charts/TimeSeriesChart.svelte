@@ -48,7 +48,7 @@
 		return seriesInputs
 			.filter((_, i) => !hiddenSeries.has(i))
 			.map((s) => {
-				const data = buildData(s.activity, s.timeOffset ?? 0);
+				const data = buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
 				const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
 				const label = s.label ?? s.activity.filename;
 				return computeSeriesStats(data, channel, label, colour, zoomRange);
@@ -62,10 +62,10 @@
 	const tooltipBg  = () => $isDark ? '#0f172a' : '#ffffff';
 	const tooltipText = () => $isDark ? '#e2e8f0' : '#0f172a';
 
-	function buildAltitudeData(activity: Activity, timeOffset = 0): [number, number | null][] {
+	function buildAltitudeData(activity: Activity, timeOffset = 0, distanceOffset = 0): [number, number | null][] {
 		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
 		if (axisMode === 'distance') {
-			const aligned = interpolateToDistanceAxis(activity);
+			const aligned = interpolateToDistanceAxis(activity, 10, distanceOffset);
 			const altData = aligned.channels.get('altitude') ?? [];
 			return aligned.axis.map((d, i) => [d / 1000, altData[i]]);
 		}
@@ -74,10 +74,10 @@
 		return xValues.map((x, i) => [x + timeOffset, raw[i]]);
 	}
 
-	function buildData(activity: Activity, timeOffset = 0): [number, number | null][] {
+	function buildData(activity: Activity, timeOffset = 0, distanceOffset = 0): [number, number | null][] {
 		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
 		if (axisMode === 'distance') {
-			const aligned = interpolateToDistanceAxis(activity);
+			const aligned = interpolateToDistanceAxis(activity, 10, distanceOffset);
 			const channelData = aligned.channels.get(channel) ?? [];
 			const smoothed = smooth(channelData, $smoothing);
 			return aligned.axis.map((d, i) => [d / 1000, smoothed[i]]);
@@ -95,7 +95,7 @@
 
 		const showAltBackdrop = channel !== 'altitude' && seriesInputs.length > 0;
 		const altData = showAltBackdrop
-			? buildAltitudeData(seriesInputs[0].activity, seriesInputs[0].timeOffset ?? 0)
+			? buildAltitudeData(seriesInputs[0].activity, seriesInputs[0].timeOffset ?? 0, seriesInputs[0].distanceOffset ?? 0)
 			: [];
 		const hasAlt = altData.some(([, v]) => v != null);
 
@@ -186,7 +186,7 @@
 						type: 'line' as const,
 						name: s.label ?? s.activity.filename,
 						yAxisIndex: 0,
-						data: hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0),
+						data: hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0),
 						lineStyle: {
 							color: colour,
 							type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',

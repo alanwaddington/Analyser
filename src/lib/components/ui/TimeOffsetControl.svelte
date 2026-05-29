@@ -1,12 +1,27 @@
 <script lang="ts">
-	import type { Activity } from '$lib/types';
+	import type { Activity, AnchorSource } from '$lib/types';
 	import { timeOffsets } from '$lib/stores/session';
 	import { nudgeOffset, parseOffset } from './TimeOffsetControl.utils.ts';
 
-	let { activities, autoOffsets }: {
+	let { activities, autoOffsets, anchorSources = new Map() }: {
 		activities: Activity[];
 		autoOffsets: Map<string, number>;
+		anchorSources?: Map<string, AnchorSource>;
 	} = $props();
+
+	const ANCHOR_LABELS: Record<AnchorSource, string> = {
+		timer:       'Timer',
+		gpsMovement: 'GPS move',
+		gpsFix:      'GPS fix',
+		fileStart:   'File start',
+	};
+
+	const ANCHOR_TITLES: Record<AnchorSource, string> = {
+		timer:       'Aligned by FIT timer start event',
+		gpsMovement: 'Aligned by first GPS movement',
+		gpsFix:      'Aligned by first GPS fix (stationary)',
+		fileStart:   'No GPS — aligned by file start time',
+	};
 
 	let expanded = $state(false);
 
@@ -75,6 +90,15 @@
 					<span class="toc-filename" title={activity.filename}>
 						{activity.filename}
 					</span>
+
+					{#if anchorSources.has(activity.id)}
+						{@const source = anchorSources.get(activity.id)!}
+						<span
+							class="toc-anchor toc-anchor--{source}"
+							title={ANCHOR_TITLES[source]}
+							aria-label={ANCHOR_TITLES[source]}
+						>{ANCHOR_LABELS[source]}</span>
+					{/if}
 
 					{#if i === 0}
 						<span class="toc-reference">Reference</span>
@@ -294,5 +318,34 @@
 	.toc-reset:focus-visible {
 		outline: 2px solid #3b82f6;
 		outline-offset: 1px;
+	}
+
+	/* ── Anchor source badge ──────────────────────────────────────────── */
+
+	.toc-anchor {
+		padding: 1px 5px;
+		border-radius: 999px;
+		font-size: 0.6rem;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		white-space: nowrap;
+		flex-shrink: 0;
+		cursor: default;
+	}
+
+	.toc-anchor--timer,
+	.toc-anchor--gpsMovement {
+		background: rgba(59, 130, 246, 0.15);
+		color: #60a5fa;
+	}
+
+	.toc-anchor--gpsFix {
+		background: rgba(245, 158, 11, 0.15);
+		color: #fbbf24;
+	}
+
+	.toc-anchor--fileStart {
+		background: color-mix(in srgb, var(--color-border) 40%, transparent);
+		color: var(--color-muted);
 	}
 </style>

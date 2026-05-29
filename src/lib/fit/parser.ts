@@ -3,6 +3,7 @@ import type { Activity, ActivityRecord, Device, DeviceStream, Lap } from '../typ
 import { ANT_DEVICE_TYPE } from '../types';
 import type { ChannelKey } from '../types';
 import { applyLabels } from '../stores/deviceLabels';
+import { findAnchor } from '../align/anchor';
 
 export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Activity> {
 	return new Promise((resolve, reject) => {
@@ -27,12 +28,19 @@ interface FitSport {
 	sub_sport?: string;
 }
 
+interface FitEvent {
+	event?: string;
+	event_type?: string;
+	timestamp?: Date;
+}
+
 interface FitData {
 	sessions?: FitSession[];
 	sports?: FitSport[];
 	records?: FitRecord[];
 	laps?: FitLap[];
 	device_infos?: FitDeviceInfo[];
+	events?: FitEvent[];
 }
 
 interface FitSession {
@@ -239,6 +247,34 @@ export function buildDeviceStreams(
 	return streams;
 }
 
+/** Returns the index of the first record with a valid GPS position, or null. */
+export function findFirstGpsFixIndex(records: ActivityRecord[]): number | null {
+	for (let i = 0; i < records.length; i++) {
+		if (records[i].position != null) return i;
+	}
+	return null;
+}
+
+/** Returns the index of the first record with a valid GPS position AND speed > 0, or null. */
+export function findFirstGpsMovementIndex(records: ActivityRecord[]): number | null {
+	for (let i = 0; i < records.length; i++) {
+		const r = records[i];
+		if (r.position != null && (r.speed ?? 0) > 0) return i;
+	}
+	return null;
+}
+
+/** Returns the timestamp of the first FIT timer start event, or null. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function extractTimerStartTime(events: any[]): Date | null {
+	for (const e of events) {
+		if (e.event === 'timer' && e.event_type === 'start' && e.timestamp != null) {
+			return e.timestamp as Date;
+		}
+	}
+	return null;
+}
+
 // Running cadence in FIT files is single-leg (one foot per minute).
 // Double it so the displayed value matches the conventional spm (steps per minute).
 // Cycling cadence is full revolutions — no adjustment needed.
@@ -287,17 +323,29 @@ function normalise(data: FitData, filename: string): Activity {
 	applyLabels(devices); // restore any user-assigned labels from localStorage
 	const deviceStreams = buildDeviceStreams(devices, records);
 
+	const startTime = session.start_time ?? records[0]?.timestamp ?? new Date(0);
+	const firstGpsFixIndex = findFirstGpsFixIndex(records);
+	const firstGpsMovementIndex = findFirstGpsMovementIndex(records);
+	const timerStartTime = extractTimerStartTime(data.events ?? []);
+
+	// findAnchor only needs these five fields; safe to cast the partial object.
+	const anchor = findAnchor({ records, firstGpsFixIndex, firstGpsMovementIndex, timerStartTime, startTime } as Activity);
+
 	return {
 		id: crypto.randomUUID(),
 		filename,
 		sport,
-		startTime: session.start_time ?? records[0]?.timestamp ?? new Date(0),
+		startTime,
 		totalDistance: session.total_distance ?? records.at(-1)?.distance ?? 0,
 		totalElapsedTime: session.total_elapsed_time ?? records.at(-1)?.elapsedSeconds ?? 0,
 		records,
 		laps,
 		devices,
 		deviceStreams,
+		firstGpsFixIndex,
+		firstGpsMovementIndex,
+		timerStartTime,
+		anchor,
 	};
 }
 

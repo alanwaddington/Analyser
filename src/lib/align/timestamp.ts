@@ -24,6 +24,26 @@ export function computeTimeOffsets(activities: Activity[]): Map<string, number> 
 }
 
 /**
+ * Compute per-file time offsets (in seconds) relative to the first activity's
+ * alignment anchor. Uses the anchor hierarchy: timer event → GPS movement →
+ * GPS fix → file start. Falls back to raw startTime when no GPS is available.
+ *
+ * Returns a Map<activityId, offsetSeconds>.
+ */
+export function computeAnchoredOffsets(activities: Activity[]): Map<string, number> {
+	const offsets = new Map<string, number>();
+	if (activities.length === 0) return offsets;
+
+	const referenceMs = activities[0].anchor.timestamp.getTime();
+
+	for (const activity of activities) {
+		const offsetSeconds = (referenceMs - activity.anchor.timestamp.getTime()) / 1000;
+		offsets.set(activity.id, offsetSeconds);
+	}
+	return offsets;
+}
+
+/**
  * Returns true when all activities appear to be from the same session —
  * i.e. no two start times are more than OVERLAP_THRESHOLD_SECONDS apart.
  * Returns true for empty or single-activity arrays.

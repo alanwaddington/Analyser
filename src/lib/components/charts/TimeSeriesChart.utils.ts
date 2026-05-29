@@ -5,9 +5,10 @@ import { summarise } from '$lib/analytics/summary';
 export interface SeriesInput {
 	activity: Activity;
 	colourIndex: number;
-	colour?: string;      // explicit colour override; if set, takes precedence over colourIndex lookup
-	label?: string;       // optional override for the series name in chart legend
-	timeOffset?: number;  // seconds to add to x-axis values in time mode (cross-file alignment)
+	colour?: string;          // explicit colour override; if set, takes precedence over colourIndex lookup
+	label?: string;           // optional override for the series name in chart legend
+	timeOffset?: number;      // seconds to add to x-axis values in time mode (cross-file alignment)
+	distanceOffset?: number;  // metres to subtract from distance axis (GPS anchor re-zeroing)
 }
 
 export function extractChannel(records: ActivityRecord[], channel: ChannelKey): (number | null)[] {
@@ -16,6 +17,8 @@ export function extractChannel(records: ActivityRecord[], channel: ChannelKey): 
 
 export function buildXValues(records: ActivityRecord[], mode: 'time' | 'distance'): number[] {
 	if (mode === 'time') return records.map(r => r.elapsedSeconds);
+	// Distance mode: interpolateToDistanceAxis handles re-zeroing via distanceOffset;
+	// this path is only reached in time mode (kept for time-axis altitude backdrop).
 	return records.map(r => r.distance / 1000);
 }
 

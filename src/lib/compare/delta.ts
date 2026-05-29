@@ -2,15 +2,26 @@ import type { Activity, TimeDelta } from '../types';
 
 // Compute cumulative time delta between a candidate activity and a reference,
 // aligned on a shared distance axis. Positive = candidate is ahead.
-export function computeTimeDelta(reference: Activity, candidate: Activity, stepMetres = 10): TimeDelta[] {
-	const maxDist = Math.min(reference.totalDistance, candidate.totalDistance);
+// distanceOffsets allow re-zeroing per file when GPS anchors differ.
+export function computeTimeDelta(
+	reference: Activity,
+	candidate: Activity,
+	stepMetres = 10,
+	refDistanceOffset = 0,
+	candDistanceOffset = 0,
+): TimeDelta[] {
+	const refMax = reference.totalDistance - refDistanceOffset;
+	const candMax = candidate.totalDistance - candDistanceOffset;
+	const maxDist = Math.min(refMax, candMax);
+	if (maxDist <= 0) return [];
+
 	const steps = Math.floor(maxDist / stepMetres);
 	const result: TimeDelta[] = [];
 
 	for (let i = 1; i <= steps; i++) {
 		const dist = i * stepMetres;
-		const refTime = timeAtDistance(reference, dist);
-		const candTime = timeAtDistance(candidate, dist);
+		const refTime = timeAtDistance(reference, dist + refDistanceOffset);
+		const candTime = timeAtDistance(candidate, dist + candDistanceOffset);
 		if (refTime == null || candTime == null) continue;
 		result.push({ distance: dist, cumulativeDeltaSeconds: refTime - candTime });
 	}
