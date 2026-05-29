@@ -9,12 +9,16 @@ export interface DistanceAligned {
 
 export function interpolateToDistanceAxis(
 	activity: Activity,
-	stepMetres = 10
+	stepMetres = 10,
+	distanceOffset = 0
 ): DistanceAligned {
 	const records = activity.records;
 	if (records.length === 0) return { axis: [], channels: new Map() };
 
-	const maxDist = records.at(-1)!.distance;
+	const rawMaxDist = records.at(-1)!.distance;
+	const maxDist = rawMaxDist - distanceOffset;
+	if (maxDist <= 0) return { axis: [], channels: new Map() };
+
 	const steps = Math.ceil(maxDist / stepMetres);
 	const axis = Array.from({ length: steps + 1 }, (_, i) => i * stepMetres);
 
@@ -27,7 +31,7 @@ export function interpolateToDistanceAxis(
 	const channels = new Map<ChannelKey, (number | null)[]>();
 
 	for (const key of channelKeys) {
-		channels.set(key, axis.map((d) => lerp(records, d, key)));
+		channels.set(key, axis.map((d) => lerp(records, d + distanceOffset, key)));
 	}
 
 	return { axis, channels };

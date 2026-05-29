@@ -74,3 +74,111 @@ describe('interpolateToDistanceAxis — duplicate distance values', () => {
 		expect(cadence?.[1]).toBe(90);
 	});
 });
+
+// ---- distance axis re-zeroing (distanceOffset) ----
+
+describe('interpolateToDistanceAxis — distanceOffset re-zeroing', () => {
+	it('distanceOffset_zero_identicalToDefault', () => {
+		// AC: zero offset produces identical output to calling without offset
+		const activity = makeActivity([
+			{ distance: 0, cadence: 80 },
+			{ distance: 20, cadence: 100 },
+		]);
+		const withoutOffset = interpolateToDistanceAxis(activity, 10);
+		const withZeroOffset = interpolateToDistanceAxis(activity, 10, 0);
+		expect(withZeroOffset.axis).toEqual(withoutOffset.axis);
+		expect(withZeroOffset.channels.get('cadence')).toEqual(withoutOffset.channels.get('cadence'));
+	});
+
+	it('distanceOffset_200m_axisStartsAtZeroWhichWas200m', () => {
+		// Activity records from 0–400m; offset 200m → axis should go 0–200m
+		const activity = makeActivity([
+			{ distance: 0,   cadence: 60 },
+			{ distance: 100, cadence: 70 },
+			{ distance: 200, cadence: 80 },
+			{ distance: 300, cadence: 90 },
+			{ distance: 400, cadence: 100 },
+		]);
+		const aligned = interpolateToDistanceAxis(activity, 100, 200);
+		// Axis should start at 0m (previously 200m) and end at 200m (previously 400m)
+		expect(aligned.axis[0]).toBe(0);
+		expect(aligned.axis.at(-1)).toBe(200);
+	});
+
+	it('distanceOffset_200m_cadenceAtOriginMatchesValueAt200mInOriginal', () => {
+		// The value at the new 0m mark should equal the original value at 200m
+		const activity = makeActivity([
+			{ distance: 0,   cadence: 60 },
+			{ distance: 200, cadence: 80 },
+			{ distance: 400, cadence: 100 },
+		]);
+		const aligned = interpolateToDistanceAxis(activity, 100, 200);
+		const cadence = aligned.channels.get('cadence')!;
+		// New axis[0] = 0m = original 200m → cadence should be 80
+		expect(cadence[0]).toBe(80);
+	});
+
+	it('distanceOffset_preAnchorRecordsExcluded_axisDoesNotContainNegativeValues', () => {
+		// Records before the anchor (negative in adjusted space) must not appear
+		const activity = makeActivity([
+			{ distance: 0,   cadence: 60 },
+			{ distance: 50,  cadence: 70 },
+			{ distance: 150, cadence: 80 },
+		]);
+		const aligned = interpolateToDistanceAxis(activity, 10, 50);
+		expect(aligned.axis.every(d => d >= 0)).toBe(true);
+	});
+
+	it('distanceOffset_offsetLargerThanMaxDist_returnsEmpty', () => {
+		const activity = makeActivity([
+			{ distance: 0, cadence: 80 },
+			{ distance: 50, cadence: 90 },
+		]);
+		const aligned = interpolateToDistanceAxis(activity, 10, 100);
+		expect(aligned.axis).toHaveLength(0);
+	});
+});
+
+// ---- computeTimeDelta with distance offsets ----
+
+import { computeTimeDelta } from '../compare/delta.ts';
+
+describe('computeTimeDelta — distanceOffset', () => {
+	it('computeTimeDelta_noOffsets_sameAsCurrent', () => {
+		// Reference: 0–1000m in 100s; candidate: 0–1000m in 90s (10s faster)
+		const ref = makeActivity([
+			{ distance: 0, elapsedSeconds: 0 },
+			{ distance: 1000, elapsedSeconds: 100 },
+		]);
+		const cand = makeActivity([
+			{ distance: 0, elapsedSeconds: 0 },
+			{ distance: 1000, elapsedSeconds: 90 },
+		]);
+		const deltas = computeTimeDelta(ref, cand);
+		expect(deltas.length).toBeGreaterThan(0);
+		const last = deltas.at(-1)!;
+		// cumulativeDelta at ~1000m: refTime - candTime = 100 - 90 = 10 (cand ahead)
+		expect(last.cumulativeDeltaSeconds).toBeCloseTo(10, 0);
+	});
+
+	it('computeTimeDelta_withDistanceOffsets_alignsOnSharedDistanceAxis', () => {
+		// Ref: starts at 0m; Cand: starts at 100m (offset = 100)
+		// Both cover the same course after the anchor point
+		const ref = makeActivity([
+			{ distance: 0, elapsedSeconds: 0 },
+			{ distance: 500, elapsedSeconds: 50 },
+			{ distance: 1000, elapsedSeconds: 100 },
+		]);
+		const cand = makeActivity([
+			{ distance: 100, elapsedSeconds: 0 },
+			{ distance: 600, elapsedSeconds: 50 },
+			{ distance: 1100, elapsedSeconds: 100 },
+		]);
+		// With offset of 100m for cand, adjusted distances are 0–1000m for both
+		const deltas = computeTimeDelta(ref, cand, 10, 0, 100);
+		expect(deltas.length).toBeGreaterThan(0);
+		// At the same adjusted distance, times should match closely (same pace)
+		const mid = deltas[Math.floor(deltas.length / 2)];
+		expect(Math.abs(mid.cumulativeDeltaSeconds)).toBeLessThan(1);
+	});
+});
