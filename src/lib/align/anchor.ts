@@ -23,19 +23,27 @@ export function haversineDistance(a: { lat: number; lon: number }, b: { lat: num
 /**
  * Select the best alignment anchor for an activity.
  *
- * Hierarchy (highest priority first):
+ * Indoor hierarchy (highest priority first):
+ *   1. FIT timer start event — explicit user intent
+ *   2. First workout_step — start of the first structured interval
+ *   3. First indoor movement (speed/power/cadence > 0) — skips idle/calibration
+ *   4. File start — no usable signal
+ *
+ * Outdoor hierarchy (highest priority first):
  *   1. FIT timer start event — explicit user intent
  *   2. First GPS movement record — GPS fix with speed > 0
  *   3. First GPS fix — GPS acquired but stationary
- *   4. File start (index 0) — no GPS at all
+ *   4. File start — no GPS at all
  */
 export function findAnchor(activity: Activity): AlignmentAnchor {
-	const { records, timerStartTime, firstGpsMovementIndex, firstGpsFixIndex, startTime } = activity;
+	const {
+		records, timerStartTime, startTime, isIndoor,
+		firstGpsMovementIndex, firstGpsFixIndex,
+		firstIndoorMovementIndex, firstWorkoutStepTime,
+	} = activity;
 
-	// 1. Timer event: find the record closest to timerStartTime, but only if it is
-	//    within TIMER_TOLERANCE_MS. A timer event far outside the record timespan
-	//    (e.g. from a different session or a clock mismatch) is silently ignored
-	//    and the next signal in the hierarchy is used instead.
+	// Step 1 (shared): Timer event — explicit user intent; applies to both paths.
+	// Find the record closest to timerStartTime, but only within TIMER_TOLERANCE_MS.
 	if (timerStartTime != null && records.length > 0) {
 		const timerMs = timerStartTime.getTime();
 		const idx = findClosestRecordIndex(records, timerMs);
@@ -44,19 +52,36 @@ export function findAnchor(activity: Activity): AlignmentAnchor {
 		}
 	}
 
-	// 2. First GPS movement
-	if (firstGpsMovementIndex != null) {
-		const r = records[firstGpsMovementIndex];
-		return anchorFromRecord(r, firstGpsMovementIndex, 'gpsMovement');
+	if (isIndoor) {
+		// Step 2 (indoor): First workout_step — marks the true begin of structured work.
+		if (firstWorkoutStepTime != null && records.length > 0) {
+			const stepMs = firstWorkoutStepTime.getTime();
+			const idx = findClosestRecordIndex(records, stepMs);
+			if (idx !== null && Math.abs(records[idx].timestamp.getTime() - stepMs) <= TIMER_TOLERANCE_MS) {
+				return anchorFromRecord(records[idx], idx, 'workoutStep');
+			}
+		}
+
+		// Step 3 (indoor): First movement — skips idle / calibration spins.
+		if (firstIndoorMovementIndex != null) {
+			const r = records[firstIndoorMovementIndex];
+			return anchorFromRecord(r, firstIndoorMovementIndex, 'indoorMovement');
+		}
+	} else {
+		// Step 2 (outdoor): First GPS movement.
+		if (firstGpsMovementIndex != null) {
+			const r = records[firstGpsMovementIndex];
+			return anchorFromRecord(r, firstGpsMovementIndex, 'gpsMovement');
+		}
+
+		// Step 3 (outdoor): First GPS fix (stationary).
+		if (firstGpsFixIndex != null) {
+			const r = records[firstGpsFixIndex];
+			return anchorFromRecord(r, firstGpsFixIndex, 'gpsFix');
+		}
 	}
 
-	// 3. First GPS fix (stationary)
-	if (firstGpsFixIndex != null) {
-		const r = records[firstGpsFixIndex];
-		return anchorFromRecord(r, firstGpsFixIndex, 'gpsFix');
-	}
-
-	// 4. File start fallback — use activity.startTime as the anchor timestamp
+	// Step 4 (shared): File start fallback — use activity.startTime as the anchor timestamp.
 	return {
 		recordIndex: 0,
 		distanceMetres: records[0]?.distance ?? 0,
