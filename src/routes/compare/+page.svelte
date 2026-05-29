@@ -21,8 +21,10 @@
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import { exportActivities } from '$lib/export/exportActivities';
+	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
 	import '../map-panel.css';
 	import '../export-btn.css';
+	import '../indoor-warning.css';
 
 	const TABS = [
 		{ id: 'charts', label: 'Charts' },
@@ -186,23 +188,14 @@
 	const locationMismatch = $derived($activities.length > 1 && anchorsAreDistant($activities));
 	let locationWarningDismissed = $state(false);
 
-	// True when the loaded set mixes indoor and outdoor activities — distance axes incompatible
-	const hasMixedIndoorOutdoor = $derived(
-		$activities.length > 1 &&
-		$activities.some(a => a.isIndoor) &&
-		$activities.some(a => !a.isIndoor)
-	);
-	// True when every loaded file is an indoor activity
-	const allIndoor = $derived($activities.length > 0 && $activities.every(a => a.isIndoor));
-	let mixedWarningDismissed = $state(false);
-	let indoorInfoDismissed = $state(false);
+	const indoor = createIndoorWarnings(() => $activities);
 
-	// Reset dismissals whenever the file set changes
-	$effect(() => { void $activities; locationWarningDismissed = false; mixedWarningDismissed = false; indoorInfoDismissed = false; });
+	// Reset location warning whenever the file set changes
+	$effect(() => { void $activities; locationWarningDismissed = false; });
 
 	// Force Time mode when a mixed session is detected — distance is not meaningful
 	$effect(() => {
-		if (hasMixedIndoorOutdoor && $xAxisMode === 'distance') xAxisMode.set('time');
+		if (indoor.hasMixedIndoorOutdoor && $xAxisMode === 'distance') xAxisMode.set('time');
 	});
 
 	$effect(() => {
@@ -371,26 +364,26 @@
 							class:axis-active={$xAxisMode === 'distance'}
 							onclick={() => xAxisMode.set('distance')}
 							aria-pressed={$xAxisMode === 'distance'}
-							disabled={hasMixedIndoorOutdoor}
-							title={hasMixedIndoorOutdoor ? 'Distance mode unavailable — indoor and outdoor files have incompatible distance axes' : undefined}
+							disabled={indoor.hasMixedIndoorOutdoor}
+							title={indoor.hasMixedIndoorOutdoor ? 'Distance mode unavailable — indoor and outdoor files have incompatible distance axes' : undefined}
 						>Distance</button>
 					</div>
 				</div>
 			</CollapsiblePanel>
 
-			{#if hasMixedIndoorOutdoor && !mixedWarningDismissed}
+			{#if indoor.hasMixedIndoorOutdoor && !indoor.mixedWarningDismissed}
 				<div class="location-warning" role="alert" aria-live="polite">
 					<span class="warning-icon" aria-hidden="true">⚠</span>
 					<span class="warning-text">Indoor and outdoor files loaded — distance axes are incompatible. Switch to Time mode for a meaningful comparison.</span>
-					<button class="warning-dismiss" onclick={() => mixedWarningDismissed = true} aria-label="Dismiss mixed session warning">✕</button>
+					<button class="warning-dismiss" onclick={() => indoor.mixedWarningDismissed = true} aria-label="Dismiss mixed session warning">✕</button>
 				</div>
 			{/if}
 
-			{#if allIndoor && !hasMixedIndoorOutdoor && !indoorInfoDismissed}
+			{#if indoor.allIndoor && !indoor.hasMixedIndoorOutdoor && !indoor.indoorInfoDismissed}
 				<div class="indoor-info" role="status" aria-live="polite">
 					<span class="warning-icon" aria-hidden="true">ℹ</span>
 					<span class="warning-text">All files are indoor activities — distance values are device-estimated, not GPS-measured.</span>
-					<button class="warning-dismiss" onclick={() => indoorInfoDismissed = true} aria-label="Dismiss indoor info">✕</button>
+					<button class="warning-dismiss" onclick={() => indoor.indoorInfoDismissed = true} aria-label="Dismiss indoor info">✕</button>
 				</div>
 			{/if}
 
@@ -633,11 +626,6 @@
 	.axis-btn.axis-active {
 		background: #3b82f6;
 		color: #fff;
-	}
-
-	.axis-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
 	}
 
 	/* ── Different-sessions gate panel ─────────────────────────────── */
@@ -936,20 +924,6 @@
 		background: rgba(245, 158, 11, 0.08);
 		border-bottom: 1px solid rgba(245, 158, 11, 0.25);
 		flex-shrink: 0;
-	}
-
-	.indoor-info {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 6px 16px;
-		background: rgba(59, 130, 246, 0.08);
-		border-bottom: 1px solid rgba(59, 130, 246, 0.25);
-		flex-shrink: 0;
-	}
-
-	.indoor-info .warning-icon {
-		color: #60a5fa;
 	}
 
 	.warning-icon {

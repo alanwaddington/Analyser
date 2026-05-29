@@ -509,6 +509,18 @@ describe('classifyIndoor', () => {
 		expect(classifyIndoor('indoor_running', [])).toBe(true);
 	});
 
+	it('classifyIndoor_indoorWalking_returnsTrue', () => {
+		expect(classifyIndoor('indoor_walking', [])).toBe(true);
+	});
+
+	it('classifyIndoor_virtualRide_returnsTrue', () => {
+		expect(classifyIndoor('virtual_ride', [])).toBe(true);
+	});
+
+	it('classifyIndoor_virtualRun_returnsTrue', () => {
+		expect(classifyIndoor('virtual_run', [])).toBe(true);
+	});
+
 	it('classifyIndoor_outdoorCycling_returnsFalse', () => {
 		expect(classifyIndoor('road', [makeRecord(true)])).toBe(false);
 	});

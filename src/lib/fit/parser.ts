@@ -301,7 +301,8 @@ export function extractFirstWorkoutStepTime(steps: any[]): Date | null {
 
 const INDOOR_SUB_SPORTS = new Set([
 	'indoor_cycling', 'virtual_activity', 'spin', 'stationary_bike',
-	'treadmill', 'indoor_rowing', 'indoor_running',
+	'treadmill', 'indoor_rowing', 'indoor_running', 'indoor_walking',
+	'virtual_ride', 'virtual_run',
 ]);
 
 /**
