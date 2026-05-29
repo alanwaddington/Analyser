@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -408,5 +408,132 @@ describe('extractTimerStartTime', () => {
 			{ event: 'workout', event_type: 'start', timestamp: new Date() },
 		];
 		expect(extractTimerStartTime(events)).toBeNull();
+	});
+});
+
+describe('findFirstIndoorMovementIndex', () => {
+	function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
+		return { timestamp: new Date(), elapsedSeconds: 0, distance: 0, ...overrides };
+	}
+
+	it('findFirstIndoorMovementIndex_speedAboveZero_returnsIndex', () => {
+		const records = [makeRecord({ speed: 0 }), makeRecord({ speed: 5 })];
+		expect(findFirstIndoorMovementIndex(records)).toBe(1);
+	});
+
+	it('findFirstIndoorMovementIndex_powerAboveZero_returnsIndex', () => {
+		const records = [makeRecord({ power: 0 }), makeRecord({ power: 150 })];
+		expect(findFirstIndoorMovementIndex(records)).toBe(1);
+	});
+
+	it('findFirstIndoorMovementIndex_cadenceAboveZero_returnsIndex', () => {
+		const records = [makeRecord({ cadence: 0 }), makeRecord({ cadence: 90 })];
+		expect(findFirstIndoorMovementIndex(records)).toBe(1);
+	});
+
+	it('findFirstIndoorMovementIndex_allZero_returnsNull', () => {
+		const records = [makeRecord({ speed: 0, power: 0, cadence: 0 }), makeRecord({})];
+		expect(findFirstIndoorMovementIndex(records)).toBeNull();
+	});
+
+	it('findFirstIndoorMovementIndex_emptyArray_returnsNull', () => {
+		expect(findFirstIndoorMovementIndex([])).toBeNull();
+	});
+
+	it('findFirstIndoorMovementIndex_firstRecordHasMovement_returnsZero', () => {
+		const records = [makeRecord({ power: 200 }), makeRecord({ power: 210 })];
+		expect(findFirstIndoorMovementIndex(records)).toBe(0);
+	});
+});
+
+describe('extractFirstWorkoutStepTime', () => {
+	it('extractFirstWorkoutStepTime_workoutStepPresent_returnsTimestamp', () => {
+		const t = new Date('2025-01-01T10:05:00Z');
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const steps: any[] = [{ timestamp: t, duration_value: 60 }];
+		expect(extractFirstWorkoutStepTime(steps)).toEqual(t);
+	});
+
+	it('extractFirstWorkoutStepTime_noSteps_returnsNull', () => {
+		expect(extractFirstWorkoutStepTime([])).toBeNull();
+	});
+
+	it('extractFirstWorkoutStepTime_stepWithoutTimestamp_returnsNull', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const steps: any[] = [{ duration_value: 60 }];
+		expect(extractFirstWorkoutStepTime(steps)).toBeNull();
+	});
+
+	it('extractFirstWorkoutStepTime_multipleSteps_returnsFirst', () => {
+		const t1 = new Date('2025-01-01T10:05:00Z');
+		const t2 = new Date('2025-01-01T10:10:00Z');
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const steps: any[] = [{ timestamp: t1 }, { timestamp: t2 }];
+		expect(extractFirstWorkoutStepTime(steps)).toEqual(t1);
+	});
+});
+
+describe('classifyIndoor', () => {
+	function makeRecord(hasGps: boolean): ActivityRecord {
+		return {
+			timestamp: new Date(), elapsedSeconds: 0, distance: 0,
+			...(hasGps ? { position: { lat: 51.5, lon: -0.1 } } : {}),
+		};
+	}
+
+	it('classifyIndoor_indoorCycling_returnsTrue', () => {
+		expect(classifyIndoor('indoor_cycling', [])).toBe(true);
+	});
+
+	it('classifyIndoor_virtualActivity_returnsTrue', () => {
+		expect(classifyIndoor('virtual_activity', [])).toBe(true);
+	});
+
+	it('classifyIndoor_treadmill_returnsTrue', () => {
+		expect(classifyIndoor('treadmill', [])).toBe(true);
+	});
+
+	it('classifyIndoor_spin_returnsTrue', () => {
+		expect(classifyIndoor('spin', [])).toBe(true);
+	});
+
+	it('classifyIndoor_stationaryBike_returnsTrue', () => {
+		expect(classifyIndoor('stationary_bike', [])).toBe(true);
+	});
+
+	it('classifyIndoor_indoorRowing_returnsTrue', () => {
+		expect(classifyIndoor('indoor_rowing', [])).toBe(true);
+	});
+
+	it('classifyIndoor_indoorRunning_returnsTrue', () => {
+		expect(classifyIndoor('indoor_running', [])).toBe(true);
+	});
+
+	it('classifyIndoor_outdoorCycling_returnsFalse', () => {
+		expect(classifyIndoor('road', [makeRecord(true)])).toBe(false);
+	});
+
+	it('classifyIndoor_unknownSubSport_withGps_returnsFalse', () => {
+		expect(classifyIndoor('generic', [makeRecord(true)])).toBe(false);
+	});
+
+	it('classifyIndoor_noSubSport_allRecordsHaveNoGps_returnsTrue', () => {
+		const records = [makeRecord(false), makeRecord(false)];
+		expect(classifyIndoor(undefined, records)).toBe(true);
+	});
+
+	it('classifyIndoor_noSubSport_someRecordsHaveGps_returnsFalse', () => {
+		const records = [makeRecord(false), makeRecord(true)];
+		expect(classifyIndoor(undefined, records)).toBe(false);
+	});
+
+	it('classifyIndoor_noSubSport_emptyRecords_returnsFalse', () => {
+		expect(classifyIndoor(undefined, [])).toBe(false);
+	});
+
+	it('classifyIndoor_unknownSubSport_noGps_returnsFalse', () => {
+		// Known sub_sport takes precedence — GPS-absence fallback only runs when sub_sport is undefined
+		const records = [makeRecord(false)];
+		expect(classifyIndoor('generic', records)).toBe(false);
 	});
 });
