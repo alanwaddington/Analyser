@@ -567,6 +567,8 @@ Key parsing details:
 
 Both functions are exported from `parser.ts` for unit testing.
 
+**Lap building** is handled by `buildLaps(fitLaps, records)`, which also exported for direct unit testing. It derives `startDistance` and `endDistance` from the running cursor position in the records array rather than from the FIT lap's `start_distance` field. This makes it resilient to Garmin devices that write `start_distance = 0` for every lap (per-lap relative) rather than cumulative from the session start. Laps with `total_distance = 0` are returned as zero-length entries (`startIndex === endIndex`, `startDistance === endDistance`) without advancing the cursor.
+
 ---
 
 ## 6. Testing
