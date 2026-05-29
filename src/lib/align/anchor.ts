@@ -27,7 +27,7 @@ export function haversineDistance(a: { lat: number; lon: number }, b: { lat: num
  *   4. File start (index 0) — no GPS at all
  */
 export function findAnchor(activity: Activity): AlignmentAnchor {
-	const { records, timerStartTime, firstGpsMovementIndex, firstGpsFixIndex } = activity;
+	const { records, timerStartTime, firstGpsMovementIndex, firstGpsFixIndex, startTime } = activity;
 
 	// 1. Timer event: find the record whose timestamp is closest to (and ≥) timerStartTime
 	if (timerStartTime != null && records.length > 0) {
@@ -50,12 +50,12 @@ export function findAnchor(activity: Activity): AlignmentAnchor {
 		return anchorFromRecord(r, firstGpsFixIndex, 'gpsFix');
 	}
 
-	// 4. File start fallback
+	// 4. File start fallback — use activity.startTime as the anchor timestamp
 	return {
 		recordIndex: 0,
 		distanceMetres: records[0]?.distance ?? 0,
 		elapsedSeconds: records[0]?.elapsedSeconds ?? 0,
-		timestamp: records[0]?.timestamp ?? new Date(0),
+		timestamp: startTime,
 		source: 'fileStart',
 	};
 }

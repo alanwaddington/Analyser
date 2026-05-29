@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeTimeOffsets, activitiesOverlap } from './timestamp.ts';
-import type { Activity } from '$lib/types';
+import { computeTimeOffsets, computeAnchoredOffsets, activitiesOverlap } from './timestamp.ts';
+import type { Activity, ActivityRecord } from '$lib/types';
 
 function makeActivity(id: string, startTime: Date): Activity {
 	return {
@@ -168,5 +168,119 @@ describe('differentSessions gate predicate', () => {
 		const b = makeActivity('b', T30);
 		const c = makeActivity('c', NEXT_DAY);
 		expect(!activitiesOverlap([a, b, c])).toBe(true);
+	});
+});
+
+// ---- helpers for computeAnchoredOffsets tests ----
+
+function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
+	return {
+		timestamp: new Date('2025-01-01T10:00:00Z'),
+		elapsedSeconds: 0,
+		distance: 0,
+		...overrides,
+	};
+}
+
+function makeActivityWithGps(id: string, records: ActivityRecord[], opts: {
+	firstGpsMovementIndex?: number | null;
+	firstGpsFixIndex?: number | null;
+	timerStartTime?: Date | null;
+} = {}): Activity {
+	return {
+		id,
+		filename: `${id}.fit`,
+		startTime: records[0]?.timestamp ?? new Date(0),
+		totalDistance: 5000,
+		totalElapsedTime: 1800,
+		records,
+		laps: [],
+		devices: [],
+		deviceStreams: [],
+		firstGpsFixIndex: opts.firstGpsFixIndex ?? null,
+		firstGpsMovementIndex: opts.firstGpsMovementIndex ?? null,
+		timerStartTime: opts.timerStartTime ?? null,
+	};
+}
+
+describe('computeAnchoredOffsets', () => {
+	it('computeAnchoredOffsets_emptyArray_returnsEmptyMap', () => {
+		const result = computeAnchoredOffsets([]);
+		expect(result.size).toBe(0);
+	});
+
+	it('computeAnchoredOffsets_singleActivity_returnsZero', () => {
+		const r = makeRecord({ timestamp: T0, elapsedSeconds: 0 });
+		const a = makeActivityWithGps('a', [r], { firstGpsMovementIndex: 0 });
+		const result = computeAnchoredOffsets([a]);
+		expect(result.get('a')).toBe(0);
+	});
+
+	it('computeAnchoredOffsets_twoFilesGpsMovementAnchors_offsetIsAnchorTimestampDiff', () => {
+		// Reference: GPS movement at T0; other: GPS movement at T30
+		// Expected offset for other = (T0 - T30) = -30s (other started 30s later in wall time)
+		const rA = makeRecord({ timestamp: T0, elapsedSeconds: 5 });
+		const rB = makeRecord({ timestamp: T30, elapsedSeconds: 5 });
+		const a = makeActivityWithGps('a', [rA], { firstGpsMovementIndex: 0 });
+		const b = makeActivityWithGps('b', [rB], { firstGpsMovementIndex: 0 });
+		const result = computeAnchoredOffsets([a, b]);
+		expect(result.get('a')).toBe(0);
+		expect(result.get('b')).toBe(-30);
+	});
+
+	it('computeAnchoredOffsets_preRecordingOffset_aligns_toGpsAnchor_notFileStart', () => {
+		// File A: started recording at T0, GPS movement at T0 (elapsedSeconds 0)
+		// File B: started recording at T0 also (same wall time), GPS movement at T30 (30s into recording)
+		// Both athletes are at the same GPS location at T30.
+		// File B should have offset = -(30) so charts align at the GPS movement moment.
+		const rA0 = makeRecord({ timestamp: T0, elapsedSeconds: 0 });
+		const rA_move = makeRecord({ timestamp: T0, elapsedSeconds: 0 });
+		const rB0 = makeRecord({ timestamp: T0, elapsedSeconds: 0 });
+		const rB_move = makeRecord({ timestamp: T30, elapsedSeconds: 30 });
+
+		const a = makeActivityWithGps('a', [rA0, rA_move], { firstGpsMovementIndex: 0 });
+		const b = makeActivityWithGps('b', [rB0, rB_move], { firstGpsMovementIndex: 1 });
+		const result = computeAnchoredOffsets([a, b]);
+		expect(result.get('a')).toBe(0);
+		expect(result.get('b')).toBe(-30);
+	});
+
+	it('computeAnchoredOffsets_timerEventPriority_usesTimerNotGpsMovement', () => {
+		// File A: timer at T0; File B: timer at T5
+		// GPS movement in both at T30 — should be ignored in favour of timer
+		const timerA = T0;
+		const timerB = T5;
+		const rA = [
+			makeRecord({ timestamp: T0, elapsedSeconds: 0 }),
+			makeRecord({ timestamp: T30, elapsedSeconds: 30, speed: 5, position: { lat: 51.5, lon: -0.1 } }),
+		];
+		const rB = [
+			makeRecord({ timestamp: T5, elapsedSeconds: 0 }),
+			makeRecord({ timestamp: T30, elapsedSeconds: 25, speed: 5, position: { lat: 51.5, lon: -0.1 } }),
+		];
+		const a = makeActivityWithGps('a', rA, { firstGpsMovementIndex: 1, timerStartTime: timerA });
+		const b = makeActivityWithGps('b', rB, { firstGpsMovementIndex: 1, timerStartTime: timerB });
+		const result = computeAnchoredOffsets([a, b]);
+		expect(result.get('a')).toBe(0);
+		// Timer B is T5, timer A is T0 → offset for B = (T0 - T5) = -5s
+		expect(result.get('b')).toBe(-5);
+	});
+
+	it('computeAnchoredOffsets_noGpsNoTimer_fallsBackToStartTime', () => {
+		// Activities with no GPS fall back to raw startTime difference (existing behaviour)
+		const a = makeActivity('a', T0);
+		const b = makeActivity('b', T30);
+		const result = computeAnchoredOffsets([a, b]);
+		expect(result.get('a')).toBe(0);
+		expect(result.get('b')).toBe(-30);
+	});
+
+	it('computeAnchoredOffsets_referenceAlwaysZero', () => {
+		const rA = makeRecord({ timestamp: T30, elapsedSeconds: 0 });
+		const rB = makeRecord({ timestamp: T0, elapsedSeconds: 0 });
+		const a = makeActivityWithGps('a', [rA], { firstGpsMovementIndex: 0 });
+		const b = makeActivityWithGps('b', [rB], { firstGpsMovementIndex: 0 });
+		const result = computeAnchoredOffsets([a, b]);
+		expect(result.get('a')).toBe(0);
 	});
 });
