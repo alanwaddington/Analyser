@@ -1,5 +1,4 @@
 import type { Activity } from '$lib/types';
-import { findAnchor } from './anchor';
 
 /** Activities are considered from different sessions when they start more than this apart. */
 const OVERLAP_THRESHOLD_SECONDS = 3600; // 1 hour
@@ -35,12 +34,10 @@ export function computeAnchoredOffsets(activities: Activity[]): Map<string, numb
 	const offsets = new Map<string, number>();
 	if (activities.length === 0) return offsets;
 
-	const referenceAnchor = findAnchor(activities[0]);
-	const referenceMs = referenceAnchor.timestamp.getTime();
+	const referenceMs = activities[0].anchor.timestamp.getTime();
 
 	for (const activity of activities) {
-		const anchor = findAnchor(activity);
-		const offsetSeconds = (referenceMs - anchor.timestamp.getTime()) / 1000;
+		const offsetSeconds = (referenceMs - activity.anchor.timestamp.getTime()) / 1000;
 		offsets.set(activity.id, offsetSeconds);
 	}
 	return offsets;

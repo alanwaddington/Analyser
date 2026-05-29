@@ -92,6 +92,7 @@ export interface Activity {
 	firstGpsFixIndex: number | null;
 	firstGpsMovementIndex: number | null;
 	timerStartTime: Date | null;
+	anchor: AlignmentAnchor; // best alignment anchor for this activity, computed at parse time
 }
 
 export interface AlignedSeries {

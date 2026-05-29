@@ -16,7 +16,7 @@
 	import DeviceToggleBar from '$lib/components/ui/DeviceToggleBar.svelte';
 	import TimeOffsetControl from '$lib/components/ui/TimeOffsetControl.svelte';
 	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
-	import { computeAnchoredOffsets, activitiesOverlap, findAnchor } from '$lib/align';
+	import { computeAnchoredOffsets, activitiesOverlap } from '$lib/align';
 	import type { AnchorSource } from '$lib/types';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
@@ -88,23 +88,14 @@
 	const autoOffsets = $derived(computeAnchoredOffsets($activities));
 
 	// Per-file distance offsets for re-zeroing charts to the GPS anchor point
-	const distanceOffsets = $derived.by<Map<string, number>>(() => {
-		const m = new Map<string, number>();
-		for (const activity of $activities) {
-			const anchor = findAnchor(activity);
-			m.set(activity.id, anchor.distanceMetres);
-		}
-		return m;
-	});
+	const distanceOffsets = $derived(
+		new Map($activities.map(a => [a.id, a.anchor.distanceMetres]))
+	);
 
 	// Per-file anchor sources for the alignment indicator in TimeOffsetControl
-	const anchorSources = $derived.by<Map<string, AnchorSource>>(() => {
-		const m = new Map<string, AnchorSource>();
-		for (const activity of $activities) {
-			m.set(activity.id, findAnchor(activity).source);
-		}
-		return m;
-	});
+	const anchorSources = $derived(
+		new Map<string, AnchorSource>($activities.map(a => [a.id, a.anchor.source]))
+	);
 
 	// Initialise the timeOffsets store whenever activities change.
 	// The store may then be overridden by TimeOffsetControl for manual fine-tuning.

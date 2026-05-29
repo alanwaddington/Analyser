@@ -3,6 +3,7 @@ import type { Activity, ActivityRecord, Device, DeviceStream, Lap } from '../typ
 import { ANT_DEVICE_TYPE } from '../types';
 import type { ChannelKey } from '../types';
 import { applyLabels } from '../stores/deviceLabels';
+import { findAnchor } from '../align/anchor';
 
 export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Activity> {
 	return new Promise((resolve, reject) => {
@@ -322,20 +323,29 @@ function normalise(data: FitData, filename: string): Activity {
 	applyLabels(devices); // restore any user-assigned labels from localStorage
 	const deviceStreams = buildDeviceStreams(devices, records);
 
+	const startTime = session.start_time ?? records[0]?.timestamp ?? new Date(0);
+	const firstGpsFixIndex = findFirstGpsFixIndex(records);
+	const firstGpsMovementIndex = findFirstGpsMovementIndex(records);
+	const timerStartTime = extractTimerStartTime(data.events ?? []);
+
+	// findAnchor only needs these five fields; safe to cast the partial object.
+	const anchor = findAnchor({ records, firstGpsFixIndex, firstGpsMovementIndex, timerStartTime, startTime } as Activity);
+
 	return {
 		id: crypto.randomUUID(),
 		filename,
 		sport,
-		startTime: session.start_time ?? records[0]?.timestamp ?? new Date(0),
+		startTime,
 		totalDistance: session.total_distance ?? records.at(-1)?.distance ?? 0,
 		totalElapsedTime: session.total_elapsed_time ?? records.at(-1)?.elapsedSeconds ?? 0,
 		records,
 		laps,
 		devices,
 		deviceStreams,
-		firstGpsFixIndex: findFirstGpsFixIndex(records),
-		firstGpsMovementIndex: findFirstGpsMovementIndex(records),
-		timerStartTime: extractTimerStartTime(data.events ?? []),
+		firstGpsFixIndex,
+		firstGpsMovementIndex,
+		timerStartTime,
+		anchor,
 	};
 }
 

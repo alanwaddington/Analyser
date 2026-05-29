@@ -25,6 +25,7 @@ function makeActivity(records: ActivityRecord[]): Activity {
 		firstGpsFixIndex: null,
 		firstGpsMovementIndex: null,
 		timerStartTime: null,
+		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
 	};
 }
 

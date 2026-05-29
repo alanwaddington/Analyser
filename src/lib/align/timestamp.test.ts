@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeTimeOffsets, computeAnchoredOffsets, activitiesOverlap } from './timestamp.ts';
+import { findAnchor } from './anchor.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
 
 function makeActivity(id: string, startTime: Date): Activity {
@@ -16,6 +17,8 @@ function makeActivity(id: string, startTime: Date): Activity {
 		firstGpsFixIndex: null,
 		firstGpsMovementIndex: null,
 		timerStartTime: null,
+		// No GPS/timer → fileStart anchor; timestamp must be startTime for fallback to work
+		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: startTime, source: 'fileStart' as const },
 	};
 }
 
@@ -187,7 +190,7 @@ function makeActivityWithGps(id: string, records: ActivityRecord[], opts: {
 	firstGpsFixIndex?: number | null;
 	timerStartTime?: Date | null;
 } = {}): Activity {
-	return {
+	const a: Activity = {
 		id,
 		filename: `${id}.fit`,
 		startTime: records[0]?.timestamp ?? new Date(0),
@@ -200,7 +203,10 @@ function makeActivityWithGps(id: string, records: ActivityRecord[], opts: {
 		firstGpsFixIndex: opts.firstGpsFixIndex ?? null,
 		firstGpsMovementIndex: opts.firstGpsMovementIndex ?? null,
 		timerStartTime: opts.timerStartTime ?? null,
+		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
 	};
+	a.anchor = findAnchor(a);
+	return a;
 }
 
 describe('computeAnchoredOffsets', () => {

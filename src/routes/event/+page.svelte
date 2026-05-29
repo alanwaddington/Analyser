@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import { activities, activeChannels, xAxisMode, referenceIndex } from '$lib/stores/session';
-	import { findAnchor } from '$lib/align';
+
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
 	import { buildSegments } from '$lib/utils/segments';
@@ -71,7 +71,7 @@
 		$activities.map((a, i) => ({
 			activity: a,
 			colourIndex: i,
-			distanceOffset: findAnchor(a).distanceMetres,
+			distanceOffset: a.anchor.distanceMetres,
 		})),
 	);
 	const lapMarkers = $derived(buildLapMarkers($activities[$referenceIndex], $xAxisMode));
