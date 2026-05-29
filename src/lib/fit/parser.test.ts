@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -297,5 +297,116 @@ describe('removeCyclingPace', () => {
 		expect(records[0].pace).toBeUndefined();
 		expect(records[1].pace).toBeUndefined();
 		expect(records[2].pace).toBeUndefined();
+	});
+});
+
+// ---- GPS anchor detection helpers ----
+
+function makeGpsRecord(lat: number | null, lon: number | null, speed = 0, dist = 0): import('$lib/types').ActivityRecord {
+	return {
+		timestamp: new Date(),
+		elapsedSeconds: 0,
+		distance: dist,
+		speed,
+		position: lat != null && lon != null ? { lat, lon } : undefined,
+	};
+}
+
+describe('findFirstGpsFixIndex', () => {
+	it('findFirstGpsFixIndex_allNullGps_returnsNull', () => {
+		const records = [makeGpsRecord(null, null), makeGpsRecord(null, null)];
+		expect(findFirstGpsFixIndex(records)).toBeNull();
+	});
+
+	it('findFirstGpsFixIndex_emptyRecords_returnsNull', () => {
+		expect(findFirstGpsFixIndex([])).toBeNull();
+	});
+
+	it('findFirstGpsFixIndex_firstRecordHasGps_returnsZero', () => {
+		const records = [makeGpsRecord(51.5, -0.1), makeGpsRecord(51.6, -0.2)];
+		expect(findFirstGpsFixIndex(records)).toBe(0);
+	});
+
+	it('findFirstGpsFixIndex_gpsStartsAtThirdRecord_returnsTwo', () => {
+		const records = [
+			makeGpsRecord(null, null),
+			makeGpsRecord(null, null),
+			makeGpsRecord(51.5, -0.1),
+			makeGpsRecord(51.6, -0.2),
+		];
+		expect(findFirstGpsFixIndex(records)).toBe(2);
+	});
+});
+
+describe('findFirstGpsMovementIndex', () => {
+	it('findFirstGpsMovementIndex_allNullGps_returnsNull', () => {
+		const records = [makeGpsRecord(null, null, 5), makeGpsRecord(null, null, 10)];
+		expect(findFirstGpsMovementIndex(records)).toBeNull();
+	});
+
+	it('findFirstGpsMovementIndex_emptyRecords_returnsNull', () => {
+		expect(findFirstGpsMovementIndex([])).toBeNull();
+	});
+
+	it('findFirstGpsMovementIndex_gpsWithZeroSpeed_returnsNull', () => {
+		// AC4: GPS acquired while stationary — should not be the movement anchor
+		const records = [makeGpsRecord(51.5, -0.1, 0), makeGpsRecord(51.5, -0.1, 0)];
+		expect(findFirstGpsMovementIndex(records)).toBeNull();
+	});
+
+	it('findFirstGpsMovementIndex_gpsAcquiredThenMovement_returnsMovementIndex', () => {
+		// AC4: fix at index 1 (speed=0), movement at index 3 — movement index returned
+		const records = [
+			makeGpsRecord(null, null, 0),
+			makeGpsRecord(51.5, -0.1, 0),  // fix but not moving
+			makeGpsRecord(51.5, -0.1, 0),  // still not moving
+			makeGpsRecord(51.5, -0.1, 5),  // first movement
+		];
+		expect(findFirstGpsMovementIndex(records)).toBe(3);
+	});
+
+	it('findFirstGpsMovementIndex_gpsAndMovementFromFirstRecord_returnsZero', () => {
+		const records = [makeGpsRecord(51.5, -0.1, 3)];
+		expect(findFirstGpsMovementIndex(records)).toBe(0);
+	});
+});
+
+describe('extractTimerStartTime', () => {
+	it('extractTimerStartTime_noEvents_returnsNull', () => {
+		expect(extractTimerStartTime([])).toBeNull();
+	});
+
+	it('extractTimerStartTime_timerStartEvent_returnsTimestamp', () => {
+		const t = new Date('2025-01-01T10:00:00Z');
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const events: any[] = [{ event: 'timer', event_type: 'start', timestamp: t }];
+		expect(extractTimerStartTime(events)).toEqual(t);
+	});
+
+	it('extractTimerStartTime_timerStopEvent_returnsNull', () => {
+		const t = new Date('2025-01-01T10:00:00Z');
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const events: any[] = [{ event: 'timer', event_type: 'stop', timestamp: t }];
+		expect(extractTimerStartTime(events)).toBeNull();
+	});
+
+	it('extractTimerStartTime_multipleEvents_returnsFirstTimerStart', () => {
+		const t1 = new Date('2025-01-01T09:50:00Z');
+		const t2 = new Date('2025-01-01T10:00:00Z');
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const events: any[] = [
+			{ event: 'session', event_type: 'start', timestamp: t1 },
+			{ event: 'timer', event_type: 'start', timestamp: t2 },
+		];
+		expect(extractTimerStartTime(events)).toEqual(t2);
+	});
+
+	it('extractTimerStartTime_noTimerStartAmongEvents_returnsNull', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const events: any[] = [
+			{ event: 'session', event_type: 'start', timestamp: new Date() },
+			{ event: 'workout', event_type: 'start', timestamp: new Date() },
+		];
+		expect(extractTimerStartTime(events)).toBeNull();
 	});
 });

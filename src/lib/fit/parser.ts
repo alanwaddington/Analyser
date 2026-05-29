@@ -27,12 +27,19 @@ interface FitSport {
 	sub_sport?: string;
 }
 
+interface FitEvent {
+	event?: string;
+	event_type?: string;
+	timestamp?: Date;
+}
+
 interface FitData {
 	sessions?: FitSession[];
 	sports?: FitSport[];
 	records?: FitRecord[];
 	laps?: FitLap[];
 	device_infos?: FitDeviceInfo[];
+	events?: FitEvent[];
 }
 
 interface FitSession {
@@ -239,6 +246,34 @@ export function buildDeviceStreams(
 	return streams;
 }
 
+/** Returns the index of the first record with a valid GPS position, or null. */
+export function findFirstGpsFixIndex(records: ActivityRecord[]): number | null {
+	for (let i = 0; i < records.length; i++) {
+		if (records[i].position != null) return i;
+	}
+	return null;
+}
+
+/** Returns the index of the first record with a valid GPS position AND speed > 0, or null. */
+export function findFirstGpsMovementIndex(records: ActivityRecord[]): number | null {
+	for (let i = 0; i < records.length; i++) {
+		const r = records[i];
+		if (r.position != null && (r.speed ?? 0) > 0) return i;
+	}
+	return null;
+}
+
+/** Returns the timestamp of the first FIT timer start event, or null. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function extractTimerStartTime(events: any[]): Date | null {
+	for (const e of events) {
+		if (e.event === 'timer' && e.event_type === 'start' && e.timestamp != null) {
+			return e.timestamp as Date;
+		}
+	}
+	return null;
+}
+
 // Running cadence in FIT files is single-leg (one foot per minute).
 // Double it so the displayed value matches the conventional spm (steps per minute).
 // Cycling cadence is full revolutions — no adjustment needed.
@@ -298,9 +333,9 @@ function normalise(data: FitData, filename: string): Activity {
 		laps,
 		devices,
 		deviceStreams,
-		firstGpsFixIndex: null,
-		firstGpsMovementIndex: null,
-		timerStartTime: null,
+		firstGpsFixIndex: findFirstGpsFixIndex(records),
+		firstGpsMovementIndex: findFirstGpsMovementIndex(records),
+		timerStartTime: extractTimerStartTime(data.events ?? []),
 	};
 }
 
