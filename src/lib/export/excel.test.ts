@@ -26,6 +26,9 @@ function makeActivity(id: string, overrides: Partial<Activity> = {}): Activity {
 		laps: [],
 		devices: [],
 		deviceStreams: [],
+		firstGpsFixIndex: null,
+		firstGpsMovementIndex: null,
+		timerStartTime: null,
 		...overrides,
 	};
 }

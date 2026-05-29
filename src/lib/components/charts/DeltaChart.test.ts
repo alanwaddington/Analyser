@@ -21,6 +21,9 @@ function makeActivity(totalDistance: number, records: ActivityRecord[]): Activit
 		laps: [],
 		devices: [],
 		deviceStreams: [],
+		firstGpsFixIndex: null,
+		firstGpsMovementIndex: null,
+		timerStartTime: null,
 	};
 }
 

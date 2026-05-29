@@ -27,6 +27,9 @@ function makeActivity(id: string): Activity {
 		laps: [],
 		devices: [],
 		deviceStreams: [],
+		firstGpsFixIndex: null,
+		firstGpsMovementIndex: null,
+		timerStartTime: null,
 	};
 }
 

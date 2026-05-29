@@ -298,6 +298,9 @@ function normalise(data: FitData, filename: string): Activity {
 		laps,
 		devices,
 		deviceStreams,
+		firstGpsFixIndex: null,
+		firstGpsMovementIndex: null,
+		timerStartTime: null,
 	};
 }
 

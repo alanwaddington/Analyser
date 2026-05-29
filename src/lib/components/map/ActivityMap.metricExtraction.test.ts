@@ -30,6 +30,9 @@ function makeActivity(records: ActivityRecord[]): Activity {
 		laps: [],
 		devices: [],
 		deviceStreams: [],
+		firstGpsFixIndex: null,
+		firstGpsMovementIndex: null,
+		timerStartTime: null,
 	};
 }
 

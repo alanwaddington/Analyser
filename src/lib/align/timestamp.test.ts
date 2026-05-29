@@ -13,6 +13,9 @@ function makeActivity(id: string, startTime: Date): Activity {
 		laps: [],
 		devices: [],
 		deviceStreams: [],
+		firstGpsFixIndex: null,
+		firstGpsMovementIndex: null,
+		timerStartTime: null,
 	};
 }
 
