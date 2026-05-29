@@ -512,13 +512,18 @@ The `TimeOffsetControl` component shows a colour-coded anchor badge per file. La
 
 ```ts
 const indoor = createIndoorWarnings(() => $activities);
-// indoor.hasMixedIndoorOutdoor — any indoor + any outdoor file loaded
-// indoor.allIndoor             — all files are indoor (requires ≥2 files)
+// indoor.hasMixedIndoorOutdoor — any indoor + any outdoor file loaded (requires ≥2 files)
+// indoor.allIndoor             — all loaded files are indoor (single file or more)
 // indoor.mixedWarningDismissed — dismissal state for amber banner
 // indoor.indoorInfoDismissed   — dismissal state for blue banner
 ```
 
-The composable owns the dismissal reset `$effect` (fires on every `$activities` change). The page adds a separate `$effect` to auto-switch `xAxisMode` to `'time'` when a mixed session is detected, since that is page-level behaviour. CSS for the banners is in `src/routes/indoor-warning.css` (shared by both pages).
+The composable owns the dismissal reset `$effect` (fires on every `$activities` change). Each page adds two separate `$effect` blocks for axis auto-switching:
+
+- **Mixed session:** `if (hasMixedIndoorOutdoor && $xAxisMode === 'distance') xAxisMode.set('time')` — locks to Time because mixed distance axes are incompatible.
+- **All-indoor session:** `if (allIndoor && untrack(() => $xAxisMode) === 'distance') xAxisMode.set('time')` — defaults to Time on file load but uses `untrack()` so the user can manually switch back to Distance. `untrack()` prevents `$xAxisMode` from becoming a reactive dependency, limiting the effect to firing only when the file set changes.
+
+CSS for the banners is in `src/routes/indoor-warning.css` (shared by both pages).
 
 ### Proximity warning
 
