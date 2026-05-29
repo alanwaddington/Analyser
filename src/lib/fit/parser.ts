@@ -408,7 +408,17 @@ export function buildLaps(fitLaps: FitLap[], records: ActivityRecord[]): Lap[] {
 	return fitLaps.map((l) => {
 		const startIndex = cursor;
 		const startDist = prevEndDist;
-		const targetDist = startDist + (l.total_distance ?? 0);
+		const lapDistance = l.total_distance ?? 0;
+		if (lapDistance === 0) {
+			return {
+				startDistance: startDist,
+				endDistance: startDist,
+				elapsedSeconds: l.total_elapsed_time ?? 0,
+				startIndex,
+				endIndex: startIndex,
+			};
+		}
+		const targetDist = startDist + lapDistance;
 		while (cursor < records.length && records[cursor].distance <= targetDist) cursor++;
 		const endIndex = Math.max(startIndex, cursor - 1);
 		const endDist = records[endIndex]?.distance ?? targetDist;

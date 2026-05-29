@@ -584,6 +584,10 @@ describe('buildLaps', () => {
 		expect(laps[2].startDistance).toBeGreaterThan(laps[1].startDistance);
 		expect(laps[3].startDistance).toBeGreaterThan(laps[2].startDistance);
 		expect(laps[4].startDistance).toBeGreaterThan(laps[3].startDistance);
+		expect(laps[1].startDistance).toBeCloseTo(1000, -1);
+		expect(laps[2].startDistance).toBeCloseTo(2000, -1);
+		expect(laps[3].startDistance).toBeCloseTo(3000, -1);
+		expect(laps[4].startDistance).toBeCloseTo(4000, -1);
 	});
 
 	it('buildLaps_allZeroStartDistance_eachLapHasNonZeroSpan', () => {
@@ -656,5 +660,23 @@ describe('buildLaps', () => {
 		const fitLaps: any[] = [{ start_distance: 0, total_distance: 1000, total_elapsed_time: 327 }];
 		const laps = buildLaps(fitLaps, records);
 		expect(laps[0].elapsedSeconds).toBe(327);
+	});
+
+	it('buildLaps_zeroDistanceLap_producesZeroLengthEntry', () => {
+		const records = makeRecords(2000);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+			{ start_distance: 0, total_distance: 0,    total_elapsed_time: 0 },
+			{ start_distance: 0, total_distance: 1000, total_elapsed_time: 100 },
+		];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps).toHaveLength(3);
+		// Zero-distance lap must not consume a record
+		expect(laps[1].startIndex).toBe(laps[1].endIndex);
+		expect(laps[1].startDistance).toBe(laps[1].endDistance);
+		// Following lap must start from the correct cumulative position
+		expect(laps[2].startDistance).toBeCloseTo(1000, -1);
+		expect(laps[2].endDistance).toBeCloseTo(2000, -1);
 	});
 });
