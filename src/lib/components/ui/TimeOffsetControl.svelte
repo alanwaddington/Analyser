@@ -1,31 +1,13 @@
 <script lang="ts">
 	import type { Activity, AnchorSource } from '$lib/types';
 	import { timeOffsets } from '$lib/stores/session';
-	import { nudgeOffset, parseOffset } from './TimeOffsetControl.utils.ts';
+	import { nudgeOffset, parseOffset, ANCHOR_LABELS, ANCHOR_TITLES } from './TimeOffsetControl.utils.ts';
 
 	let { activities, autoOffsets, anchorSources = new Map() }: {
 		activities: Activity[];
 		autoOffsets: Map<string, number>;
 		anchorSources?: Map<string, AnchorSource>;
 	} = $props();
-
-	const ANCHOR_LABELS: Record<AnchorSource, string> = {
-		timer:          'Timer',
-		gpsMovement:    'GPS move',
-		gpsFix:         'GPS fix',
-		fileStart:      'File start',
-		workoutStep:    'Workout',
-		indoorMovement: 'Indoor',
-	};
-
-	const ANCHOR_TITLES: Record<AnchorSource, string> = {
-		timer:          'Aligned by FIT timer start event',
-		gpsMovement:    'Aligned by first GPS movement',
-		gpsFix:         'Aligned by first GPS fix (stationary)',
-		fileStart:      'No GPS — aligned by file start time',
-		workoutStep:    'Aligned by first workout step',
-		indoorMovement: 'Aligned by first indoor movement (speed/power/cadence)',
-	};
 
 	let expanded = $state(false);
 
