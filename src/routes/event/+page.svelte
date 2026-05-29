@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import { activities, activeChannels, xAxisMode, referenceIndex } from '$lib/stores/session';
+	import { findAnchor } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
 	import { buildSegments } from '$lib/utils/segments';
@@ -67,7 +68,11 @@
 
 	const availableChannels = $derived(deriveAvailableChannels($activities));
 	const seriesInputs: SeriesInput[] = $derived(
-		$activities.map((a, i) => ({ activity: a, colourIndex: i })),
+		$activities.map((a, i) => ({
+			activity: a,
+			colourIndex: i,
+			distanceOffset: findAnchor(a).distanceMetres,
+		})),
 	);
 	const lapMarkers = $derived(buildLapMarkers($activities[$referenceIndex], $xAxisMode));
 	const segments = $derived(buildSegments($activities[$referenceIndex]));

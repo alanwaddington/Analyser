@@ -4,10 +4,14 @@ import { computeTimeDelta } from '$lib/compare';
 export interface DeltaSeriesInput {
 	activity: Activity;
 	colourIndex: number;
+	distanceOffset?: number;
 }
 
-export function getClipDistance(activities: Activity[]): number {
-	return Math.min(...activities.map(a => a.totalDistance));
+export function getClipDistance(activities: Activity[], distanceOffsets?: Map<string, number>): number {
+	return Math.min(...activities.map(a => {
+		const offset = distanceOffsets?.get(a.id) ?? 0;
+		return a.totalDistance - offset;
+	}));
 }
 
 export function buildZeroLine(maxDist: number, mode: 'time' | 'distance'): [number, number][] {
@@ -20,8 +24,10 @@ export function buildDeltaData(
 	candidate: Activity,
 	maxDist: number,
 	mode: 'time' | 'distance',
+	refDistanceOffset = 0,
+	candDistanceOffset = 0,
 ): [number, number][] {
-	const deltas = computeTimeDelta(ref, candidate);
+	const deltas = computeTimeDelta(ref, candidate, 10, refDistanceOffset, candDistanceOffset);
 	const filtered = deltas.filter(d => d.distance <= maxDist);
 	return filtered.map(d => [
 		mode === 'distance' ? d.distance / 1000 : d.distance,

@@ -16,7 +16,8 @@
 	import DeviceToggleBar from '$lib/components/ui/DeviceToggleBar.svelte';
 	import TimeOffsetControl from '$lib/components/ui/TimeOffsetControl.svelte';
 	import { getActiveStreamsForChannel, deriveDeviceLabel, deviceKey } from '$lib/utils/deviceChannels';
-	import { computeTimeOffsets, activitiesOverlap } from '$lib/align';
+	import { computeAnchoredOffsets, activitiesOverlap, findAnchor } from '$lib/align';
+	import type { AnchorSource } from '$lib/types';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import { exportActivities } from '$lib/export/exportActivities';
@@ -83,13 +84,32 @@
 		return result;
 	});
 
-	// Auto-computed time offsets (used as defaults and for reset in TimeOffsetControl)
-	const autoOffsets = $derived(computeTimeOffsets($activities));
+	// Auto-computed time offsets anchored to GPS movement / timer event (used as defaults and for reset)
+	const autoOffsets = $derived(computeAnchoredOffsets($activities));
+
+	// Per-file distance offsets for re-zeroing charts to the GPS anchor point
+	const distanceOffsets = $derived.by<Map<string, number>>(() => {
+		const m = new Map<string, number>();
+		for (const activity of $activities) {
+			const anchor = findAnchor(activity);
+			m.set(activity.id, anchor.distanceMetres);
+		}
+		return m;
+	});
+
+	// Per-file anchor sources for the alignment indicator in TimeOffsetControl
+	const anchorSources = $derived.by<Map<string, AnchorSource>>(() => {
+		const m = new Map<string, AnchorSource>();
+		for (const activity of $activities) {
+			m.set(activity.id, findAnchor(activity).source);
+		}
+		return m;
+	});
 
 	// Initialise the timeOffsets store whenever activities change.
 	// The store may then be overridden by TimeOffsetControl for manual fine-tuning.
 	$effect(() => {
-		timeOffsets.set(computeTimeOffsets($activities));
+		timeOffsets.set(computeAnchoredOffsets($activities));
 	});
 
 	// Auto-select all streams with data whenever the file set changes, so charts
@@ -134,6 +154,7 @@
 				colour: FILE_COLOURS[actIndex % FILE_COLOURS.length],
 				label: deriveDeviceLabel(cfs.stream.device),
 				timeOffset: $timeOffsets.get(cfs.activity.id) ?? 0,
+				distanceOffset: distanceOffsets.get(cfs.activity.id) ?? 0,
 			};
 		});
 	}
@@ -321,7 +342,7 @@
 					<DeviceToggleBar streams={crossFileStreams} {multiFile} />
 					{#if multiFile && $xAxisMode === 'time'}
 						<div class="toc-wrap">
-							<TimeOffsetControl activities={$activities} {autoOffsets} />
+							<TimeOffsetControl activities={$activities} {autoOffsets} {anchorSources} />
 						</div>
 					{/if}
 					<div class="axis-toggle" role="group" aria-label="X-axis mode">
