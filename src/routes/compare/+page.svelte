@@ -21,6 +21,7 @@
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import { exportActivities } from '$lib/export/exportActivities';
+	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
 	import '../map-panel.css';
 	import '../export-btn.css';
@@ -198,9 +199,11 @@
 		if (indoor.hasMixedIndoorOutdoor && $xAxisMode === 'distance') xAxisMode.set('time');
 	});
 
-	// Force Time mode when all activities are indoor — distance is device-estimated, not GPS
+	// Force Time mode when all activities are indoor — distance is device-estimated, not GPS.
+	// untrack() prevents $xAxisMode from becoming a dependency so the effect only re-fires
+	// on file-set changes, allowing the user to manually switch to Distance if desired.
 	$effect(() => {
-		if (indoor.allIndoor && $xAxisMode === 'distance') xAxisMode.set('time');
+		if (indoor.allIndoor && untrack(() => $xAxisMode) === 'distance') xAxisMode.set('time');
 	});
 
 	$effect(() => {
