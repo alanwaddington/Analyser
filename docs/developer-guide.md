@@ -77,6 +77,12 @@ src/
 │   │   ├── session.ts       # Activity session state
 │   │   └── viewport.ts      # Responsive breakpoint store
 │   ├── utils/        # Pure utility functions
+│   │                 # - binarySearch.ts: lowerBound<T>(arr, key, target) — shared lower-bound binary search
+│   │                 # - channels.ts: deriveAvailableChannels()
+│   │                 # - deviceChannels.ts: deviceKey(), deriveDeviceLabel(), groupStreamsByChannel(), isComparableGroup()
+│   │                 # - indoorWarnings.svelte.ts: createIndoorWarnings() composable
+│   │                 # - lapMarkers.ts: buildLapMarkers()
+│   │                 # - segments.ts: buildSegments()
 │   ├── validation.ts # Shared regex constants (UUID, short code)
 │   └── types.ts      # Domain types
 └── routes/
