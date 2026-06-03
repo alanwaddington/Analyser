@@ -1,4 +1,5 @@
 import type { Activity, TimeDelta } from '../types';
+import { lowerBound } from '../utils/binarySearch.ts';
 
 // Compute cumulative time delta between a candidate activity and a reference,
 // aligned on a shared distance axis. Positive = candidate is ahead.
@@ -31,14 +32,7 @@ export function computeTimeDelta(
 
 export function timeAtDistance(activity: Activity, targetDist: number): number | null {
 	const records = activity.records;
-	let lo = 0;
-	let hi = records.length - 1;
-
-	while (lo < hi) {
-		const mid = (lo + hi) >> 1;
-		if (records[mid].distance < targetDist) lo = mid + 1;
-		else hi = mid;
-	}
+	const lo = Math.min(lowerBound(records, (r) => r.distance, targetDist), records.length - 1);
 
 	if (lo === 0) return records[0].elapsedSeconds;
 
