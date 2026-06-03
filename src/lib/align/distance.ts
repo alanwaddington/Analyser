@@ -1,4 +1,5 @@
 import type { Activity, ActivityRecord } from '../types';
+import { lowerBound } from '../utils/binarySearch.ts';
 
 export type ChannelKey = keyof Omit<ActivityRecord, 'timestamp' | 'distance' | 'elapsedSeconds' | 'position'>;
 
@@ -38,14 +39,7 @@ export function interpolateToDistanceAxis(
 }
 
 function lerp(records: ActivityRecord[], targetDist: number, key: ChannelKey): number | null {
-	let lo = 0;
-	let hi = records.length - 1;
-
-	while (lo < hi) {
-		const mid = (lo + hi) >> 1;
-		if (records[mid].distance < targetDist) lo = mid + 1;
-		else hi = mid;
-	}
+	const lo = Math.min(lowerBound(records, (r) => r.distance, targetDist), records.length - 1);
 
 	if (records[lo].distance === targetDist) return (records[lo][key] as number | undefined) ?? null;
 	if (lo === 0) return (records[0][key] as number | undefined) ?? null;
