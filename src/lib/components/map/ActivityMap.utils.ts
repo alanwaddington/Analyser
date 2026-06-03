@@ -1,4 +1,5 @@
 import type { Activity, ActivityRecord, GpsPoint } from '$lib/types';
+import { lowerBound } from '$lib/utils/binarySearch.ts';
 
 // ---------------------------------------------------------------------------
 // Tile layer providers
@@ -81,16 +82,8 @@ export function positionFromPoints(
 ): GpsPoint | null {
 	if (points.length === 0) return null;
 
-	let lo = 0;
-	let hi = points.length - 1;
-
-	while (lo < hi) {
-		const mid = (lo + hi) >> 1;
-		if (points[mid].distance < targetDist) lo = mid + 1;
-		else hi = mid;
-	}
-
-	if (points[lo].distance < targetDist) return null;
+	const lo = lowerBound(points, (p) => p.distance, targetDist);
+	if (lo >= points.length) return null;
 	if (lo === 0) return { lat: points[0].lat, lon: points[0].lon };
 
 	const a = points[lo - 1];
