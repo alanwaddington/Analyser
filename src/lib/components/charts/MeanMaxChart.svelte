@@ -8,6 +8,7 @@
 	import type { MeanMaxSeriesInput } from './MeanMaxChart.utils.ts';
 	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
+	import './chart-skeleton.css';
 
 	let {
 		seriesInputs,
@@ -102,6 +103,7 @@
 	onMount(async () => {
 		ec = await loadECharts();
 		chart = ec.init(container, undefined, { renderer: 'canvas' });
+		chart.setOption(buildOption(), { notMerge: true });
 
 		resizeObserver = new ResizeObserver(() => chart?.resize());
 		resizeObserver.observe(container);
@@ -209,17 +211,7 @@
 		display: block;
 	}
 
-	.chart-skeleton {
-		background: linear-gradient(90deg, var(--skeleton-from) 25%, var(--skeleton-to) 50%, var(--skeleton-from) 75%);
-		background-size: 200% 100%;
-		animation: shimmer 1.5s ease-in-out infinite;
-		border-radius: 4px;
-	}
 
-	@keyframes shimmer {
-		0%   { background-position: 200% 0; }
-		100% { background-position: -200% 0; }
-	}
 
 	/* breakpoints: --bp-phone (480px) in layout.css */
 	@media (max-width: 480px) { /* --bp-phone */

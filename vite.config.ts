@@ -5,6 +5,7 @@ import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig(({ mode }) => ({
 	plugins: [tailwindcss(), sveltekit(), visualizer({ filename: 'stats.html', open: false, gzipSize: true })],
+	build: { chunkSizeWarningLimit: 1200 },
 	// The 'browser' condition is required by vitest so Svelte 5 resolves to
 	// its browser bundle instead of index-server.js (which throws
 	// "mount(...) is not available on the server" in jsdom component tests).

@@ -12,6 +12,7 @@
 	import { interpolateToDistanceAxis } from '$lib/align/distance';
 	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
+	import './chart-skeleton.css';
 
 	let {
 		channel,
@@ -427,18 +428,6 @@
 		height: 180px;
 		width: 100%;
 		display: block;
-	}
-
-	.chart-skeleton {
-		background: linear-gradient(90deg, var(--skeleton-from) 25%, var(--skeleton-to) 50%, var(--skeleton-from) 75%);
-		background-size: 200% 100%;
-		animation: shimmer 1.5s ease-in-out infinite;
-		border-radius: 4px;
-	}
-
-	@keyframes shimmer {
-		0%   { background-position: 200% 0; }
-		100% { background-position: -200% 0; }
 	}
 
 	/* breakpoints: --bp-phone (480px) in layout.css */
