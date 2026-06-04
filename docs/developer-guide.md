@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.5 · **Last updated:** May 2026
+> **Version:** 1.6 · **Last updated:** June 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -10,6 +10,7 @@ This guide covers the technical internals of the Analyser application for contri
 
 1. [Project Setup](#1-project-setup)
 2. [Architecture Overview](#2-architecture-overview)
+   - 2.1 [ECharts Lazy-Loading](#21-echarts-lazy-loading)
 3. [Cross-Device Label Sync](#3-cross-device-label-sync)
    - 3.1 [Design Goals](#31-design-goals)
    - 3.2 [Data Model in Redis](#32-data-model-in-redis)
@@ -37,10 +38,12 @@ This guide covers the technical internals of the Analyser application for contri
 ```bash
 npm install
 npm run dev        # dev server on http://localhost:5173
-npm run build      # production build
+npm run build      # production build — also generates stats.html bundle report
 npm run check      # svelte-check + tsc
 npm test           # vitest unit tests
 ```
+
+`npm run build` generates `stats.html` (via `rollup-plugin-visualizer`) in the project root. Open it in a browser after any build to inspect chunk sizes and identify modules that have regressed into the initial bundle. The file is gitignored.
 
 The app uses **SvelteKit** with the **Vercel adapter** (`@sveltejs/adapter-vercel`). Deployment is to Vercel via GitHub Actions on push to `main`.
 
@@ -60,7 +63,9 @@ src/
 │   │   ├── exportActivities.ts # exportActivities(activities): lazy-loads excel.ts, triggers download
 │   │   └── download.ts        # triggerDownload(), downloadPng(), localDateString()
 │   ├── components/
-│   │   ├── charts/   # ECharts wrappers
+│   │   ├── charts/   # ECharts wrappers (ECharts is lazy-loaded — see §2.1)
+│   │   │             # - echarts-loader.ts: singleton loadECharts() — one dynamic import, cached for session
+│   │   │             # - chart-skeleton.css: shared shimmer skeleton styles used by all four chart components
 │   │   │             # - TimeSeriesChart.svelte: per-series stats row (min/avg/max, zoom-aware; pace inverted)
 │   │   │             # - TimeSeriesChart.utils.ts: computeSeriesStats(), formatStatValue(), SeriesStats
 │   │   │             # - StripChart.svelte: metric strip chart wrapper (map tab)
@@ -98,6 +103,83 @@ src/
     ├── compare/+page.svelte
     └── event/+page.svelte
 ```
+
+### 2.1 ECharts Lazy-Loading
+
+ECharts (≈1.1 MB / 374 kB gzipped) is **not in the initial bundle**. It is deferred to a separate async chunk and fetched only when the first chart component mounts.
+
+#### How it works
+
+All four chart components (`TimeSeriesChart`, `DeltaChart`, `MeanMaxChart`, `SegmentChart`) import ECharts through a shared singleton loader:
+
+```ts
+// src/lib/components/charts/echarts-loader.ts
+import type * as EChartsNamespace from 'echarts';
+export type EChartsModule = typeof EChartsNamespace;
+
+let cached: Promise<EChartsModule> | null = null;
+
+export function loadECharts(): Promise<EChartsModule> {
+  if (!cached) {
+    cached = import('echarts') as Promise<EChartsModule>;
+  }
+  return cached;
+}
+```
+
+Each chart component calls `loadECharts()` inside an `async onMount`:
+
+```ts
+onMount(async () => {
+  ec = await loadECharts();               // dynamic import (first call fetches; subsequent calls return cache)
+  chart = ec.init(container, undefined, { renderer: 'canvas' });
+  chart.setOption(buildOption(), { notMerge: true }); // explicit initial render
+  // ... event binding, ResizeObserver, etc.
+  ready = true;
+});
+```
+
+#### Why `chart.setOption()` is called explicitly in `onMount`
+
+Three of the four chart components (`TimeSeriesChart`, `DeltaChart`, `SegmentChart`) declare `chart` as a plain `let` variable rather than `$state`. Because `chart` is not reactive, the Svelte `$effect` that normally calls `chart?.setOption()` fires *before* the `await loadECharts()` resolves — hitting a no-op. The explicit `setOption` call immediately after `ec.init()` guarantees the first render regardless of reactive timing.
+
+`MeanMaxChart` uses `let chart = $state<ECharts | undefined>(undefined)` — assigning the chart instance triggers the `$effect` reactively — but still includes the explicit `setOption` call for consistency and to make all four components follow the same pattern.
+
+#### Loading skeleton
+
+While `loadECharts()` is in flight the chart canvas (`bind:this={container}`) stays in the DOM with `visibility: hidden` so `ec.init()` can be called on an element with real dimensions. A shimmer placeholder div replaces the visual space:
+
+```svelte
+{#if !ready}
+  <div class="chart-canvas chart-skeleton" aria-hidden="true"></div>
+{/if}
+<div bind:this={container} class="chart-canvas" style:visibility={ready ? 'visible' : 'hidden'}></div>
+```
+
+Skeleton styles live in `src/lib/components/charts/chart-skeleton.css` (imported by all four chart components) and use CSS custom properties defined in `src/routes/layout.css`:
+
+```css
+/* dark theme (default) */
+--skeleton-from: #1e293b;
+--skeleton-to:   #334155;
+
+/* light theme */
+--skeleton-from: #e2e8f0;
+--skeleton-to:   #f1f5f9;
+```
+
+#### Bundle verification
+
+`rollup-plugin-visualizer` is configured in `vite.config.ts`. Every `npm run build` writes `stats.html` to the project root (gitignored). Open it to verify ECharts appears only as a dynamic entry (`isDynamicEntry: true` in the Vite manifest) and is absent from all entry-point sync dependency trees.
+
+#### Adding a new chart component
+
+If you add a fifth chart component:
+
+1. Import from the shared loader: `import { loadECharts, type EChartsModule } from './echarts-loader'`
+2. Keep `import type { ECharts, EChartsOption } from 'echarts'` — type-only imports are erased at compile time and do not create a bundle dependency
+3. Use `async onMount`, call `loadECharts()`, call `chart.setOption(buildOption(), { notMerge: true })` immediately after `ec.init()`
+4. Import `chart-skeleton.css` and add the skeleton/visibility template pattern
 
 ---
 
@@ -609,6 +691,8 @@ Svelte 5 exports both a browser build (`index.js`) and a server build (`index-se
 ```typescript
 // vite.config.ts — mode-conditional resolve
 export default defineConfig(({ mode }) => ({
+  plugins: [tailwindcss(), sveltekit(), visualizer({ filename: 'stats.html', open: false, gzipSize: true })],
+  build: { chunkSizeWarningLimit: 1200 }, // ECharts async chunk is ~1.1 MB — suppress expected warning
   ...(mode === 'test' ? { resolve: { conditions: ['browser'] } } : {}),
   // ...
 }));
