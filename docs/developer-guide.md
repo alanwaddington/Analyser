@@ -80,6 +80,7 @@ src/
 │   │                 # - binarySearch.ts: lowerBound<T>(arr, key, target) — shared lower-bound binary search
 │   │                 # - channels.ts: deriveAvailableChannels()
 │   │                 # - deviceChannels.ts: deviceKey(), deriveDeviceLabel(), groupStreamsByChannel(), isComparableGroup()
+│   │                 # - formatting.ts: formatPace(decimalMinutes) → "M:SS" string — single source of truth for pace display
 │   │                 # - indoorWarnings.svelte.ts: createIndoorWarnings() composable
 │   │                 # - lapMarkers.ts: buildLapMarkers()
 │   │                 # - segments.ts: buildSegments()
@@ -381,7 +382,7 @@ PR #85 added a compact stats row below each `TimeSeriesChart` showing minimum, a
 
 ### Key functions
 
-**`formatStatValue(value, channel)`** — formats a raw number for display. Pace channels use `paceFormat()` (M:SS); integer channels (heartRate, power, cadence) round to zero decimal places; float channels (speed, temperature) show one decimal.
+**`formatStatValue(value, channel)`** — formats a raw number for display. Pace channels use `paceFormat()` (M:SS — re-exported from `$lib/utils/formatting` as the shared `formatPace`); integer channels (heartRate, power, cadence) round to zero decimal places; float channels (speed, temperature) show one decimal.
 
 **`computeSeriesStats(data, channel, label, colour, xRange?)`** — slices `data` to the optional `xRange` window, passes y-values to `summarise()`, and returns a `SeriesStats` object (or `null` if no data). The `xRange` is provided by the zoom handler.
 
