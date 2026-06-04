@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import * as echarts from 'echarts';
 	import type { ECharts, EChartsOption } from 'echarts';
+	import { loadECharts, type EChartsModule } from './echarts-loader';
 	import { FILE_COLOURS } from '$lib/types';
 	import { computeSegmentDeltas } from './SegmentChart.utils.ts';
 	import { isDark } from '$lib/stores/theme';
 	import type { SegmentSeriesInput, Segment } from './SegmentChart.utils.ts';
 	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
+	import './chart-skeleton.css';
 
 	let {
 		seriesInputs,
@@ -20,7 +21,9 @@
 	} = $props();
 
 	let container: HTMLDivElement;
+	let ec: EChartsModule | undefined;
 	let chart: ECharts | undefined;
+	let ready = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 
 	const refActivity = $derived(seriesInputs[referenceIndex]?.activity);
@@ -123,11 +126,14 @@
 		chart?.setOption(buildOption(), { notMerge: true });
 	}
 
-	onMount(() => {
-		chart = echarts.init(container, undefined, { renderer: 'canvas' });
+	onMount(async () => {
+		ec = await loadECharts();
+		chart = ec.init(container, undefined, { renderer: 'canvas' });
+		chart.setOption(buildOption(), { notMerge: true });
 
 		resizeObserver = new ResizeObserver(() => chart?.resize());
 		resizeObserver.observe(container);
+		ready = true;
 	});
 
 	onDestroy(() => {
@@ -180,7 +186,10 @@
 		</button>
 	</div>
 
-	<div bind:this={container} class="chart-canvas"></div>
+	{#if !ready}
+		<div class="chart-canvas chart-skeleton" aria-hidden="true"></div>
+	{/if}
+	<div bind:this={container} class="chart-canvas" style:visibility={ready ? 'visible' : 'hidden'}></div>
 
 	<div class="chart-legend" role="group" aria-label="Series visibility toggles">
 		{#each seriesInputs as s, i}
@@ -230,6 +239,8 @@
 		width: 100%;
 		display: block;
 	}
+
+
 
 	/* breakpoints: --bp-phone (480px) in layout.css */
 	@media (max-width: 480px) { /* --bp-phone */

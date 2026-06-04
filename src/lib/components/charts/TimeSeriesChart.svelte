@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import * as echarts from 'echarts';
 	import type { ECharts, EChartsOption } from 'echarts';
+	import { loadECharts, type EChartsModule } from './echarts-loader';
 	import type { Activity, ChannelKey } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
@@ -12,6 +12,7 @@
 	import { interpolateToDistanceAxis } from '$lib/align/distance';
 	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
+	import './chart-skeleton.css';
 
 	let {
 		channel,
@@ -37,7 +38,9 @@
 	} = $props();
 
 	let container: HTMLDivElement;
+	let ec: EChartsModule | undefined;
 	let chart: ECharts | undefined;
+	let ready = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 	let zoomRange = $state<{ min: number; max: number } | undefined>(undefined);
 
@@ -222,10 +225,12 @@
 		chart?.setOption(buildOption(), { notMerge: true });
 	}
 
-	onMount(() => {
-		chart = echarts.init(container, undefined, { renderer: 'canvas' });
+	onMount(async () => {
+		ec = await loadECharts();
+		chart = ec.init(container, undefined, { renderer: 'canvas' });
+		chart.setOption(buildOption(), { notMerge: true });
 		chart.group = groupId;
-		echarts.connect(groupId);
+		ec.connect(groupId);
 
 		// Chart → map sync: emit distance (metres) when crosshair moves in distance mode.
 		// updateAxisPointer fires for all connected charts; we only wire onHoverDistance
@@ -263,6 +268,7 @@
 
 		resizeObserver = new ResizeObserver(() => chart?.resize());
 		resizeObserver.observe(container);
+		ready = true;
 	});
 
 	onDestroy(() => {
@@ -344,7 +350,10 @@
 		</button>
 	</div>
 
-	<div bind:this={container} class="chart-canvas"></div>
+	{#if !ready}
+		<div class="chart-canvas chart-skeleton" aria-hidden="true"></div>
+	{/if}
+	<div bind:this={container} class="chart-canvas" style:visibility={ready ? 'visible' : 'hidden'}></div>
 
 	<div class="chart-legend" role="group" aria-label="Series visibility toggles">
 		{#each seriesInputs as s, i}
