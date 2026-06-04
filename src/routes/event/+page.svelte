@@ -21,6 +21,7 @@
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import type { ChannelKey } from '$lib/types';
 	import { exportActivities } from '$lib/export/exportActivities';
+	import { formatPace } from '$lib/utils/formatting';
 	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
 	import '../map-panel.css';
@@ -204,11 +205,6 @@
 		return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 	}
 
-	function formatPace(secPerKm: number): string {
-		const m = Math.floor(secPerKm / 60);
-		const s = Math.floor(secPerKm % 60);
-		return `${m}:${String(s).padStart(2, '0')} /km`;
-	}
 </script>
 
 <div class="page">
@@ -404,7 +400,7 @@
 								<td class="cell-stat">{(activity.totalDistance / 1000).toFixed(2)} km</td>
 								<td class="cell-stat">{hrStats ? hrStats.avg.toFixed(0) + ' bpm' : '—'}</td>
 								<td class="cell-stat">{hrStats ? hrStats.max.toFixed(0) + ' bpm' : '—'}</td>
-								<td class="cell-stat">{paceSecPerKm ? formatPace(paceSecPerKm) : '—'}</td>
+								<td class="cell-stat">{paceSecPerKm ? formatPace(paceSecPerKm / 60) + ' /km' : '—'}</td>
 								<td class="cell-stat">{powerStats ? powerStats.avg.toFixed(0) + ' W' : '—'}</td>
 							</tr>
 						{/each}

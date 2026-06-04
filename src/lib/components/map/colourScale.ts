@@ -1,4 +1,5 @@
 import type { ChannelKey } from '$lib/types';
+import { formatPace } from '$lib/utils/formatting';
 
 /**
  * 4-stop gradient: blue → green → yellow → red
@@ -61,12 +62,8 @@ function toHex(value: number): string {
  */
 export function formatMetricValue(value: number, channel: ChannelKey): string {
 	switch (channel) {
-		case 'pace': {
-			const totalSeconds = Math.round(value * 60);
-			const m = Math.floor(totalSeconds / 60);
-			const s = totalSeconds % 60;
-			return `${m}:${String(s).padStart(2, '0')}`;
-		}
+		case 'pace':
+			return formatPace(value);
 		case 'heartRate':
 		case 'power':
 		case 'powerLeft':

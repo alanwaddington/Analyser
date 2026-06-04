@@ -15,6 +15,7 @@
 import * as xlsx from 'xlsx';
 import type { Activity, ActivityRecord, ChannelKey } from '$lib/types';
 import { CHANNEL_META } from '$lib/types';
+import { formatPace } from '$lib/utils/formatting';
 
 // Ordered list of all channel keys; used to build consistent column ordering.
 const CHANNEL_KEYS: ChannelKey[] = [
@@ -33,17 +34,6 @@ const CHANNEL_KEYS: ChannelKey[] = [
 	'groundContactTime',
 	'strideLength',
 ];
-
-/** Convert a decimal min/km pace value to an "M:SS" string. */
-function formatPace(decimalMinKm: number): string {
-	const minutes = Math.floor(decimalMinKm);
-	const seconds = Math.round((decimalMinKm - minutes) * 60);
-	// Handle rounding overflow (e.g. 4.9999 → 5:00)
-	if (seconds === 60) {
-		return `${minutes + 1}:00`;
-	}
-	return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
 
 /**
  * Determine which ChannelKeys have at least one non-null value across
