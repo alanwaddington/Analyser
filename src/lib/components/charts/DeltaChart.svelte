@@ -133,6 +133,7 @@
 	onMount(async () => {
 		ec = await loadECharts();
 		chart = ec.init(container, undefined, { renderer: 'canvas' });
+		chart.setOption(buildOption(), { notMerge: true });
 		chart.group = groupId;
 		ec.connect(groupId);
 

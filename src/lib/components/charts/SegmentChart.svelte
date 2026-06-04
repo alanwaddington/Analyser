@@ -128,6 +128,7 @@
 	onMount(async () => {
 		ec = await loadECharts();
 		chart = ec.init(container, undefined, { renderer: 'canvas' });
+		chart.setOption(buildOption(), { notMerge: true });
 
 		resizeObserver = new ResizeObserver(() => chart?.resize());
 		resizeObserver.observe(container);
