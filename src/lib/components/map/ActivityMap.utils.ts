@@ -1,5 +1,5 @@
 import type { Activity, ActivityRecord, GpsPoint } from '$lib/types';
-import { lowerBound } from '$lib/utils/binarySearch.ts';
+import { lowerBound } from '$lib/utils/binarySearch';
 
 // ---------------------------------------------------------------------------
 // Tile layer providers
