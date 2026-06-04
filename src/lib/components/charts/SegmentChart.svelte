@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import * as echarts from 'echarts';
 	import type { ECharts, EChartsOption } from 'echarts';
+	import { loadECharts, type EChartsModule } from './echarts-loader';
 	import { FILE_COLOURS } from '$lib/types';
 	import { computeSegmentDeltas } from './SegmentChart.utils.ts';
 	import { isDark } from '$lib/stores/theme';
@@ -20,7 +20,9 @@
 	} = $props();
 
 	let container: HTMLDivElement;
+	let ec: EChartsModule | undefined;
 	let chart: ECharts | undefined;
+	let ready = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 
 	const refActivity = $derived(seriesInputs[referenceIndex]?.activity);
@@ -123,11 +125,13 @@
 		chart?.setOption(buildOption(), { notMerge: true });
 	}
 
-	onMount(() => {
-		chart = echarts.init(container, undefined, { renderer: 'canvas' });
+	onMount(async () => {
+		ec = await loadECharts();
+		chart = ec.init(container, undefined, { renderer: 'canvas' });
 
 		resizeObserver = new ResizeObserver(() => chart?.resize());
 		resizeObserver.observe(container);
+		ready = true;
 	});
 
 	onDestroy(() => {
@@ -180,7 +184,10 @@
 		</button>
 	</div>
 
-	<div bind:this={container} class="chart-canvas"></div>
+	{#if !ready}
+		<div class="chart-canvas chart-skeleton" aria-hidden="true"></div>
+	{/if}
+	<div bind:this={container} class="chart-canvas" style:visibility={ready ? 'visible' : 'hidden'}></div>
 
 	<div class="chart-legend" role="group" aria-label="Series visibility toggles">
 		{#each seriesInputs as s, i}
@@ -229,6 +236,18 @@
 		height: 260px;
 		width: 100%;
 		display: block;
+	}
+
+	.chart-skeleton {
+		background: linear-gradient(90deg, var(--skeleton-from) 25%, var(--skeleton-to) 50%, var(--skeleton-from) 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.5s ease-in-out infinite;
+		border-radius: 4px;
+	}
+
+	@keyframes shimmer {
+		0%   { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
 	}
 
 	/* breakpoints: --bp-phone (480px) in layout.css */
