@@ -1,6 +1,8 @@
 import type { Activity, ActivityRecord, ChannelKey } from '$lib/types';
 import { CHANNEL_META } from '$lib/types';
 import { summarise } from '$lib/analytics/summary';
+import { formatPace } from '$lib/utils/formatting';
+export { formatPace as paceFormat } from '$lib/utils/formatting';
 
 export interface SeriesInput {
 	activity: Activity;
@@ -60,7 +62,7 @@ const INTEGER_CHANNELS = new Set<ChannelKey>([
 ]);
 
 export function formatStatValue(value: number, channel: ChannelKey): string {
-	if (channel === 'pace') return paceFormat(value);
+	if (channel === 'pace') return formatPace(value);
 	if (INTEGER_CHANNELS.has(channel)) return value.toFixed(0);
 	return value.toFixed(1);
 }
@@ -97,11 +99,4 @@ export function computeSeriesStats(
 		xMax: xRange?.max ?? points[points.length - 1][0],
 		unit: CHANNEL_META[channel].unit,
 	};
-}
-
-export function paceFormat(decimalMinutes: number): string {
-	const totalSeconds = Math.round(decimalMinutes * 60);
-	const m = Math.floor(totalSeconds / 60);
-	const s = totalSeconds % 60;
-	return `${m}:${String(s).padStart(2, '0')}`;
 }
