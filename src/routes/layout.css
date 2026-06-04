@@ -21,6 +21,10 @@
   --color-border: #1e293b;
   --color-text: #e2e8f0;
   --color-muted: #475569;
+
+  /* Chart skeleton shimmer — dark theme */
+  --skeleton-from: #1e293b;
+  --skeleton-to:   #334155;
 }
 
 /* Explicit dark theme */
@@ -31,6 +35,10 @@
   --color-border: #1e293b;
   --color-text: #e2e8f0;
   --color-muted: #475569;
+
+  /* Chart skeleton shimmer — dark theme */
+  --skeleton-from: #1e293b;
+  --skeleton-to:   #334155;
 }
 
 /* Explicit light theme */
@@ -41,6 +49,10 @@
   --color-border: #e2e8f0;
   --color-text: #0f172a;
   --color-muted: #64748b;
+
+  /* Chart skeleton shimmer — light theme */
+  --skeleton-from: #e2e8f0;
+  --skeleton-to:   #f1f5f9;
 }
 
 html, body {
