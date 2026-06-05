@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
-	import { activities, activeChannels, xAxisMode, referenceIndex } from '$lib/stores/session';
+	import { activities, activeChannels, xAxisMode, referenceIndex, activityColourMap } from '$lib/stores/session';
 	import { anchorsAreDistant } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
@@ -72,9 +72,9 @@
 
 	const availableChannels = $derived(deriveAvailableChannels($activities));
 	const seriesInputs: SeriesInput[] = $derived(
-		$activities.map((a, i) => ({
+		$activities.map((a) => ({
 			activity: a,
-			colourIndex: i,
+			colourIndex: $activityColourMap.get(a.id) ?? 0,
 			distanceOffset: a.anchor.distanceMetres,
 		})),
 	);
@@ -185,10 +185,10 @@
 		if (!mapMetricChannel) return [];
 		const ch = mapMetricChannel;
 		return $activities
-			.flatMap((activity, i) => {
+			.flatMap((activity) => {
 				const hasData = activity.records.some(r => r[ch] != null);
 				if (!hasData) return [];
-				return [{ activity, colourIndex: i, distanceOffset: activity.anchor.distanceMetres }];
+				return [{ activity, colourIndex: $activityColourMap.get(activity.id) ?? 0, distanceOffset: activity.anchor.distanceMetres }];
 			});
 	});
 
@@ -336,6 +336,7 @@
 			<div class="map-wrap" class:map-wrap--has-strip={mapMetricChannel !== null}>
 				<ActivityMap
 					activities={$activities}
+					colourMap={$activityColourMap}
 					referenceIndex={$referenceIndex}
 					availableChannels={availableChannels}
 					hoveredDistance={stripHoveredDistance ?? chartHoveredDistance}

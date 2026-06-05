@@ -217,6 +217,9 @@ src/
 │   │                 # - CollapsiblePanel.svelte: wraps toolbar at ≤768px; display:contents on desktop
 │   ├── stores/       # Svelte stores (activities, smoothing, xAxisMode, referenceIndex, etc.)
 │   │                 # - session.ts: activeDeviceIndices (Set<string>), timeOffsets (Map<activityId, offset>)
+│   │                 #   activityColourMap (Readable<Map<activityId, colourIndex>>) — stable colour assignment
+│   │                 #   keyed by activity.id; survives removals and reordering; freed slots recycled after
+│   │                 #   palette exhaustion. addActivity/removeActivity/clearActivities keep it in sync.
 │   │                 # - viewport.ts: viewport readable store ('phone'|'tablet'|'desktop')
 │   │                 #   PHONE_MAX=480, TABLET_MAX=768 constants (JS counterpart of CSS --bp-* tokens)
 │   ├── utils/        # Shared pure utility functions

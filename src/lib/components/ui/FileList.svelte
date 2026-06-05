@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { activities, referenceIndex, removeActivity } from '$lib/stores/session';
+	import { activities, referenceIndex, removeActivity, activityColourMap } from '$lib/stores/session';
 	import { FILE_COLOURS } from '$lib/types';
 
 	let { mode }: { mode: 'compare' | 'event' } = $props();
@@ -17,7 +17,7 @@
 
 <ul class="file-list">
 	{#each $activities as activity, i}
-		{@const colour = FILE_COLOURS[i % FILE_COLOURS.length]}
+		{@const colour = FILE_COLOURS[($activityColourMap.get(activity.id) ?? 0) % FILE_COLOURS.length]}
 		{@const isRef = mode === 'event' && i === $referenceIndex}
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<li

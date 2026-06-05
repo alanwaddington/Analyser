@@ -10,10 +10,13 @@ import {
 	activeChannels,
 	activeDeviceIndices,
 	timeOffsets,
+	activityColourMap,
 	addActivity,
 	removeActivity,
 	clearActivities,
+	getActivityColour,
 } from './session.ts';
+import { FILE_COLOURS } from '$lib/types';
 import type { Activity } from '$lib/types';
 
 function makeActivity(id: string): Activity {
@@ -39,11 +42,7 @@ function makeActivity(id: string): Activity {
 }
 
 beforeEach(() => {
-	activities.set([]);
-	referenceIndex.set(0);
-	activeChannels.set([]);
-	activeDeviceIndices.set(new Set());
-	timeOffsets.set(new Map());
+	clearActivities();
 	smoothing.set(10);
 	xAxisMode.set('time');
 	clearing.set(false);
@@ -197,5 +196,103 @@ describe('timeOffsets', () => {
 		timeOffsets.set(new Map([['act-a', 0], ['act-b', 12.5]]));
 		expect(get(timeOffsets).get('act-a')).toBe(0);
 		expect(get(timeOffsets).get('act-b')).toBe(12.5);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// activityColourMap
+// ---------------------------------------------------------------------------
+
+describe('activityColourMap', () => {
+	it('activityColourMap_threeActivities_assignsSequentialIndices', () => {
+		addActivity(makeActivity('a'));
+		addActivity(makeActivity('b'));
+		addActivity(makeActivity('c'));
+		const map = get(activityColourMap);
+		expect(map.get('a')).toBe(0);
+		expect(map.get('b')).toBe(1);
+		expect(map.get('c')).toBe(2);
+	});
+
+	it('activityColourMap_removeMiddle_remainingKeepColours', () => {
+		addActivity(makeActivity('a'));
+		addActivity(makeActivity('b'));
+		addActivity(makeActivity('c'));
+		removeActivity('b');
+		const map = get(activityColourMap);
+		expect(map.get('a')).toBe(0);
+		expect(map.get('c')).toBe(2);
+		expect(map.has('b')).toBe(false);
+	});
+
+	it('activityColourMap_addAfterRemove_getsNextSequentialColour', () => {
+		addActivity(makeActivity('a'));
+		addActivity(makeActivity('b'));
+		addActivity(makeActivity('c'));
+		removeActivity('b');
+		addActivity(makeActivity('d'));
+		const map = get(activityColourMap);
+		expect(map.get('a')).toBe(0);
+		expect(map.get('c')).toBe(2);
+		expect(map.get('d')).toBe(3); // next sequential, not reusing freed 1 yet
+	});
+
+	it('activityColourMap_exhaustPalette_recyclesToFreedColour', () => {
+		// Load all 6 colours
+		for (let i = 0; i < FILE_COLOURS.length; i++) {
+			addActivity(makeActivity(`act${i}`));
+		}
+		// Remove act1 (index 1) → index 1 is freed
+		removeActivity('act1');
+		// Add a 7th — should recycle freed index 1
+		addActivity(makeActivity('new'));
+		const map = get(activityColourMap);
+		expect(map.get('new')).toBe(1);
+	});
+
+	it('activityColourMap_clearActivities_resetsColourState', () => {
+		addActivity(makeActivity('a'));
+		addActivity(makeActivity('b'));
+		clearActivities();
+		// After clear, next activity should start at 0 again
+		addActivity(makeActivity('x'));
+		const map = get(activityColourMap);
+		expect(map.get('x')).toBe(0);
+	});
+
+	it('activityColourMap_onInit_isEmpty', () => {
+		expect(get(activityColourMap).size).toBe(0);
+	});
+
+	it('activityColourMap_removeNonExistent_noEffect', () => {
+		addActivity(makeActivity('a'));
+		removeActivity('not-found');
+		expect(get(activityColourMap).get('a')).toBe(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// getActivityColour
+// ---------------------------------------------------------------------------
+
+describe('getActivityColour', () => {
+	it('getActivityColour_knownId_returnsCorrectFileColour', () => {
+		addActivity(makeActivity('a'));
+		addActivity(makeActivity('b'));
+		expect(getActivityColour('a')).toBe(FILE_COLOURS[0]);
+		expect(getActivityColour('b')).toBe(FILE_COLOURS[1]);
+	});
+
+	it('getActivityColour_unknownId_returnsFallback', () => {
+		expect(getActivityColour('not-found')).toBe(FILE_COLOURS[0]);
+	});
+
+	it('getActivityColour_stableAfterRemove', () => {
+		addActivity(makeActivity('a'));
+		addActivity(makeActivity('b'));
+		addActivity(makeActivity('c'));
+		removeActivity('b');
+		expect(getActivityColour('a')).toBe(FILE_COLOURS[0]);
+		expect(getActivityColour('c')).toBe(FILE_COLOURS[2]);
 	});
 });

@@ -79,7 +79,7 @@ src/
 │   ├── stores/
 │   │   ├── deviceLabels.ts  # Device label persistence (localStorage)
 │   │   ├── sync.ts          # Cross-device sync logic
-│   │   ├── session.ts       # Activity session state
+│   │   ├── session.ts       # Activity session state; activityColourMap assigns stable colours by activity.id
 │   │   └── viewport.ts      # Responsive breakpoint store
 │   ├── utils/        # Pure utility functions
 │   │                 # - binarySearch.ts: lowerBound<T>(arr, key, target) — shared lower-bound binary search
