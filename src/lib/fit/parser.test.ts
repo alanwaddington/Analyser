@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps, filterNegativeElapsed, ensureSortedByElapsed, DISTANCE_EPSILON_M } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -678,5 +678,121 @@ describe('buildLaps', () => {
 		// Following lap must start from the correct cumulative position
 		expect(laps[2].startDistance).toBeCloseTo(1000, -1);
 		expect(laps[2].endDistance).toBeCloseTo(2000, -1);
+	});
+});
+
+// ---- filterNegativeElapsed ----
+
+function makeElapsedRecord(elapsedSeconds: number, distance = 0): ActivityRecord {
+	return {
+		timestamp: new Date(0),
+		elapsedSeconds,
+		distance,
+		speed: undefined, pace: undefined, heartRate: undefined, power: undefined,
+		cadence: undefined, altitude: undefined, temperature: undefined,
+		coreTemperature: undefined, skinTemperature: undefined,
+		verticalOscillation: undefined, groundContactTime: undefined,
+		strideLength: undefined, position: undefined,
+		powerLeft: undefined, powerRight: undefined,
+	};
+}
+
+describe('filterNegativeElapsed', () => {
+	it('filterNegativeElapsed_allPositive_noChange', () => {
+		const records = [makeElapsedRecord(0), makeElapsedRecord(1), makeElapsedRecord(2)];
+		const result = filterNegativeElapsed(records);
+		expect(result).toHaveLength(3);
+	});
+
+	it('filterNegativeElapsed_someNegative_filteredOut', () => {
+		const records = [makeElapsedRecord(-1), makeElapsedRecord(0), makeElapsedRecord(1), makeElapsedRecord(-0.5)];
+		const result = filterNegativeElapsed(records);
+		expect(result).toHaveLength(2);
+		expect(result.every(r => r.elapsedSeconds >= 0)).toBe(true);
+	});
+
+	it('filterNegativeElapsed_allNegative_emptyArray', () => {
+		const records = [makeElapsedRecord(-2), makeElapsedRecord(-1)];
+		expect(filterNegativeElapsed(records)).toHaveLength(0);
+	});
+
+	it('filterNegativeElapsed_zeroElapsed_retained', () => {
+		const records = [makeElapsedRecord(0)];
+		const result = filterNegativeElapsed(records);
+		expect(result).toHaveLength(1);
+		expect(result[0].elapsedSeconds).toBe(0);
+	});
+});
+
+// ---- ensureSortedByElapsed ----
+
+describe('ensureSortedByElapsed', () => {
+	it('ensureSortedByElapsed_alreadySorted_returnsFalse', () => {
+		const records = [makeElapsedRecord(0), makeElapsedRecord(1), makeElapsedRecord(2)];
+		const wasUnsorted = ensureSortedByElapsed(records);
+		expect(wasUnsorted).toBe(false);
+		expect(records.map(r => r.elapsedSeconds)).toEqual([0, 1, 2]);
+	});
+
+	it('ensureSortedByElapsed_unsorted_sortedInPlace_returnsTrue', () => {
+		const records = [makeElapsedRecord(2), makeElapsedRecord(0), makeElapsedRecord(1)];
+		const wasUnsorted = ensureSortedByElapsed(records);
+		expect(wasUnsorted).toBe(true);
+		expect(records.map(r => r.elapsedSeconds)).toEqual([0, 1, 2]);
+	});
+
+	it('ensureSortedByElapsed_singleRecord_returnsFalse', () => {
+		const records = [makeElapsedRecord(5)];
+		expect(ensureSortedByElapsed(records)).toBe(false);
+	});
+
+	it('ensureSortedByElapsed_emptyArray_returnsFalse', () => {
+		expect(ensureSortedByElapsed([])).toBe(false);
+	});
+});
+
+// ---- DISTANCE_EPSILON_M ----
+
+describe('DISTANCE_EPSILON_M', () => {
+	it('DISTANCE_EPSILON_M_isExported_andPositive', () => {
+		expect(typeof DISTANCE_EPSILON_M).toBe('number');
+		expect(DISTANCE_EPSILON_M).toBeGreaterThan(0);
+	});
+});
+
+// ---- buildLaps epsilon tolerance ----
+
+describe('buildLaps — epsilon tolerance', () => {
+	it('buildLaps_recordAtTargetPlusSmallDelta_includedInLap', () => {
+		// Record sits 0.3 m beyond nominal lap end — within epsilon, should be included
+		const records: ActivityRecord[] = [
+			makeElapsedRecord(0, 0), makeElapsedRecord(1, 500), makeElapsedRecord(2, 1000.3),
+		];
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [{ total_distance: 1000, total_elapsed_time: 2 }];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps[0].endIndex).toBe(2); // record at 1000.3 included
+	});
+
+	it('buildLaps_recordAtTargetPlusLargeDelta_excludedFromLap', () => {
+		// Record sits 1.0 m beyond nominal lap end — beyond epsilon, should start next lap
+		const records: ActivityRecord[] = [
+			makeElapsedRecord(0, 0), makeElapsedRecord(1, 500), makeElapsedRecord(2, 1001.0),
+		];
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [{ total_distance: 1000, total_elapsed_time: 2 }];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps[0].endIndex).toBe(1); // record at 1001.0 excluded
+	});
+
+	it('buildLaps_recordAtExactEpsilonBoundary_includedInLap', () => {
+		// Record sits exactly DISTANCE_EPSILON_M (0.5 m) beyond nominal lap end — boundary is inclusive
+		const records: ActivityRecord[] = [
+			makeElapsedRecord(0, 0), makeElapsedRecord(1, 500), makeElapsedRecord(2, 1000 + DISTANCE_EPSILON_M),
+		];
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [{ total_distance: 1000, total_elapsed_time: 2 }];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps[0].endIndex).toBe(2); // record exactly at boundary included
 	});
 });

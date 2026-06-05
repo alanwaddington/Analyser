@@ -2,6 +2,7 @@
 	import { get } from 'svelte/store';
 	import { parseFitFile } from '$lib/fit/parser';
 	import { activities, addActivity, clearActivities } from '$lib/stores/session';
+	import { addToast } from '$lib/stores/toast';
 	import { MAX_FILES } from '$lib/types';
 
 	let { compact = false, singleFile = false }: { compact?: boolean; singleFile?: boolean } = $props();
@@ -29,7 +30,9 @@
 				const activity = await parseFitFile(buffer, fitFiles[0].name);
 				addActivity(activity);
 			} catch (e) {
-				error = `${fitFiles[0].name}: ${e instanceof Error ? e.message : 'parse failed'}`;
+				const msg = `${fitFiles[0].name}: ${e instanceof Error ? e.message : 'parse failed'}`;
+				error = msg;
+				addToast(msg, 'error');
 			}
 			return;
 		}
@@ -51,7 +54,9 @@
 				const activity = await parseFitFile(buffer, file.name);
 				addActivity(activity);
 			} catch (e) {
-				errors.push(`${file.name}: ${e instanceof Error ? e.message : 'parse failed'}`);
+				const msg = `${file.name}: ${e instanceof Error ? e.message : 'parse failed'}`;
+				errors.push(msg);
+				addToast(msg, 'error');
 			}
 		}
 		if (skipped > 0) {
