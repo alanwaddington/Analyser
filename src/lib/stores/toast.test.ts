@@ -77,6 +77,16 @@ describe('addToast', () => {
 		vi.advanceTimersByTime(5000);
 		expect(get(toasts)).toHaveLength(0);
 	});
+
+	it('addToast_earlyDismiss_timerClearedAndNotDoubleRemoved', () => {
+		addToast('Early dismiss', 'info', 3000);
+		const id = get(toasts)[0].id;
+		removeToast(id);
+		expect(get(toasts)).toHaveLength(0);
+		// Timer should be cleared — advancing past duration must not cause errors or ghost removals
+		vi.advanceTimersByTime(3000);
+		expect(get(toasts)).toHaveLength(0);
+	});
 });
 
 describe('removeToast', () => {
