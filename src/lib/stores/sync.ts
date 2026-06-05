@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { getAllLabels, replaceAllLabels, setOnLabelChange } from '$lib/stores/deviceLabels';
+import { fetchWithRetry } from '$lib/utils/fetchWithRetry';
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -18,6 +19,7 @@ export type SyncStatus = {
 	shortCode: string | null;
 	lastSynced: string | null; // ISO timestamp of last successful sync
 	error: string | null;
+	syncing: boolean;          // true while any sync operation is in progress
 };
 
 let _initialised = false;
@@ -27,6 +29,7 @@ let _status: SyncStatus = {
 	shortCode: null,
 	lastSynced: null,
 	error: null,
+	syncing: false,
 };
 
 /** Reactive store — subscribe in Svelte components to update the UI. */
@@ -65,12 +68,14 @@ export function deriveShortCode(uuid: string): string {
  * Fires after initSync is called; subsequently triggered automatically
  * by the onLabelChange hook after every setDeviceLabel / removeDeviceLabel.
  *
+ * Retries up to 3 times with exponential backoff on transient errors.
  * Errors are caught and surfaced in syncStatus.error — they do NOT propagate.
  */
 export async function pushLabels(uuid: string, shortCode: string): Promise<void> {
+	updateStatus({ syncing: true });
 	try {
 		const labels = getAllLabels();
-		const response = await fetch(`/api/labels/${uuid}`, {
+		const response = await fetchWithRetry(`/api/labels/${uuid}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ labels, shortCode }),
@@ -80,11 +85,11 @@ export async function pushLabels(uuid: string, shortCode: string): Promise<void>
 		}
 		const ts = new Date().toISOString();
 		localStorage.setItem(SYNC_TS_KEY, ts);
-		updateStatus({ lastSynced: ts, error: null });
+		updateStatus({ lastSynced: ts, error: null, syncing: false });
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : 'Sync push failed';
 		console.warn('[sync] pushLabels error:', msg);
-		updateStatus({ error: msg });
+		updateStatus({ error: msg, syncing: false });
 	}
 }
 
@@ -93,13 +98,16 @@ export async function pushLabels(uuid: string, shortCode: string): Promise<void>
  * KV is treated as the source of truth after initial seeding.
  * A 404 response is silently ignored (remote has no data yet — that's fine).
  *
+ * Retries up to 3 times with exponential backoff on transient errors.
  * Errors are caught and surfaced in syncStatus.error — they do NOT propagate.
  */
 export async function pullLabels(uuid: string): Promise<void> {
+	updateStatus({ syncing: true });
 	try {
-		const response = await fetch(`/api/labels/${uuid}`);
+		const response = await fetchWithRetry(`/api/labels/${uuid}`);
 		if (response.status === 404) {
 			// No remote data yet — continue with local labels
+			updateStatus({ syncing: false });
 			return;
 		}
 		if (!response.ok) {
@@ -109,21 +117,22 @@ export async function pullLabels(uuid: string): Promise<void> {
 		replaceAllLabels(data.labels);
 		const ts = new Date().toISOString();
 		localStorage.setItem(SYNC_TS_KEY, ts);
-		updateStatus({ lastSynced: ts, error: null });
+		updateStatus({ lastSynced: ts, error: null, syncing: false });
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : 'Sync pull failed';
 		console.warn('[sync] pullLabels error:', msg);
-		updateStatus({ error: msg });
+		updateStatus({ error: msg, syncing: false });
 	}
 }
 
 /**
  * Resolve a short sync code to its full UUID via the API.
+ * Retries up to 3 times with exponential backoff on transient errors.
  * Throws `Error('Code not found')` on 404 (invalid or expired code).
  * Other errors also throw — the caller (SyncPanel) handles the UI.
  */
 export async function resolveCode(code: string): Promise<string> {
-	const response = await fetch(`/api/labels/resolve/${code}`);
+	const response = await fetchWithRetry(`/api/labels/resolve/${code}`);
 	if (response.status === 404) {
 		throw new Error('Code not found');
 	}

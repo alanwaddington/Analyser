@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mocks — set up before any imports
@@ -48,6 +48,8 @@ let getAllLabels: () => Record<string, string>;
 
 function resetFetch() {
 	(mockFetch as Mock).mockReset();
+	// Default: return 500 so retry calls get a defined response (not undefined)
+	(mockFetch as Mock).mockResolvedValue(new Response('{}', { status: 500 }));
 }
 
 function mockFetchOk(body: unknown) {
@@ -92,6 +94,10 @@ beforeEach(async () => {
 	adoptSyncIdentity = syncMod.adoptSyncIdentity;
 	resetSyncIdentity = syncMod.resetSyncIdentity;
 	getSyncStatus = syncMod.getSyncStatus;
+
+	// Use instant sleep so retry delays don't block existing tests
+	const { _setSleepFn } = await import('$lib/utils/fetchWithRetry');
+	_setSleepFn(() => Promise.resolve());
 });
 
 // Expected short code for MOCK_UUID
@@ -556,6 +562,11 @@ describe('getSyncStatus', () => {
 		expect(status.error).toBeNull();
 	});
 
+	it('getSyncStatus_initial_syncingIsFalse', () => {
+		const status = getSyncStatus();
+		expect(status.syncing).toBe(false);
+	});
+
 	it('getSyncStatus_afterPushSuccess_hasLastSynced', async () => {
 		mockFetchOk({ ok: true });
 		await pushLabels(MOCK_UUID, MOCK_SHORT_CODE);
@@ -571,5 +582,116 @@ describe('getSyncStatus', () => {
 
 		const status = getSyncStatus();
 		expect(status.error).not.toBeNull();
+	});
+
+	it('getSyncStatus_afterPushSuccess_syncingIsFalse', async () => {
+		mockFetchOk({ ok: true });
+		await pushLabels(MOCK_UUID, MOCK_SHORT_CODE);
+
+		expect(getSyncStatus().syncing).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// pushLabels — retry behaviour
+// ---------------------------------------------------------------------------
+
+describe('pushLabels — retry', () => {
+	it('pushLabels_transientThenSuccess_retriesAndSyncs', async () => {
+		mockFetch500(); // first attempt fails
+		mockFetchOk({ ok: true }); // retry succeeds
+
+		await pushLabels(MOCK_UUID, MOCK_SHORT_CODE);
+
+		const status = getSyncStatus();
+		expect(status.lastSynced).not.toBeNull();
+		expect(status.error).toBeNull();
+		expect((mockFetch as Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it('pushLabels_allRetriesFail_setsError', async () => {
+		// All 4 attempts (1 initial + 3 retries) fail via default 500 mock
+		await pushLabels(MOCK_UUID, MOCK_SHORT_CODE);
+
+		expect(getSyncStatus().error).not.toBeNull();
+		expect((mockFetch as Mock).mock.calls.length).toBe(4);
+	});
+
+	it('pushLabels_networkErrorThenSuccess_retriesAndSyncs', async () => {
+		mockFetchNetworkError(); // first attempt throws
+		mockFetchOk({ ok: true }); // retry succeeds
+
+		await pushLabels(MOCK_UUID, MOCK_SHORT_CODE);
+
+		expect(getSyncStatus().lastSynced).not.toBeNull();
+		expect(getSyncStatus().error).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// pullLabels — retry behaviour
+// ---------------------------------------------------------------------------
+
+describe('pullLabels — retry', () => {
+	it('pullLabels_transientThenSuccess_retriesAndSyncs', async () => {
+		mockFetch500(); // first attempt fails
+		mockFetchOk({ labels: { 'ant:99': 'My HRM' } }); // retry succeeds
+
+		await pullLabels(MOCK_UUID);
+
+		expect(getSyncStatus().lastSynced).not.toBeNull();
+		expect(getSyncStatus().error).toBeNull();
+		expect((mockFetch as Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it('pullLabels_404_doesNotRetry', async () => {
+		// 404 is a non-retryable response for pullLabels (silently ignored)
+		mockFetch404();
+
+		await pullLabels(MOCK_UUID);
+
+		// No retry — 404 is not retryable per fetchWithRetry
+		expect((mockFetch as Mock).mock.calls.length).toBe(1);
+		expect(getSyncStatus().error).toBeNull();
+	});
+
+	it('pullLabels_allRetriesFail_setsError', async () => {
+		// All 4 attempts fail via default 500 mock
+		await pullLabels(MOCK_UUID);
+
+		expect(getSyncStatus().error).not.toBeNull();
+		expect((mockFetch as Mock).mock.calls.length).toBe(4);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// resolveCode — retry behaviour
+// ---------------------------------------------------------------------------
+
+describe('resolveCode — retry', () => {
+	it('resolveCode_transientThenSuccess_retriesAndReturnsUuid', async () => {
+		mockFetch500(); // first attempt fails
+		mockFetchOk({ uuid: MOCK_UUID }); // retry succeeds
+
+		const result = await resolveCode(MOCK_SHORT_CODE);
+
+		expect(result).toBe(MOCK_UUID);
+		expect((mockFetch as Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it('resolveCode_400_doesNotRetry', async () => {
+		(mockFetch as Mock).mockResolvedValueOnce(
+			new Response('{}', { status: 400 }),
+		);
+
+		await expect(resolveCode(MOCK_SHORT_CODE)).rejects.toThrow();
+		expect((mockFetch as Mock).mock.calls.length).toBe(1);
+	});
+
+	it('resolveCode_404_doesNotRetry', async () => {
+		mockFetch404();
+
+		await expect(resolveCode(MOCK_SHORT_CODE)).rejects.toThrow('Code not found');
+		expect((mockFetch as Mock).mock.calls.length).toBe(1);
 	});
 });

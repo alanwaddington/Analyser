@@ -4,6 +4,14 @@ export interface RetryOptions {
 	jitter?: number;
 }
 
+// Sleep function — injectable for tests so existing tests don't need fake timers.
+let _sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+/** Override the sleep function. Use in tests to make retries instant. */
+export function _setSleepFn(fn: (ms: number) => Promise<void>): void {
+	_sleep = fn;
+}
+
 /** Returns true if the error or response status indicates a transient failure worth retrying. */
 export function isRetryable(errorOrResponse: Error | Response): boolean {
 	if (errorOrResponse instanceof Response) {
@@ -53,7 +61,7 @@ export async function fetchWithRetry(
 
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
 		try {
-			const response = await fetch(input, init);
+			const response = await (init !== undefined ? fetch(input, init) : fetch(input));
 
 			if (!isRetryable(response) || attempt === maxRetries) {
 				return response;
@@ -67,7 +75,7 @@ export async function fetchWithRetry(
 				: undefined;
 
 			const delay = computeDelay(attempt, baseDelayMs, jitter, validRetryAfter);
-			await new Promise<void>((resolve) => setTimeout(resolve, delay));
+			await _sleep(delay);
 		} catch (err) {
 			lastError = err instanceof Error ? err : new Error(String(err));
 
@@ -76,7 +84,7 @@ export async function fetchWithRetry(
 			}
 
 			const delay = computeDelay(attempt, baseDelayMs, jitter);
-			await new Promise<void>((resolve) => setTimeout(resolve, delay));
+			await _sleep(delay);
 		}
 	}
 
