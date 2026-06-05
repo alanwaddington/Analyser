@@ -11,6 +11,7 @@
 	import { viewport } from '$lib/stores/viewport';
 	import { initSync, adoptSyncIdentity } from '$lib/stores/sync';
 	import Sidebar from '$lib/components/ui/Sidebar.svelte';
+	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 
 	let { children } = $props();
 
@@ -149,6 +150,8 @@
 	</main>
 
 	<!-- Bottom navigation bar — phone only (≤480px) -->
+	<ToastContainer />
+
 	{#if isPhone}
 		<nav class="bottom-nav" aria-label="Primary navigation">
 			<button
