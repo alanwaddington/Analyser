@@ -3,7 +3,10 @@ import type { Activity, ActivityRecord, Device, DeviceStream, Lap } from '../typ
 import { ANT_DEVICE_TYPE } from '../types';
 import type { ChannelKey } from '../types';
 import { applyLabels } from '../stores/deviceLabels';
+import { addToast } from '../stores/toast';
 import { findAnchor } from '../align/anchor';
+
+export const DISTANCE_EPSILON_M = 0.5;
 
 export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Activity> {
 	return new Promise((resolve, reject) => {
@@ -332,6 +335,29 @@ export function removeCyclingPace(records: ActivityRecord[]): void {
 	for (const r of records) r.pace = undefined;
 }
 
+// Remove records with negative elapsedSeconds — these occur in some FIT files
+// when the timer is paused or the device clock is reset mid-activity.
+export function filterNegativeElapsed(records: ActivityRecord[]): ActivityRecord[] {
+	return records.filter(r => r.elapsedSeconds >= 0);
+}
+
+// Sort records in-place by elapsedSeconds if out of order. Returns true when
+// sorting was required so the caller can emit a warning toast.
+export function ensureSortedByElapsed(records: ActivityRecord[], filename: string): boolean {
+	if (records.length < 2) return false;
+	let outOfOrder = false;
+	for (let i = 1; i < records.length; i++) {
+		if (records[i].elapsedSeconds < records[i - 1].elapsedSeconds) {
+			outOfOrder = true;
+			break;
+		}
+	}
+	if (!outOfOrder) return false;
+	records.sort((a, b) => a.elapsedSeconds - b.elapsedSeconds);
+	addToast(`"${filename}": records were out of order and have been sorted automatically.`, 'warning');
+	return true;
+}
+
 function normalise(data: FitData, filename: string): Activity {
 	const session = data.sessions?.[0] ?? {};
 	// fit-file-parser puts sport on data.sports[0], not data.sessions[0].
@@ -340,7 +366,12 @@ function normalise(data: FitData, filename: string): Activity {
 	const subSport = data.sports?.[0]?.sub_sport ?? session.sub_sport;
 	const rawRecords = data.records ?? [];
 
-	const records: ActivityRecord[] = rawRecords.map(normaliseRecord);
+	let records: ActivityRecord[] = rawRecords.map(normaliseRecord);
+	records = filterNegativeElapsed(records);
+	if (records.length < rawRecords.length) {
+		addToast(`"${filename}": ${rawRecords.length - records.length} record(s) with negative elapsed time were removed.`, 'warning');
+	}
+	ensureSortedByElapsed(records, filename);
 
 	if (sport === 'running') {
 		applyRunningCadenceDoubling(records);
@@ -418,7 +449,7 @@ export function buildLaps(fitLaps: FitLap[], records: ActivityRecord[]): Lap[] {
 			};
 		}
 		const targetDist = startDist + lapDistance;
-		while (cursor < records.length && records[cursor].distance <= targetDist) cursor++;
+		while (cursor < records.length && records[cursor].distance <= targetDist + DISTANCE_EPSILON_M) cursor++;
 		const endIndex = Math.max(startIndex, cursor - 1);
 		const endDist = records[endIndex]?.distance ?? targetDist;
 		prevEndDist = endDist;
