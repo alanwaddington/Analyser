@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the redis module before importing the route handler.
-// The rate limiter now uses Redis incr/expire/ttl; the code lookup uses get.
-const mockGet    = vi.fn();
-const mockIncr   = vi.fn();
-const mockExpire = vi.fn();
-const mockTtl    = vi.fn();
+// The rate limiter uses redis.pipeline().incr().expire().exec(); the code lookup uses get/ttl.
+const mockGet         = vi.fn();
+const mockTtl         = vi.fn();
+const mockPipelineExec = vi.fn();
+
+const mockPipeline = {
+	incr:   vi.fn().mockReturnThis(),
+	expire: vi.fn().mockReturnThis(),
+	exec:   mockPipelineExec,
+};
 
 vi.mock('$lib/server/redis.ts', () => ({
 	getRedis: vi.fn().mockReturnValue({
-		get:    mockGet,
-		incr:   mockIncr,
-		expire: mockExpire,
-		ttl:    mockTtl,
+		get:      mockGet,
+		ttl:      mockTtl,
+		pipeline: vi.fn().mockReturnValue(mockPipeline),
 	}),
 }));
 
@@ -36,10 +40,9 @@ function makeEvent(code: string, ip = '127.0.0.1') {
 const VALID_CODE = 'E6Y-NXEMF';
 const VALID_UUID = 'efbe6aac-3910-4b87-8c03-eeb9ea6f0276';
 
-/** Set the rate limiter mock to allow the request (count ≤ 10). */
+/** Set the pipeline mock to allow the request (count ≤ 10). */
 function allowRequest(count = 1): void {
-	mockIncr.mockResolvedValueOnce(count);
-	if (count === 1) mockExpire.mockResolvedValueOnce(1);
+	mockPipelineExec.mockResolvedValueOnce([count, 1]);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,34 +123,26 @@ describe('GET /api/labels/resolve/[code] — rate limiting', () => {
 		mockGet.mockResolvedValue(VALID_UUID);
 	});
 
-	it('GET_firstRequest_incrsRedisKey', async () => {
-		mockIncr.mockResolvedValueOnce(1);
-		mockExpire.mockResolvedValueOnce(1);
+	it('GET_firstRequest_callsPipelineWithKey', async () => {
+		mockPipelineExec.mockResolvedValueOnce([1, 1]);
 
 		await GET(makeEvent(VALID_CODE, '10.0.0.1'));
 
-		expect(mockIncr).toHaveBeenCalledWith('ratelimit:resolve:10.0.0.1');
+		expect(mockPipeline.incr).toHaveBeenCalledWith('ratelimit:resolve:10.0.0.1');
+		expect(mockPipeline.expire).toHaveBeenCalledWith('ratelimit:resolve:10.0.0.1', 60);
 	});
 
-	it('GET_firstRequest_setsExpire', async () => {
-		mockIncr.mockResolvedValueOnce(1);
-		mockExpire.mockResolvedValueOnce(1);
-
-		await GET(makeEvent(VALID_CODE, '10.0.0.2'));
-
-		expect(mockExpire).toHaveBeenCalledWith('ratelimit:resolve:10.0.0.2', 60);
-	});
-
-	it('GET_subsequentRequest_doesNotSetExpire', async () => {
-		mockIncr.mockResolvedValueOnce(5); // not the first request
+	it('GET_subsequentRequest_alsoCallsExpireInPipeline', async () => {
+		// With pipeline, EXPIRE is always called (atomically with INCR)
+		mockPipelineExec.mockResolvedValueOnce([5, 1]);
 
 		await GET(makeEvent(VALID_CODE, '10.0.0.3'));
 
-		expect(mockExpire).not.toHaveBeenCalled();
+		expect(mockPipeline.expire).toHaveBeenCalledWith('ratelimit:resolve:10.0.0.3', 60);
 	});
 
 	it('GET_underLimit_returns200', async () => {
-		mockIncr.mockResolvedValueOnce(10); // exactly at limit
+		mockPipelineExec.mockResolvedValueOnce([10, 1]); // exactly at limit
 		mockGet.mockResolvedValueOnce(VALID_UUID);
 
 		const response = await GET(makeEvent(VALID_CODE, '10.0.0.4'));
@@ -156,8 +151,8 @@ describe('GET /api/labels/resolve/[code] — rate limiting', () => {
 	});
 
 	it('GET_overLimit_returns429WithRetryAfter', async () => {
-		mockIncr.mockResolvedValueOnce(11); // over limit
-		mockTtl.mockResolvedValueOnce(45);  // 45 seconds remaining
+		mockPipelineExec.mockResolvedValueOnce([11, 1]); // over limit
+		mockTtl.mockResolvedValueOnce(45);               // 45 seconds remaining
 
 		const response = await GET(makeEvent(VALID_CODE, '10.0.0.5'));
 
@@ -168,7 +163,7 @@ describe('GET /api/labels/resolve/[code] — rate limiting', () => {
 	});
 
 	it('GET_rateLimitExceeded_retryAfterMatchesTtl', async () => {
-		mockIncr.mockResolvedValueOnce(15);
+		mockPipelineExec.mockResolvedValueOnce([15, 1]);
 		mockTtl.mockResolvedValueOnce(30);
 
 		const response = await GET(makeEvent(VALID_CODE, '10.0.0.6'));
@@ -181,11 +176,10 @@ describe('GET /api/labels/resolve/[code] — rate limiting', () => {
 		const ip1 = '10.1.1.1';
 		const ip2 = '10.1.1.2';
 
-		mockIncr
-			.mockResolvedValueOnce(11) // ip1 over limit
-			.mockResolvedValueOnce(1);  // ip2 under limit
+		mockPipelineExec
+			.mockResolvedValueOnce([11, 1]) // ip1 over limit
+			.mockResolvedValueOnce([1, 1]); // ip2 under limit
 		mockTtl.mockResolvedValueOnce(60);
-		mockExpire.mockResolvedValueOnce(1);
 		mockGet.mockResolvedValueOnce(VALID_UUID);
 
 		const response1 = await GET(makeEvent(VALID_CODE, ip1));
@@ -193,12 +187,12 @@ describe('GET /api/labels/resolve/[code] — rate limiting', () => {
 
 		expect(response1.status).toBe(429);
 		expect(response2.status).toBe(200);
-		expect(mockIncr).toHaveBeenCalledWith(`ratelimit:resolve:${ip1}`);
-		expect(mockIncr).toHaveBeenCalledWith(`ratelimit:resolve:${ip2}`);
+		expect(mockPipeline.incr).toHaveBeenCalledWith(`ratelimit:resolve:${ip1}`);
+		expect(mockPipeline.incr).toHaveBeenCalledWith(`ratelimit:resolve:${ip2}`);
 	});
 
 	it('GET_redisRateLimitError_failsOpen', async () => {
-		mockIncr.mockRejectedValueOnce(new Error('Redis unreachable'));
+		mockPipelineExec.mockRejectedValueOnce(new Error('Redis unreachable'));
 		mockGet.mockResolvedValueOnce(VALID_UUID);
 
 		// Should proceed with the request (fail-open)

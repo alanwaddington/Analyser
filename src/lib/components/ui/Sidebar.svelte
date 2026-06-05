@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { activities, lastMode } from '$lib/stores/session';
 	import { syncStatus } from '$lib/stores/sync';
+	import { formatAge } from '$lib/utils/formatAge';
 	import FileList from '$lib/components/ui/FileList.svelte';
 	import DropZone from '$lib/components/ui/DropZone.svelte';
 	import XAxisToggle from '$lib/components/ui/XAxisToggle.svelte';
@@ -10,32 +11,21 @@
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 	import SyncPanel from '$lib/components/ui/SyncPanel.svelte';
 
-	function formatAge(ts: string | null): string {
-		if (!ts) return '';
-		const diff = Date.now() - new Date(ts).getTime();
-		const mins = Math.floor(diff / 60000);
-		if (mins < 1) return 'just now';
-		if (mins < 60) return `${mins} min ago`;
-		const hours = Math.floor(mins / 60);
-		if (hours < 24) return `${hours}h ago`;
-		return new Date(ts).toLocaleDateString();
-	}
-
-	const indicatorState = $derived((): 'syncing' | 'error' | 'ok' | 'muted' => {
+	const indicatorState = $derived.by((): 'syncing' | 'error' | 'ok' | 'muted' => {
 		if ($syncStatus.syncing)    return 'syncing';
 		if ($syncStatus.error)      return 'error';
 		if ($syncStatus.lastSynced) return 'ok';
 		return 'muted';
 	});
 
-	const statusText = $derived((): string => {
+	const statusText = $derived.by((): string => {
 		if ($syncStatus.syncing)    return 'Syncing…';
 		if ($syncStatus.error)      return 'Sync error';
 		if ($syncStatus.lastSynced) return 'Synced';
 		return 'Setting up…';
 	});
 
-	const ariaLabel = $derived((): string => {
+	const ariaLabel = $derived.by((): string => {
 		if ($syncStatus.syncing)    return 'Sync in progress';
 		if ($syncStatus.error)      return `Sync error: ${$syncStatus.error}`;
 		if ($syncStatus.lastSynced) return `Synced ${formatAge($syncStatus.lastSynced)}`;
@@ -112,9 +102,9 @@
 		<ThemeToggle />
 		<SmoothingSlider />
 		<div
-			class="sync-indicator sync-indicator--{indicatorState()}"
+			class="sync-indicator sync-indicator--{indicatorState}"
 			aria-live="polite"
-			aria-label={ariaLabel()}
+			aria-label={ariaLabel}
 		>
 			<span class="sync-indicator__icon" class:sync-indicator__icon--spinning={$syncStatus.syncing} aria-hidden="true">
 				{#if $syncStatus.syncing}
@@ -134,7 +124,7 @@
 					</svg>
 				{/if}
 			</span>
-			<span class="sync-indicator__text">{statusText()}</span>
+			<span class="sync-indicator__text">{statusText}</span>
 		</div>
 		<SyncPanel />
 	</div>

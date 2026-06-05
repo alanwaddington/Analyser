@@ -9,6 +9,7 @@
 		resetSyncIdentity,
 	} from '$lib/stores/sync';
 	import { SHORT_CODE_REGEX } from '$lib/validation';
+	import { formatAge } from '$lib/utils/formatAge';
 
 	// ---------------------------------------------------------------------------
 	// Local state
@@ -37,18 +38,6 @@
 
 	/** Whether the ☁ badge should appear (UUID not yet set up — should be rare). */
 	const showBadge = $derived(!$syncStatus.uuid && !$syncStatus.error);
-
-	/** Human-readable last-synced time. */
-	function formatAge(ts: string | null): string {
-		if (!ts) return '';
-		const diff = Date.now() - new Date(ts).getTime();
-		const mins = Math.floor(diff / 60000);
-		if (mins < 1) return 'just now';
-		if (mins < 60) return `${mins} min ago`;
-		const hours = Math.floor(mins / 60);
-		if (hours < 24) return `${hours}h ago`;
-		return new Date(ts).toLocaleDateString();
-	}
 
 	// ---------------------------------------------------------------------------
 	// Actions

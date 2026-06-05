@@ -10,11 +10,9 @@ async function isRateLimited(ip: string): Promise<{ limited: boolean; retryAfter
 	try {
 		const redis = getRedis();
 		const key = `ratelimit:resolve:${ip}`;
-		const count = await redis.incr(key);
-		if (count === 1) {
-			// First request in this window — set the expiry
-			await redis.expire(key, RATE_LIMIT_WINDOW_S);
-		}
+		// Pipeline INCR + EXPIRE atomically — prevents a keyless TTL if the
+		// server crashes between the two commands.
+		const [count] = await redis.pipeline().incr(key).expire(key, RATE_LIMIT_WINDOW_S).exec() as [number, number];
 		if (count > RATE_LIMIT_MAX_REQ) {
 			const ttl = await redis.ttl(key);
 			return { limited: true, retryAfter: Math.max(ttl, 1) };
