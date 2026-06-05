@@ -2,12 +2,35 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { activities, lastMode } from '$lib/stores/session';
+	import { syncStatus } from '$lib/stores/sync';
+	import { formatAge } from '$lib/utils/formatAge';
 	import FileList from '$lib/components/ui/FileList.svelte';
 	import DropZone from '$lib/components/ui/DropZone.svelte';
 	import XAxisToggle from '$lib/components/ui/XAxisToggle.svelte';
 	import SmoothingSlider from '$lib/components/ui/SmoothingSlider.svelte';
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 	import SyncPanel from '$lib/components/ui/SyncPanel.svelte';
+
+	const indicatorState = $derived.by((): 'syncing' | 'error' | 'ok' | 'muted' => {
+		if ($syncStatus.syncing)    return 'syncing';
+		if ($syncStatus.error)      return 'error';
+		if ($syncStatus.lastSynced) return 'ok';
+		return 'muted';
+	});
+
+	const statusText = $derived.by((): string => {
+		if ($syncStatus.syncing)    return 'Syncing…';
+		if ($syncStatus.error)      return 'Sync error';
+		if ($syncStatus.lastSynced) return 'Synced';
+		return 'Setting up…';
+	});
+
+	const ariaLabel = $derived.by((): string => {
+		if ($syncStatus.syncing)    return 'Sync in progress';
+		if ($syncStatus.error)      return `Sync error: ${$syncStatus.error}`;
+		if ($syncStatus.lastSynced) return `Synced ${formatAge($syncStatus.lastSynced)}`;
+		return 'Sync setting up';
+	});
 
 	let {
 		compareDisabled = false,
@@ -78,6 +101,31 @@
 		<XAxisToggle eventMode={isEvent} />
 		<ThemeToggle />
 		<SmoothingSlider />
+		<div
+			class="sync-indicator sync-indicator--{indicatorState}"
+			aria-live="polite"
+			aria-label={ariaLabel}
+		>
+			<span class="sync-indicator__icon" class:sync-indicator__icon--spinning={$syncStatus.syncing} aria-hidden="true">
+				{#if $syncStatus.syncing}
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+						<path d="M8 2a6 6 0 0 1 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+						<path d="M14 8a6 6 0 0 1-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+					</svg>
+				{:else if $syncStatus.error}
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+						<path d="M8 2L14 13H2L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+						<line x1="8" y1="6" x2="8" y2="9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+						<circle cx="8" cy="11.5" r="0.75" fill="currentColor"/>
+					</svg>
+				{:else}
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+						<circle cx="8" cy="8" r="4" fill="currentColor"/>
+					</svg>
+				{/if}
+			</span>
+			<span class="sync-indicator__text">{statusText}</span>
+		</div>
 		<SyncPanel />
 	</div>
 </nav>
@@ -177,6 +225,54 @@
 		gap: 12px;
 		padding: 12px;
 		margin-top: auto;
+	}
+
+	/* ── Sync indicator ─────────────────────────────────────────────────── */
+
+	.sync-indicator {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 0;
+		min-height: 28px;
+	}
+
+	.sync-indicator__icon {
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.sync-indicator__icon--spinning {
+		animation: sync-spin 1s linear infinite;
+	}
+
+	.sync-indicator__text {
+		font-size: 0.7rem;
+		line-height: 1;
+		white-space: nowrap;
+	}
+
+	.sync-indicator--ok .sync-indicator__icon  { color: #10b981; }
+	.sync-indicator--ok .sync-indicator__text  { color: var(--color-muted); }
+
+	.sync-indicator--syncing .sync-indicator__icon { color: #3b82f6; }
+	.sync-indicator--syncing .sync-indicator__text { color: #3b82f6; }
+
+	.sync-indicator--error .sync-indicator__icon { color: #fbbf24; }
+	.sync-indicator--error .sync-indicator__text { color: #fbbf24; }
+
+	.sync-indicator--muted .sync-indicator__icon { color: var(--color-muted); }
+	.sync-indicator--muted .sync-indicator__text { color: var(--color-muted); }
+
+	:global([data-theme="light"]) .sync-indicator--ok .sync-indicator__icon { color: #16a34a; }
+
+	@keyframes sync-spin {
+		from { transform: rotate(0deg); }
+		to   { transform: rotate(360deg); }
 	}
 
 	/* ── Mobile: drawer overlay at ≤768px ─────────────────────────────── */

@@ -9,6 +9,7 @@
 		resetSyncIdentity,
 	} from '$lib/stores/sync';
 	import { SHORT_CODE_REGEX } from '$lib/validation';
+	import { formatAge } from '$lib/utils/formatAge';
 
 	// ---------------------------------------------------------------------------
 	// Local state
@@ -37,18 +38,6 @@
 
 	/** Whether the ☁ badge should appear (UUID not yet set up — should be rare). */
 	const showBadge = $derived(!$syncStatus.uuid && !$syncStatus.error);
-
-	/** Human-readable last-synced time. */
-	function formatAge(ts: string | null): string {
-		if (!ts) return '';
-		const diff = Date.now() - new Date(ts).getTime();
-		const mins = Math.floor(diff / 60000);
-		if (mins < 1) return 'just now';
-		if (mins < 60) return `${mins} min ago`;
-		const hours = Math.floor(mins / 60);
-		if (hours < 24) return `${hours}h ago`;
-		return new Date(ts).toLocaleDateString();
-	}
 
 	// ---------------------------------------------------------------------------
 	// Actions
@@ -126,9 +115,13 @@
 	<div class="sync-panel">
 		<!-- Status line -->
 		{#if $syncStatus.error}
-			<p class="status error">
-				⚠ Sync error —
-				<button class="link-btn" onclick={retrySync}>retry</button>
+			<p class="status" class:error={!$syncStatus.syncing} class:retrying={$syncStatus.syncing}>
+				{#if $syncStatus.syncing}
+					Retrying…
+				{:else}
+					⚠ Sync error —
+					<button class="link-btn" onclick={retrySync}>retry</button>
+				{/if}
 			</p>
 		{:else if $syncStatus.lastSynced}
 			<p class="status ok">☁ Syncing across devices ✓ · {formatAge($syncStatus.lastSynced)}</p>
@@ -284,9 +277,10 @@
 		line-height: 1.3;
 	}
 
-	.status.ok     { color: #4ade80; }
-	.status.error  { color: #f59e0b; }
-	.status.muted  { color: var(--color-muted); }
+	.status.ok       { color: #4ade80; }
+	.status.error    { color: #f59e0b; }
+	.status.retrying { color: #3b82f6; }
+	.status.muted    { color: var(--color-muted); }
 
 	:global([data-theme="light"]) .status.ok { color: #16a34a; }
 

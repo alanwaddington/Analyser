@@ -16,6 +16,8 @@ This guide covers the technical internals of the Analyser application for contri
    - 3.2 [Data Model in Redis](#32-data-model-in-redis)
    - 3.3 [Identity Lifecycle](#33-identity-lifecycle)
    - 3.4 [Sync Store (`sync.ts`)](#34-sync-store-syncts)
+   - 3.4a [Retry / Backoff (`fetchWithRetry`)](#34a-retry--backoff-fetchwithretry)
+   - 3.4b [Sidebar Sync Indicator](#34b-sidebar-sync-indicator)
    - 3.5 [DeviceLabels Integration](#35-devicelabels-integration)
    - 3.6 [API Routes](#36-api-routes)
    - 3.7 [SyncPanel Component](#37-syncpanel-component)
@@ -86,6 +88,8 @@ src/
 │   │                 # - binarySearch.ts: lowerBound<T>(arr, key, target) — shared lower-bound binary search
 │   │                 # - channels.ts: deriveAvailableChannels()
 │   │                 # - deviceChannels.ts: deviceKey(), deriveDeviceLabel(), groupStreamsByChannel(), isComparableGroup()
+│   │                 # - fetchWithRetry.ts: fetchWithRetry(), isRetryable(), computeDelay() — retry with backoff
+│   │                 # - formatAge.ts: formatAge(ts) → human-readable relative time string
 │   │                 # - formatting.ts: formatPace(decimalMinutes) → "M:SS" string — single source of truth for pace display
 │   │                 # - indoorWarnings.svelte.ts: createIndoorWarnings() composable
 │   │                 # - lapMarkers.ts: buildLapMarkers()
@@ -242,11 +246,11 @@ Exports:
 
 | Export | Type | Description |
 |--------|------|-------------|
-| `syncStatus` | `Writable<SyncStatus>` | Reactive store for UI state (uuid, shortCode, lastSynced, error) |
+| `syncStatus` | `Writable<SyncStatus>` | Reactive store for UI state (uuid, shortCode, lastSynced, error, syncing) |
 | `initSync()` | `async () => (() => void) \| undefined` | Idempotent — safe to call multiple times; second call is a no-op. Returns a cleanup function on first call (call in `onDestroy` to deregister hook and allow HMR reinit); returns `undefined` if already initialised. SSR-safe. |
-| `pushLabels(uuid, shortCode)` | `async` | Upload current labels to Redis. Errors update `syncStatus.error`. |
-| `pullLabels(uuid)` | `async` | Download labels from Redis and call `replaceAllLabels()`. |
-| `resolveCode(code)` | `async → uuid` | Resolve short code to UUID via API. Throws on 404. |
+| `pushLabels(uuid, shortCode)` | `async` | Upload current labels to Redis. Retries up to 3× on transient errors. Sets `syncStatus.syncing` while in progress. Errors update `syncStatus.error`. |
+| `pullLabels(uuid)` | `async` | Download labels from Redis. Retries up to 3× on transient errors. Sets `syncStatus.syncing` while in progress. |
+| `resolveCode(code)` | `async → uuid` | Resolve short code to UUID via API. Retries up to 3× on transient errors. Throws on 404. |
 | `adoptSyncIdentity(uuid)` | `async` | Replace local identity with external UUID and pull. |
 | `resetSyncIdentity()` | `async` | Generate fresh UUID, push current labels under it. |
 | `deriveShortCode(uuid)` | `string` | Pure function: BigInt base-36 encode of UUID, 8 chars, `XXX-XXXXX`. |
@@ -260,8 +264,62 @@ type SyncStatus = {
   shortCode:  string | null;
   lastSynced: string | null; // ISO timestamp
   error:      string | null;
+  syncing:    boolean;       // true while any sync operation is in flight (including retries)
 };
 ```
+
+### 3.4a Retry / Backoff (`fetchWithRetry`)
+
+**Location:** `src/lib/utils/fetchWithRetry.ts`
+
+All three sync network calls (`pushLabels`, `pullLabels`, `resolveCode`) use a shared retry utility rather than bare `fetch`:
+
+```ts
+fetchWithRetry(input, init?, opts?): Promise<Response>
+```
+
+**Default options:** `maxRetries: 3`, `baseDelayMs: 1000`, `jitter: 0.25` (±25%).
+
+**Retry classification (`isRetryable`):**
+
+| Response / Error | Retried? |
+|-----------------|----------|
+| Network error (`TypeError`) | ✅ Yes |
+| 5xx | ✅ Yes |
+| 429 | ✅ Yes |
+| 4xx (except 429) | ❌ No |
+| 2xx / 3xx | ❌ No |
+
+**Backoff schedule** (zero jitter, for clarity):
+
+| Attempt | Delay |
+|---------|-------|
+| 0 → 1 | ~1 s |
+| 1 → 2 | ~2 s |
+| 2 → 3 | ~4 s |
+
+When the server returns a `429` with a `Retry-After` header, that value (in seconds) overrides the exponential delay for that attempt, preventing wasted retries within the rate-limit window.
+
+After all retries are exhausted: the last `Response` is returned for HTTP errors; the last network error is thrown.
+
+**Test isolation:** `_setSleepFn(fn)` replaces the internal sleep function so that retry tests do not incur real delays (used in `sync.test.ts` via `beforeEach`).
+
+### 3.4b Sidebar Sync Indicator
+
+**Location:** `src/lib/components/ui/Sidebar.svelte`
+
+A persistent status indicator is always visible in the sidebar footer, showing the current sync state without requiring the user to expand the SyncPanel. It subscribes to `$syncStatus` via three `$derived.by()` values:
+
+| State | Condition | Icon | Colour |
+|-------|-----------|------|--------|
+| `syncing` | `$syncStatus.syncing === true` | Animated two-arc spinner SVG | Blue (`#3b82f6`) |
+| `error` | `$syncStatus.error !== null` | Triangle warning SVG | Amber (`#fbbf24`) |
+| `ok` | `$syncStatus.lastSynced !== null` | Filled circle SVG | Green (`#10b981`) |
+| `muted` | All others (setting up) | Filled circle SVG | `--color-muted` |
+
+The element carries `aria-live="polite"` and a dynamic `aria-label` (e.g. `"Synced just now"`, `"Sync error: ..."`) for screen readers.
+
+When `syncing === true` and `error !== null` simultaneously (i.e. auto-retry is in progress after a previous failure), `SyncPanel.svelte` shows `"Retrying…"` in blue instead of the normal amber `"⚠ Sync error — retry"` link.
 
 ### 3.5 DeviceLabels Integration
 
@@ -333,7 +391,7 @@ See the full API reference in [`docs/api-reference.md`](api-reference.md).
 
 **`PUT /api/labels/[uuid]`** — expects `{ labels: Record<string,string>, shortCode: string }`. Writes both `labels:{uuid}` and `code:{shortCode}` to Redis with a 90-day TTL.
 
-**`GET /api/labels/resolve/[code]`** — resolves short code to UUID. Rate-limited at 10 req/min/IP to deter enumeration.
+**`GET /api/labels/resolve/[code]`** — resolves short code to UUID. Rate-limited at 10 req/min/IP via Redis `INCR`/`EXPIRE` pipeline (globally enforced across all Vercel instances). Responds 429 with `Retry-After` header on limit exceeded; fails open if Redis is unavailable.
 
 All routes validate inputs against `UUID_REGEX` / `SHORT_CODE_REGEX` from `src/lib/validation.ts` and return structured JSON errors on 400/404/429/500.
 
