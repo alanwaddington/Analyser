@@ -321,6 +321,9 @@ Each toast has a level-appropriate left-border accent and dismiss button (`×`).
 | Caller | Level | Message |
 |--------|-------|---------|
 | `deviceLabels.ts` — `saveLabels` catch | `warning` | `'Device label could not be saved — storage full'` (QuotaExceededError) or `'Device label could not be saved'` (other errors) |
+| `DropZone.svelte` — parse error catch (single-file and multi-file) | `error` | `'<filename>: <parser error message>'` — fires alongside the existing inline error text so the error persists after navigation |
+| `parser.ts` — `normalise()` negative elapsed | `warning` | `'"<filename>": N record(s) with negative elapsed time were removed.'` |
+| `parser.ts` — `normalise()` out-of-order records | `warning` | `'"<filename>": records were out of order and have been sorted automatically.'` |
 
 ### 3.7 API Routes
 
@@ -708,7 +711,18 @@ Key parsing details:
 
 Both functions are exported from `parser.ts` for unit testing.
 
-**Lap building** is handled by `buildLaps(fitLaps, records)`, which also exported for direct unit testing. It derives `startDistance` and `endDistance` from the running cursor position in the records array rather than from the FIT lap's `start_distance` field. This makes it resilient to Garmin devices that write `start_distance = 0` for every lap (per-lap relative) rather than cumulative from the session start. Laps with `total_distance = 0` are returned as zero-length entries (`startIndex === endIndex`, `startDistance === endDistance`) without advancing the cursor.
+**Record validation** is applied in `normalise()` after record normalisation and before sport-specific post-processing (PR #142):
+
+| Function | Behaviour | Toast / log |
+|----------|-----------|-------------|
+| `filterNegativeElapsed(records)` | Returns a new array with all records where `elapsedSeconds < 0` removed. Broken device clocks can emit these. | `console.warn` + `'warning'` toast if any are removed. |
+| `ensureSortedByElapsed(records)` | Sorts `records` in-place by `elapsedSeconds` if out of order; returns `true` when sorting was required. | Caller (`normalise()`) emits `console.warn` + `'warning'` toast on `true`. |
+
+Both functions are exported from `parser.ts` for unit testing. Well-formed files pass through both with no output.
+
+**Lap building** is handled by `buildLaps(fitLaps, records)`, which is also exported for direct unit testing. It derives `startDistance` and `endDistance` from the running cursor position in the records array rather than from the FIT lap's `start_distance` field. This makes it resilient to Garmin devices that write `start_distance = 0` for every lap (per-lap relative) rather than cumulative from the session start. Laps with `total_distance = 0` are returned as zero-length entries (`startIndex === endIndex`, `startDistance === endDistance`) without advancing the cursor.
+
+The cursor advancement uses `records[cursor].distance <= targetDist + DISTANCE_EPSILON_M` (where `DISTANCE_EPSILON_M = 0.5`) to absorb GPS floating-point drift at lap boundaries. The constant is exported for use in tests and any future callers that need the same tolerance.
 
 ---
 
