@@ -185,10 +185,10 @@
 		if (!mapMetricChannel) return [];
 		const ch = mapMetricChannel;
 		return $activities
-			.flatMap((activity, i) => {
+			.flatMap((activity) => {
 				const hasData = activity.records.some(r => r[ch] != null);
 				if (!hasData) return [];
-				return [{ activity, colourIndex: i, distanceOffset: activity.anchor.distanceMetres }];
+				return [{ activity, colourIndex: $activityColourMap.get(activity.id) ?? 0, distanceOffset: activity.anchor.distanceMetres }];
 			});
 	});
 

@@ -473,8 +473,7 @@
 							<tr>
 								<th class="col-channel"></th>
 								{#each activeCrossFileStreams as cfs}
-									{@const actIndex = $activities.indexOf(cfs.activity)}
-									{@const dotColour = FILE_COLOURS[actIndex % FILE_COLOURS.length]}
+									{@const dotColour = FILE_COLOURS[($activityColourMap.get(cfs.activity.id) ?? 0) % FILE_COLOURS.length]}
 									<th class="col-device">
 										<span class="device-header">
 											<span class="device-dot" style="background:{dotColour}"></span>
