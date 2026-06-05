@@ -34,7 +34,7 @@ Object.defineProperty(globalThis, 'crypto', {
 // ---------------------------------------------------------------------------
 
 let deriveShortCode: (uuid: string) => string;
-let initSync: () => Promise<void>;
+let initSync: () => Promise<(() => void) | undefined>;
 let pushLabels: (uuid: string, shortCode: string) => Promise<void>;
 let pullLabels: (uuid: string) => Promise<void>;
 let resolveCode: (code: string) => Promise<string>;
@@ -254,6 +254,35 @@ describe('initSync — onLabelChange hook', () => {
 			`/api/labels/${MOCK_UUID}`,
 			expect.objectContaining({ method: 'PUT' }),
 		);
+	});
+
+	it('initSync_calledTwice_secondCallIsNoop', async () => {
+		localStorageMock.setItem('analyser-sync-id', MOCK_UUID);
+		localStorageMock.setItem('analyser-sync-code', MOCK_SHORT_CODE);
+		mockFetchOk({ labels: {} }); // pull for first call
+
+		await initSync();
+		const secondResult = await initSync(); // no mock needed — should not fetch
+
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+		expect(secondResult).toBeUndefined();
+	});
+
+	it('initSync_cleanup_resetsAndAllowsReinit', async () => {
+		localStorageMock.setItem('analyser-sync-id', MOCK_UUID);
+		localStorageMock.setItem('analyser-sync-code', MOCK_SHORT_CODE);
+		mockFetchOk({ labels: {} }); // pull for first call
+
+		const cleanup = await initSync();
+		expect(cleanup).toBeTypeOf('function');
+
+		cleanup!();
+
+		// After cleanup, a second initSync should run fresh
+		mockFetchOk({ labels: {} }); // pull for second call
+		await initSync();
+
+		expect(mockFetch).toHaveBeenCalledTimes(2);
 	});
 });
 

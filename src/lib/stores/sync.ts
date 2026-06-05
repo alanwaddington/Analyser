@@ -20,6 +20,8 @@ export type SyncStatus = {
 	error: string | null;
 };
 
+let _initialised = false;
+
 let _status: SyncStatus = {
 	uuid: null,
 	shortCode: null,
@@ -177,9 +179,15 @@ export function getSyncStatus(): SyncStatus {
  * - Returning visit: pulls latest labels from remote (KV is source of truth).
  * In both cases: registers the onLabelChange hook for future automatic pushes.
  * SSR-safe (no-op when window is undefined).
+ *
+ * Returns a cleanup function that deregisters the hook and resets the initialised
+ * flag — call it from onDestroy so HMR teardown/remount cycles work cleanly.
+ * Returns undefined if already initialised (no-op path).
  */
-export async function initSync(): Promise<void> {
+export async function initSync(): Promise<(() => void) | undefined> {
 	if (typeof localStorage === 'undefined') return;
+	if (_initialised) return;
+	_initialised = true;
 
 	let uuid = localStorage.getItem(SYNC_ID_KEY);
 	let shortCode = localStorage.getItem(SYNC_CODE_KEY);
@@ -218,4 +226,9 @@ export async function initSync(): Promise<void> {
 			pushLabels(currentUuid, currentCode).catch(() => {});
 		}
 	});
+
+	return () => {
+		setOnLabelChange(null);
+		_initialised = false;
+	};
 }

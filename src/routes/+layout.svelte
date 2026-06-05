@@ -1,6 +1,6 @@
 <script lang="ts">
 	import './layout.css';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
@@ -70,6 +70,8 @@
 		goto('/event');
 	}
 
+	let cleanupSync: (() => void) | undefined;
+
 	onMount(async () => {
 		initTheme();
 
@@ -86,7 +88,11 @@
 
 		// Initialise sync identity (generates UUID on first visit, pulls on returning visits).
 		// Called after adoptSyncIdentity so a newly adopted identity is not overwritten.
-		await initSync();
+		cleanupSync = await initSync();
+	});
+
+	onDestroy(() => {
+		cleanupSync?.();
 	});
 
 	// Sync data-theme attribute on <html> whenever the resolved theme changes.
