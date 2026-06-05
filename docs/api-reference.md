@@ -182,7 +182,9 @@ HTTP status codes used:
 
 The resolve endpoint (`GET /api/labels/resolve/[code]`) is rate-limited to **10 requests per minute per IP address** to deter brute-force code enumeration.
 
-The rate limiter is in-process (not shared across serverless function instances). It provides per-instance protection sufficient for deterring casual enumeration, but is not a substitute for infrastructure-level rate limiting at scale.
+The rate limiter is **Redis-backed** (Upstash) and enforced globally across all Vercel serverless instances. It uses an atomic `INCR` + `EXPIRE` pipeline per IP key (`ratelimit:resolve:{ip}`), so the limit cannot be bypassed by routing requests to different function instances. If Redis is unavailable, the limiter **fails open** — requests are allowed through rather than blocked, preserving availability.
+
+The `Retry-After` header value is derived from the Redis key's remaining TTL at the time of the 429 response.
 
 The `GET /api/labels/[uuid]` and `PUT /api/labels/[uuid]` endpoints are not rate-limited. The UUID namespace (36^8 × 36^8 entries) makes enumeration infeasible.
 
