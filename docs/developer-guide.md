@@ -80,6 +80,7 @@ src/
 │   │   ├── deviceLabels.ts  # Device label persistence (localStorage)
 │   │   ├── sync.ts          # Cross-device sync logic
 │   │   ├── session.ts       # Activity session state; activityColourMap assigns stable colours by activity.id
+│   │   ├── toast.ts         # Transient toast notification store (addToast, removeToast, auto-dismiss)
 │   │   └── viewport.ts      # Responsive breakpoint store
 │   ├── utils/        # Pure utility functions
 │   │                 # - binarySearch.ts: lowerBound<T>(arr, key, target) — shared lower-bound binary search
@@ -276,7 +277,52 @@ Three additions support sync:
 
 Only one change callback can be registered at a time. `initSync` registers its push callback after the initial push/pull, so subsequent label changes auto-push. The cleanup function returned by `initSync` calls `setOnLabelChange(null)` to deregister on teardown.
 
-### 3.6 API Routes
+### 3.6 Toast Notification Store
+
+**Location:** `src/lib/stores/toast.ts`  
+**Component:** `src/lib/components/ui/ToastContainer.svelte`
+
+A lightweight, reusable toast system for surfacing transient non-blocking messages to the user. The store is framework-agnostic — any module can call `addToast` without importing Svelte components.
+
+#### API
+
+| Export | Signature | Description |
+|--------|-----------|-------------|
+| `toasts` | `Readable<Toast[]>` | Reactive list of active toasts. Read-only — prevents external mutation. |
+| `addToast` | `(message: string, level?: ToastLevel, duration?: number) => void` | Adds a toast. Default level: `'warning'`. Default duration: `5000` ms. |
+| `removeToast` | `(id: number) => void` | Removes a toast immediately and clears its auto-dismiss timer. |
+
+#### Types
+
+```ts
+type ToastLevel = 'info' | 'warning' | 'error';
+
+interface Toast {
+  id: number;
+  message: string;
+  level: ToastLevel;
+}
+```
+
+#### Behaviour
+
+- Each toast is assigned a unique auto-incrementing `id`.
+- `addToast` schedules a `setTimeout` to call `removeToast(id)` after `duration` ms. The timer handle is stored in a `Map<id, timer>` and cleared by `removeToast` to prevent orphaned timers when a toast is dismissed early.
+- `removeToast` with an unknown `id` is a safe no-op.
+
+#### ToastContainer component
+
+`ToastContainer.svelte` subscribes to `$toasts` and renders the most recent `MAX_VISIBLE` (3) toasts as a fixed-position stack (bottom-right on desktop; full-width above the bottom nav bar on phone). It is mounted **once** in `+layout.svelte` so toasts are visible on every page.
+
+Each toast has a level-appropriate left-border accent and dismiss button (`×`). Colours use hardcoded semantic values (amber/blue/red) against `--color-card` / `--color-text` backgrounds, ensuring correct appearance in both light and dark themes.
+
+#### Current callers
+
+| Caller | Level | Message |
+|--------|-------|---------|
+| `deviceLabels.ts` — `saveLabels` catch | `warning` | `'Device label could not be saved — storage full'` (QuotaExceededError) or `'Device label could not be saved'` (other errors) |
+
+### 3.7 API Routes
 
 See the full API reference in [`docs/api-reference.md`](api-reference.md).
 
@@ -288,7 +334,7 @@ See the full API reference in [`docs/api-reference.md`](api-reference.md).
 
 All routes validate inputs against `UUID_REGEX` / `SHORT_CODE_REGEX` from `src/lib/validation.ts` and return structured JSON errors on 400/404/429/500.
 
-### 3.7 SyncPanel Component
+### 3.8 SyncPanel Component
 
 **Location:** `src/lib/components/ui/SyncPanel.svelte`
 
@@ -311,7 +357,7 @@ Derived values:
 
 The component validates code input against `SHORT_CODE_REGEX` before hitting the API, providing immediate feedback on format errors.
 
-### 3.8 Layout Wiring
+### 3.9 Layout Wiring
 
 **`src/routes/+layout.svelte`**
 
@@ -321,7 +367,7 @@ Three sync-related wiring points:
 2. `onDestroy` calls `cleanupSync?.()` — deregisters the label-change hook and resets the initialised flag, enabling a clean reinit if the layout remounts (HMR).
 3. URL parameter handling: if the page loads with `?sync={uuid}`, `adoptSyncIdentity(uuid)` is called and the param is stripped from the URL using `history.replaceState` to avoid sharing it inadvertently via browser history.
 
-### 3.9 Validation
+### 3.10 Validation
 
 **`src/lib/validation.ts`**
 
@@ -332,7 +378,7 @@ UUID_REGEX      = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 SHORT_CODE_REGEX = /^[A-Z0-9]{3}-[A-Z0-9]{5}$/i
 ```
 
-### 3.10 Environment Variables
+### 3.11 Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -346,7 +392,7 @@ These are read via `$env/dynamic/private` (SvelteKit server-only) in `src/lib/se
 
 The Redis singleton (`getRedis()`) throws an explicit error if credentials are absent, which the API routes catch and surface as HTTP 500. This prevents silent failures.
 
-### 3.11 Local Development Setup
+### 3.12 Local Development Setup
 
 1. Create an [Upstash](https://upstash.com) account and create a Redis database (free tier is sufficient).
 2. Copy the REST URL and token from the Upstash console.
