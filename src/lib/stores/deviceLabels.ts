@@ -1,4 +1,5 @@
 import type { Device } from '$lib/types';
+import { addToast } from './toast';
 
 const STORAGE_KEY = 'analyser-device-labels';
 
@@ -65,8 +66,12 @@ function getCache(): Map<string, string> {
 function saveLabels(map: Map<string, string>): void {
 	try {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(map.entries())));
-	} catch {
-		// localStorage may be unavailable in some environments (SSR, private browsing)
+	} catch (e) {
+		const msg = e instanceof DOMException && e.name === 'QuotaExceededError'
+			? 'Device label could not be saved — storage full'
+			: 'Device label could not be saved';
+		console.warn('[deviceLabels] localStorage write failed:', e);
+		addToast(msg, 'warning');
 	}
 }
 
