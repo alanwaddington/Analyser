@@ -126,9 +126,13 @@
 	<div class="sync-panel">
 		<!-- Status line -->
 		{#if $syncStatus.error}
-			<p class="status error">
-				⚠ Sync error —
-				<button class="link-btn" onclick={retrySync}>retry</button>
+			<p class="status" class:error={!$syncStatus.syncing} class:retrying={$syncStatus.syncing}>
+				{#if $syncStatus.syncing}
+					Retrying…
+				{:else}
+					⚠ Sync error —
+					<button class="link-btn" onclick={retrySync}>retry</button>
+				{/if}
 			</p>
 		{:else if $syncStatus.lastSynced}
 			<p class="status ok">☁ Syncing across devices ✓ · {formatAge($syncStatus.lastSynced)}</p>
@@ -284,9 +288,10 @@
 		line-height: 1.3;
 	}
 
-	.status.ok     { color: #4ade80; }
-	.status.error  { color: #f59e0b; }
-	.status.muted  { color: var(--color-muted); }
+	.status.ok       { color: #4ade80; }
+	.status.error    { color: #f59e0b; }
+	.status.retrying { color: #3b82f6; }
+	.status.muted    { color: var(--color-muted); }
 
 	:global([data-theme="light"]) .status.ok { color: #16a34a; }
 
