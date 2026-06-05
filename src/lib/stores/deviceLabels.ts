@@ -98,8 +98,9 @@ export function removeDeviceLabel(key: string): void {
  * Register a callback that fires after every label write or delete.
  * Used by sync.ts to trigger a remote push on each label change.
  * The callback is called synchronously but should initiate async work internally.
+ * Pass null to deregister (e.g. during component teardown).
  */
-export function setOnLabelChange(callback: () => void): void {
+export function setOnLabelChange(callback: (() => void) | null): void {
 	_onLabelChange = callback;
 }
 

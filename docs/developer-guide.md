@@ -242,7 +242,7 @@ Exports:
 | Export | Type | Description |
 |--------|------|-------------|
 | `syncStatus` | `Writable<SyncStatus>` | Reactive store for UI state (uuid, shortCode, lastSynced, error) |
-| `initSync()` | `async () => void` | Call once from `+layout.svelte` `onMount`. SSR-safe. |
+| `initSync()` | `async () => (() => void) \| undefined` | Idempotent — safe to call multiple times; second call is a no-op. Returns a cleanup function on first call (call in `onDestroy` to deregister hook and allow HMR reinit); returns `undefined` if already initialised. SSR-safe. |
 | `pushLabels(uuid, shortCode)` | `async` | Upload current labels to Redis. Errors update `syncStatus.error`. |
 | `pullLabels(uuid)` | `async` | Download labels from Redis and call `replaceAllLabels()`. |
 | `resolveCode(code)` | `async → uuid` | Resolve short code to UUID via API. Throws on 404. |
@@ -272,9 +272,9 @@ Three additions support sync:
 |----------|-------------|
 | `getAllLabels()` | Returns a snapshot `Record<string, string>` of all stored labels |
 | `replaceAllLabels(map)` | Overwrites localStorage with the provided map and notifies the store |
-| `setOnLabelChange(fn)` | Registers a callback invoked after every `setDeviceLabel` / `removeDeviceLabel` |
+| `setOnLabelChange(fn \| null)` | Registers a callback invoked after every `setDeviceLabel` / `removeDeviceLabel`. Pass `null` to deregister. |
 
-Only one change callback can be registered at a time. `initSync` registers its push callback after the first pull, so subsequent label changes auto-push.
+Only one change callback can be registered at a time. `initSync` registers its push callback after the initial push/pull, so subsequent label changes auto-push. The cleanup function returned by `initSync` calls `setOnLabelChange(null)` to deregister on teardown.
 
 ### 3.6 API Routes
 
@@ -315,10 +315,11 @@ The component validates code input against `SHORT_CODE_REGEX` before hitting the
 
 **`src/routes/+layout.svelte`**
 
-Two sync-related additions:
+Three sync-related wiring points:
 
-1. `onMount` calls `initSync()` — runs once per browser session.
-2. URL parameter handling: if the page loads with `?sync={uuid}`, `adoptSyncIdentity(uuid)` is called and the param is stripped from the URL using `history.replaceState` to avoid sharing it inadvertently via browser history.
+1. `onMount` calls `initSync()` — idempotent; safe if called more than once (e.g. during HMR). Stores the returned cleanup function in `cleanupSync`.
+2. `onDestroy` calls `cleanupSync?.()` — deregisters the label-change hook and resets the initialised flag, enabling a clean reinit if the layout remounts (HMR).
+3. URL parameter handling: if the page loads with `?sync={uuid}`, `adoptSyncIdentity(uuid)` is called and the param is stripped from the URL using `history.replaceState` to avoid sharing it inadvertently via browser history.
 
 ### 3.9 Validation
 
