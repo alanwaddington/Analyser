@@ -18,6 +18,7 @@
 
 	let {
 		activities,
+		colourMap = new Map<string, number>(),
 		referenceIndex = undefined,
 		hoveredDistance,
 		onHoverDistance = undefined,
@@ -25,6 +26,7 @@
 		onMetricChannelChange = undefined,
 	}: {
 		activities: Activity[];
+		colourMap?: Map<string, number>;
 		referenceIndex?: number;
 		hoveredDistance: number | null;
 		/** Emits distance in metres when hovering a polyline (map→chart sync), or null on leave */
@@ -237,7 +239,7 @@
 
 		for (let i = 0; i < activities.length; i++) {
 			const activity = activities[i];
-			const colour = FILE_COLOURS[i % FILE_COLOURS.length];
+			const colour = FILE_COLOURS[(colourMap.get(activity.id) ?? i) % FILE_COLOURS.length];
 			const gpsPoints = gpsCache[i];
 			if (gpsPoints.length === 0) continue;
 
@@ -375,7 +377,7 @@
 
 		for (let i = 0; i < activities.length; i++) {
 			const pos = positionFromPoints(gpsCache[i], hoveredDistance);
-			const colour = FILE_COLOURS[i % FILE_COLOURS.length];
+			const colour = FILE_COLOURS[(colourMap.get(activity.id) ?? i) % FILE_COLOURS.length];
 
 			if (pos === null) {
 				markers[i]?.remove();

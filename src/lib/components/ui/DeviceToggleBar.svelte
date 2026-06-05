@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { activeDeviceIndices } from '$lib/stores/session';
+	import { activeDeviceIndices, activityColourMap } from '$lib/stores/session';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import type { CrossFileStream } from '$lib/types';
 	import {
@@ -62,7 +62,7 @@
 			if (!seen.has(cfs.activity.id)) {
 				seen.set(cfs.activity.id, {
 					filename: cfs.activity.filename,
-					colourIndex: seen.size,
+					colourIndex: $activityColourMap.get(cfs.activity.id) ?? 0,
 					streams: [],
 				});
 			}

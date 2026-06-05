@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
-	import { activities, activeDeviceIndices, xAxisMode, timeOffsets } from '$lib/stores/session';
+	import { activities, activeDeviceIndices, xAxisMode, timeOffsets, activityColourMap } from '$lib/stores/session';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import type { ChannelKey, CrossFileStream } from '$lib/types';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
@@ -141,11 +141,11 @@
 			$activeDeviceIndices,
 		);
 		return activeStreams.map((cfs) => {
-			const actIndex = $activities.indexOf(cfs.activity);
+			const colourIdx = $activityColourMap.get(cfs.activity.id) ?? 0;
 			return {
 				activity: cfs.activity,
-				colourIndex: actIndex,
-				colour: FILE_COLOURS[actIndex % FILE_COLOURS.length],
+				colourIndex: colourIdx,
+				colour: FILE_COLOURS[colourIdx % FILE_COLOURS.length],
 				label: deriveDeviceLabel(cfs.stream.device),
 				timeOffset: $timeOffsets.get(cfs.activity.id) ?? 0,
 				distanceOffset: distanceOffsets.get(cfs.activity.id) ?? 0,
@@ -165,11 +165,11 @@
 		return $activities
 			.filter(a => activeActivityIds.has(a.id))
 			.map(a => {
-				const actIndex = $activities.indexOf(a);
+				const colourIdx = $activityColourMap.get(a.id) ?? 0;
 				return {
 					activity: a,
-					colourIndex: actIndex,
-					colour: FILE_COLOURS[actIndex % FILE_COLOURS.length],
+					colourIndex: colourIdx,
+					colour: FILE_COLOURS[colourIdx % FILE_COLOURS.length],
 					label: a.filename,
 				};
 			});
@@ -433,6 +433,7 @@
 			<div class="map-wrap" class:map-wrap--has-strip={mapMetricChannel !== null}>
 				<ActivityMap
 					activities={$activities}
+					colourMap={$activityColourMap}
 					availableChannels={mapAvailableChannels}
 					hoveredDistance={stripHoveredDistance ?? chartHoveredDistance}
 					onHoverDistance={(d) => { handleMapStripHoverDistance(d); handleMapHoverDistance(d); }}
