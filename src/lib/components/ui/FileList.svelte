@@ -16,7 +16,7 @@
 </script>
 
 <ul class="file-list">
-	{#each $activities as activity}
+	{#each $activities as activity, i}
 		{@const colour = FILE_COLOURS[($activityColourMap.get(activity.id) ?? 0) % FILE_COLOURS.length]}
 		{@const isRef = mode === 'event' && i === $referenceIndex}
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
