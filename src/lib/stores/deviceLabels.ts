@@ -120,17 +120,24 @@ export function replaceAllLabels(labels: Record<string, string>): void {
 }
 
 /**
- * Apply stored labels to an array of devices in-place.
- * Works for all device types — ANT+, BLE, local — by deriving the storage key
- * from whatever identifying fields are available.
+ * Returns the stored label for a device, or undefined if none exists.
+ * Pure function — reads from cache without side effects.
  */
-export function applyLabels(devices: Device[]): void {
-	const map = getCache();
-	for (const device of devices) {
-		const key = deviceStorageKey(device);
-		if (key != null) {
-			const stored = map.get(key);
-			if (stored) device.label = stored;
-		}
-	}
+export function resolveLabel(device: Device): string | undefined {
+	const key = deviceStorageKey(device);
+	if (key == null) return undefined;
+	const stored = getCache().get(key);
+	return stored || undefined;
+}
+
+/**
+ * Returns a new array of Device objects with stored labels applied.
+ * Devices with no stored label are returned as-is (same reference).
+ * Does not mutate the input array or its elements.
+ */
+export function applyLabels(devices: Device[]): Device[] {
+	return devices.map(d => {
+		const label = resolveLabel(d);
+		return label ? { ...d, label } : d;
+	});
 }
