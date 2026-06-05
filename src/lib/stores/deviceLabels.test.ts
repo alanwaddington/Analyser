@@ -19,7 +19,8 @@ let deviceStorageKey: (device: Device) => string | null;
 let getDeviceLabel: (key: string) => string | undefined;
 let setDeviceLabel: (key: string, label: string) => void;
 let removeDeviceLabel: (key: string) => void;
-let applyLabels: (devices: Device[]) => void;
+let applyLabels: (devices: Device[]) => Device[];
+let resolveLabel: (device: Device) => string | undefined;
 let getAllLabels: () => Record<string, string>;
 let replaceAllLabels: (labels: Record<string, string>) => void;
 let setOnLabelChange: (callback: () => void) => void;
@@ -35,6 +36,7 @@ beforeEach(async () => {
 	setDeviceLabel = mod.setDeviceLabel;
 	removeDeviceLabel = mod.removeDeviceLabel;
 	applyLabels = mod.applyLabels;
+	resolveLabel = mod.resolveLabel;
 	getAllLabels = mod.getAllLabels;
 	replaceAllLabels = mod.replaceAllLabels;
 	setOnLabelChange = mod.setOnLabelChange;
@@ -155,8 +157,8 @@ describe('setDeviceLabel / removeDeviceLabel', () => {
 		// applyLabels will not apply a falsy stored value to the device.
 		setDeviceLabel('serial:1', '');
 		const devices: Device[] = [{ deviceIndex: 0, serialNumber: 1 }];
-		applyLabels(devices);
-		expect(devices[0].label).toBeUndefined(); // empty string is falsy — not applied
+		const result = applyLabels(devices);
+		expect(result[0].label).toBeUndefined(); // empty string is falsy — not applied
 	});
 });
 
@@ -168,36 +170,84 @@ describe('applyLabels', () => {
 	it('applyLabels_antDevice_labelsRestored', () => {
 		setDeviceLabel('ant:42', 'My HRM');
 		const devices = [makeDevice({ antDeviceNumber: 42 })];
-		applyLabels(devices);
-		expect(devices[0].label).toBe('My HRM');
+		const result = applyLabels(devices);
+		expect(result[0].label).toBe('My HRM');
 	});
 
 	it('applyLabels_serialDevice_labelsRestored', () => {
 		setDeviceLabel('serial:999', 'My Watch');
 		const devices = [makeDevice({ serialNumber: 999 })];
-		applyLabels(devices);
-		expect(devices[0].label).toBe('My Watch');
+		const result = applyLabels(devices);
+		expect(result[0].label).toBe('My Watch');
 	});
 
 	it('applyLabels_manufacturerProductDevice_labelsRestored', () => {
 		setDeviceLabel('device:stryd:duo', 'My Stryd');
 		const devices = [makeDevice({ manufacturer: 'stryd', product: 'duo' })];
-		applyLabels(devices);
-		expect(devices[0].label).toBe('My Stryd');
+		const result = applyLabels(devices);
+		expect(result[0].label).toBe('My Stryd');
 	});
 
 	it('applyLabels_antDeviceTypeOnlyDevice_labelsRestored', () => {
 		// A bare ANT+ HRM with no serial/manufacturer/device-number — keyed by type
 		setDeviceLabel('type:120', 'Polar H10');
 		const devices = [makeDevice({ antDeviceType: 120 })];
-		applyLabels(devices);
-		expect(devices[0].label).toBe('Polar H10');
+		const result = applyLabels(devices);
+		expect(result[0].label).toBe('Polar H10');
 	});
 
 	it('applyLabels_unkeyableDevice_labelUntouched', () => {
 		const devices = [makeDevice({ deviceIndex: 0 })];
-		applyLabels(devices);
-		expect(devices[0].label).toBeUndefined();
+		const result = applyLabels(devices);
+		expect(result[0].label).toBeUndefined();
+	});
+
+	it('applyLabels_withLabel_doesNotMutateOriginal', () => {
+		setDeviceLabel('ant:42', 'My HRM');
+		const device = makeDevice({ antDeviceNumber: 42 });
+		applyLabels([device]);
+		expect(device.label).toBeUndefined(); // original untouched
+	});
+
+	it('applyLabels_noLabel_returnsSameReference', () => {
+		const device = makeDevice({ deviceIndex: 0 });
+		const result = applyLabels([device]);
+		expect(result[0]).toBe(device); // no label → no copy
+	});
+
+	it('applyLabels_withLabel_returnsDifferentReference', () => {
+		setDeviceLabel('ant:42', 'My HRM');
+		const device = makeDevice({ antDeviceNumber: 42 });
+		const result = applyLabels([device]);
+		expect(result[0]).not.toBe(device); // label applied → new object
+	});
+});
+
+// ---------------------------------------------------------------------------
+// resolveLabel
+// ---------------------------------------------------------------------------
+
+describe('resolveLabel', () => {
+	it('resolveLabel_knownKey_returnsStoredLabel', () => {
+		setDeviceLabel('ant:42', 'My HRM');
+		const device = makeDevice({ antDeviceNumber: 42 });
+		expect(resolveLabel(device)).toBe('My HRM');
+	});
+
+	it('resolveLabel_unknownKey_returnsUndefined', () => {
+		const device = makeDevice({ antDeviceNumber: 99 });
+		expect(resolveLabel(device)).toBeUndefined();
+	});
+
+	it('resolveLabel_unkeyableDevice_returnsUndefined', () => {
+		const device = makeDevice({ deviceIndex: 0 });
+		expect(resolveLabel(device)).toBeUndefined();
+	});
+
+	it('resolveLabel_emptyStringStored_returnsUndefined', () => {
+		setDeviceLabel('ant:42', '');
+		const device = makeDevice({ antDeviceNumber: 42 });
+		expect(resolveLabel(device)).toBeUndefined(); // empty string is falsy
 	});
 });
 

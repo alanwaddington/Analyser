@@ -362,8 +362,7 @@ function normalise(data: FitData, filename: string): Activity {
 		seenDeviceIndices.add(idx);
 		return true;
 	});
-	const devices: Device[] = uniqueDeviceInfos.map(normaliseDeviceInfo);
-	applyLabels(devices); // restore any user-assigned labels from localStorage
+	const devices: Device[] = applyLabels(uniqueDeviceInfos.map(normaliseDeviceInfo));
 	const deviceStreams = buildDeviceStreams(devices, records);
 
 	const startTime = session.start_time ?? records[0]?.timestamp ?? new Date(0);
