@@ -729,25 +729,25 @@ describe('filterNegativeElapsed', () => {
 describe('ensureSortedByElapsed', () => {
 	it('ensureSortedByElapsed_alreadySorted_returnsFalse', () => {
 		const records = [makeElapsedRecord(0), makeElapsedRecord(1), makeElapsedRecord(2)];
-		const wasUnsorted = ensureSortedByElapsed(records, 'test.fit');
+		const wasUnsorted = ensureSortedByElapsed(records);
 		expect(wasUnsorted).toBe(false);
 		expect(records.map(r => r.elapsedSeconds)).toEqual([0, 1, 2]);
 	});
 
 	it('ensureSortedByElapsed_unsorted_sortedInPlace_returnsTrue', () => {
 		const records = [makeElapsedRecord(2), makeElapsedRecord(0), makeElapsedRecord(1)];
-		const wasUnsorted = ensureSortedByElapsed(records, 'test.fit');
+		const wasUnsorted = ensureSortedByElapsed(records);
 		expect(wasUnsorted).toBe(true);
 		expect(records.map(r => r.elapsedSeconds)).toEqual([0, 1, 2]);
 	});
 
 	it('ensureSortedByElapsed_singleRecord_returnsFalse', () => {
 		const records = [makeElapsedRecord(5)];
-		expect(ensureSortedByElapsed(records, 'test.fit')).toBe(false);
+		expect(ensureSortedByElapsed(records)).toBe(false);
 	});
 
 	it('ensureSortedByElapsed_emptyArray_returnsFalse', () => {
-		expect(ensureSortedByElapsed([], 'test.fit')).toBe(false);
+		expect(ensureSortedByElapsed([])).toBe(false);
 	});
 });
 
@@ -783,5 +783,16 @@ describe('buildLaps — epsilon tolerance', () => {
 		const fitLaps: any[] = [{ total_distance: 1000, total_elapsed_time: 2 }];
 		const laps = buildLaps(fitLaps, records);
 		expect(laps[0].endIndex).toBe(1); // record at 1001.0 excluded
+	});
+
+	it('buildLaps_recordAtExactEpsilonBoundary_includedInLap', () => {
+		// Record sits exactly DISTANCE_EPSILON_M (0.5 m) beyond nominal lap end — boundary is inclusive
+		const records: ActivityRecord[] = [
+			makeElapsedRecord(0, 0), makeElapsedRecord(1, 500), makeElapsedRecord(2, 1000 + DISTANCE_EPSILON_M),
+		];
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const fitLaps: any[] = [{ total_distance: 1000, total_elapsed_time: 2 }];
+		const laps = buildLaps(fitLaps, records);
+		expect(laps[0].endIndex).toBe(2); // record exactly at boundary included
 	});
 });

@@ -342,8 +342,8 @@ export function filterNegativeElapsed(records: ActivityRecord[]): ActivityRecord
 }
 
 // Sort records in-place by elapsedSeconds if out of order. Returns true when
-// sorting was required so the caller can emit a warning toast.
-export function ensureSortedByElapsed(records: ActivityRecord[], filename: string): boolean {
+// sorting was required so the caller can emit a warning.
+export function ensureSortedByElapsed(records: ActivityRecord[]): boolean {
 	if (records.length < 2) return false;
 	let outOfOrder = false;
 	for (let i = 1; i < records.length; i++) {
@@ -354,7 +354,6 @@ export function ensureSortedByElapsed(records: ActivityRecord[], filename: strin
 	}
 	if (!outOfOrder) return false;
 	records.sort((a, b) => a.elapsedSeconds - b.elapsedSeconds);
-	addToast(`"${filename}": records were out of order and have been sorted automatically.`, 'warning');
 	return true;
 }
 
@@ -369,9 +368,14 @@ function normalise(data: FitData, filename: string): Activity {
 	let records: ActivityRecord[] = rawRecords.map(normaliseRecord);
 	records = filterNegativeElapsed(records);
 	if (records.length < rawRecords.length) {
-		addToast(`"${filename}": ${rawRecords.length - records.length} record(s) with negative elapsed time were removed.`, 'warning');
+		const count = rawRecords.length - records.length;
+		console.warn(`[parser] "${filename}": ${count} record(s) with negative elapsed time removed`);
+		addToast(`"${filename}": ${count} record(s) with negative elapsed time were removed.`, 'warning');
 	}
-	ensureSortedByElapsed(records, filename);
+	if (ensureSortedByElapsed(records)) {
+		console.warn(`[parser] "${filename}": records were out of order — sorted by elapsedSeconds`);
+		addToast(`"${filename}": records were out of order and have been sorted automatically.`, 'warning');
+	}
 
 	if (sport === 'running') {
 		applyRunningCadenceDoubling(records);
