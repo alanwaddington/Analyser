@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { interpolateToDistanceAxis } from './distance.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
+import { makeBaseActivity } from '$lib/test-utils';
 
 function makeActivity(records: Partial<ActivityRecord>[]): Activity {
 	const full: ActivityRecord[] = records.map((r, i) => ({

@@ -1,21 +1,5 @@
 import type { Activity, ChannelKey } from '$lib/types';
-
-const ALL_CHANNELS: ChannelKey[] = [
-	'heartRate',
-	'power',
-	'powerLeft',
-	'powerRight',
-	'cadence',
-	'speed',
-	'pace',
-	'altitude',
-	'temperature',
-	'coreTemperature',
-	'skinTemperature',
-	'verticalOscillation',
-	'groundContactTime',
-	'strideLength',
-];
+import { ALL_RECORD_CHANNELS as ALL_CHANNELS } from '$lib/fit/parser';
 
 export function deriveAvailableChannels(activities: Activity[]): ChannelKey[] {
 	const union = new Set<ChannelKey>();

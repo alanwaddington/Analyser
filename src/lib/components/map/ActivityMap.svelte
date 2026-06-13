@@ -239,7 +239,7 @@
 
 		for (let i = 0; i < activities.length; i++) {
 			const activity = activities[i];
-			const colour = FILE_COLOURS[(colourMap.get(activities[i].id) ?? i) % FILE_COLOURS.length];
+			const colour = FILE_COLOURS[(colourMap.get(activity.id) ?? i) % FILE_COLOURS.length];
 			const gpsPoints = gpsCache[i];
 			if (gpsPoints.length === 0) continue;
 

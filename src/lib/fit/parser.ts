@@ -172,7 +172,7 @@ const DEVICE_TYPE_CHANNELS: Record<number, ChannelKey[]> = {
 };
 
 // All channels that can appear in records
-const ALL_RECORD_CHANNELS: ChannelKey[] = [
+export const ALL_RECORD_CHANNELS: ChannelKey[] = [
 	'heartRate', 'power', 'powerLeft', 'powerRight', 'cadence',
 	'speed', 'pace', 'altitude', 'temperature',
 	'coreTemperature', 'skinTemperature',

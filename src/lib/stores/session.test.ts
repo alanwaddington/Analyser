@@ -18,28 +18,10 @@ import {
 } from './session.ts';
 import { FILE_COLOURS } from '$lib/types';
 import type { Activity } from '$lib/types';
+import { makeBaseActivity } from '$lib/test-utils';
 
 function makeActivity(id: string): Activity {
-	return {
-		id,
-		filename: `${id}.fit`,
-		startTime: new Date(),
-		totalDistance: 5000,
-		totalElapsedTime: 1800,
-		records: [],
-		laps: [],
-		devices: [],
-		deviceStreams: [],
-		firstGpsFixIndex: null,
-		firstGpsMovementIndex: null,
-		timerStartTime: null,
-		firstIndoorMovementIndex: null,
-		firstWorkoutStepTime: null,
-		subSport: undefined,
-		isIndoor: false,
-		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
-		availableChannels: new Set(),
-	};
+	return makeBaseActivity({ id, filename: `${id}.fit`, totalDistance: 5000, totalElapsedTime: 1800 });
 }
 
 beforeEach(() => {
