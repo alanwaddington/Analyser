@@ -2,28 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { computeTimeOffsets, computeAnchoredOffsets, activitiesOverlap } from './timestamp.ts';
 import { findAnchor } from './anchor.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
+import { makeBaseActivity } from '$lib/test-utils';
 
 function makeActivity(id: string, startTime: Date): Activity {
-	return {
+	return makeBaseActivity({
 		id,
 		filename: `${id}.fit`,
 		startTime,
 		totalDistance: 5000,
 		totalElapsedTime: 1800,
-		records: [],
-		laps: [],
-		devices: [],
-		deviceStreams: [],
-		firstGpsFixIndex: null,
-		firstGpsMovementIndex: null,
-		timerStartTime: null,
-		firstIndoorMovementIndex: null,
-		firstWorkoutStepTime: null,
-		subSport: undefined,
-		isIndoor: false,
 		// No GPS/timer → fileStart anchor; timestamp must be startTime for fallback to work
 		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: startTime, source: 'fileStart' as const },
-	};
+	});
 }
 
 const T0 = new Date('2025-01-01T10:00:00Z');
@@ -194,25 +184,17 @@ function makeActivityWithGps(id: string, records: ActivityRecord[], opts: {
 	firstGpsFixIndex?: number | null;
 	timerStartTime?: Date | null;
 } = {}): Activity {
-	const a: Activity = {
+	const a = makeBaseActivity({
 		id,
 		filename: `${id}.fit`,
 		startTime: records[0]?.timestamp ?? new Date(0),
 		totalDistance: 5000,
 		totalElapsedTime: 1800,
 		records,
-		laps: [],
-		devices: [],
-		deviceStreams: [],
 		firstGpsFixIndex: opts.firstGpsFixIndex ?? null,
 		firstGpsMovementIndex: opts.firstGpsMovementIndex ?? null,
-		firstIndoorMovementIndex: null,
-		firstWorkoutStepTime: null,
-		subSport: undefined,
-		isIndoor: false,
 		timerStartTime: opts.timerStartTime ?? null,
-		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
-	};
+	});
 	a.anchor = findAnchor(a);
 	return a;
 }

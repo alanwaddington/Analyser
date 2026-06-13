@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { interpolateToDistanceAxis } from './distance.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
+import { makeBaseActivity } from '$lib/test-utils';
 
 function makeActivity(records: Partial<ActivityRecord>[]): Activity {
 	const full: ActivityRecord[] = records.map((r, i) => ({
@@ -27,6 +28,7 @@ function makeActivity(records: Partial<ActivityRecord>[]): Activity {
 		subSport: undefined,
 		isIndoor: false,
 		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
+		availableChannels: new Set(),
 	};
 }
 

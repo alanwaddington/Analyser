@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as xlsx from 'xlsx';
 import { buildWorkbook } from './excel.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
+import { makeBaseActivity } from '$lib/test-utils';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
 }
 
 function makeActivity(id: string, overrides: Partial<Activity> = {}): Activity {
-	return {
+	return makeBaseActivity({
 		id,
 		filename: `${id}.fit`,
 		sport: 'running',
@@ -23,19 +24,8 @@ function makeActivity(id: string, overrides: Partial<Activity> = {}): Activity {
 		totalDistance: 5000,
 		totalElapsedTime: 1800,
 		records: [makeRecord()],
-		laps: [],
-		devices: [],
-		deviceStreams: [],
-		firstGpsFixIndex: null,
-		firstGpsMovementIndex: null,
-		timerStartTime: null,
-		firstIndoorMovementIndex: null,
-		firstWorkoutStepTime: null,
-		subSport: undefined,
-		isIndoor: false,
-		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
 		...overrides,
-	};
+	});
 }
 
 function parseWorkbook(buf: ArrayBuffer): xlsx.WorkBook {

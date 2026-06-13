@@ -377,7 +377,7 @@
 
 		for (let i = 0; i < activities.length; i++) {
 			const pos = positionFromPoints(gpsCache[i], hoveredDistance);
-			const colour = FILE_COLOURS[(colourMap.get(activity.id) ?? i) % FILE_COLOURS.length];
+			const colour = FILE_COLOURS[(colourMap.get(activities[i].id) ?? i) % FILE_COLOURS.length];
 
 			if (pos === null) {
 				markers[i]?.remove();

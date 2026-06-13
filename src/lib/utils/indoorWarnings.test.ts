@@ -1,27 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createIndoorWarnings } from './indoorWarnings.svelte.ts';
 import type { Activity } from '$lib/types';
+import { makeBaseActivity } from '$lib/test-utils';
 
 function makeActivity(isIndoor: boolean): Activity {
-	return {
-		id: 'test',
-		filename: 'test.fit',
-		startTime: new Date(),
-		totalDistance: 5000,
-		totalElapsedTime: 1800,
-		records: [],
-		laps: [],
-		devices: [],
-		deviceStreams: [],
-		firstGpsFixIndex: null,
-		firstGpsMovementIndex: null,
-		timerStartTime: null,
-		firstIndoorMovementIndex: null,
-		firstWorkoutStepTime: null,
-		subSport: undefined,
-		isIndoor,
-		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
-	};
+	return makeBaseActivity({ isIndoor });
 }
 
 // ---- allIndoor ----
