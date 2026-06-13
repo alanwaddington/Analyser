@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.6 · **Last updated:** June 2026
+> **Version:** 1.7 · **Last updated:** June 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -782,6 +782,10 @@ Both functions are exported from `parser.ts` for unit testing. Well-formed files
 
 The cursor advancement uses `records[cursor].distance <= targetDist + DISTANCE_EPSILON_M` (where `DISTANCE_EPSILON_M = 0.5`) to absorb GPS floating-point drift at lap boundaries. The constant is exported for use in tests and any future callers that need the same tolerance.
 
+**Available channel pre-computation** — `channelsPresentInRecords(records)` scans each `ActivityRecord` once across all 14 channel keys and returns a `Set<ChannelKey>` of those with at least one non-null value. It is called once inside `normalise()` and the result is stored on `Activity` as `availableChannels: Set<ChannelKey>` (PR #108).
+
+`deriveAvailableChannels(activities)` in `src/lib/utils/channels.ts` unions those pre-computed sets rather than re-scanning records on every render call. It returns the channel list in the canonical ordering defined by `ALL_RECORD_CHANNELS` (exported from `parser.ts`), which also replaces the formerly duplicated `ALL_CHANNELS` constant that used to live only in `channels.ts`.
+
 ---
 
 ## 6. Testing
@@ -833,3 +837,17 @@ vi.stubGlobal('ResizeObserver', class { observe = vi.fn(); disconnect = vi.fn();
 ```
 
 There are no integration or end-to-end tests at present. The API routes for sync are exercised manually — see section 3.11 for local setup.
+
+### Shared test helper — `makeBaseActivity`
+
+`src/lib/test-utils.ts` exports `makeBaseActivity(overrides?)`, a single factory for building `Activity` fixture objects in tests (PR #108):
+
+```typescript
+import { makeBaseActivity } from '$lib/test-utils';
+
+const activity = makeBaseActivity({ id: 'run-1', records: [/* ... */] });
+```
+
+The factory fills every required `Activity` field with safe defaults and computes `availableChannels` automatically via `channelsPresentInRecords(records)`. Pass `overrides.availableChannels` to supply a manual set when the test is specifically about channel visibility rather than parser behaviour.
+
+All test files should import this helper rather than duplicating the full `Activity` literal — it prevents future interface changes from requiring edits across every test file.
