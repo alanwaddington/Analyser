@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { deriveAvailableChannels } from './channels.ts';
-import type { Activity, ActivityRecord } from '$lib/types';
+import type { Activity, ActivityRecord, ChannelKey } from '$lib/types';
+import { channelsPresentInRecords } from '$lib/fit/parser';
 
 function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
 	return {
@@ -11,7 +12,7 @@ function makeRecord(overrides: Partial<ActivityRecord> = {}): ActivityRecord {
 	};
 }
 
-function makeActivity(records: ActivityRecord[]): Activity {
+function makeActivity(records: ActivityRecord[], availableChannels?: Set<ChannelKey>): Activity {
 	return {
 		id: 'test',
 		filename: 'test.fit',
@@ -30,6 +31,7 @@ function makeActivity(records: ActivityRecord[]): Activity {
 		subSport: undefined,
 		isIndoor: false,
 		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
+		availableChannels: availableChannels ?? channelsPresentInRecords(records),
 	};
 }
 
