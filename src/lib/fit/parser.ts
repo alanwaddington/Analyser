@@ -180,7 +180,7 @@ const ALL_RECORD_CHANNELS: ChannelKey[] = [
 ];
 
 /** Returns only channels where at least one record has a non-null value */
-function channelsPresentInRecords(records: ActivityRecord[]): Set<ChannelKey> {
+export function channelsPresentInRecords(records: ActivityRecord[]): Set<ChannelKey> {
 	const present = new Set<ChannelKey>();
 	for (const r of records) {
 		for (const ch of ALL_RECORD_CHANNELS) {
@@ -398,6 +398,7 @@ function normalise(data: FitData, filename: string): Activity {
 		return true;
 	});
 	const devices: Device[] = applyLabels(uniqueDeviceInfos.map(normaliseDeviceInfo));
+	const availableChannels = channelsPresentInRecords(records);
 	const deviceStreams = buildDeviceStreams(devices, records);
 
 	const startTime = session.start_time ?? records[0]?.timestamp ?? new Date(0);
@@ -433,6 +434,7 @@ function normalise(data: FitData, filename: string): Activity {
 		firstWorkoutStepTime,
 		timerStartTime,
 		anchor,
+		availableChannels,
 	};
 }
 

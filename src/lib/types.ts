@@ -97,6 +97,7 @@ export interface Activity {
 	firstWorkoutStepTime: Date | null;
 	timerStartTime: Date | null;
 	anchor: AlignmentAnchor; // best alignment anchor for this activity, computed at parse time
+	availableChannels: Set<ChannelKey>;
 }
 
 export interface AlignedSeries {

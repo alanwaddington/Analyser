@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps, filterNegativeElapsed, ensureSortedByElapsed, DISTANCE_EPSILON_M } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, channelsPresentInRecords, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps, filterNegativeElapsed, ensureSortedByElapsed, DISTANCE_EPSILON_M } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -794,5 +794,38 @@ describe('buildLaps — epsilon tolerance', () => {
 		const fitLaps: any[] = [{ total_distance: 1000, total_elapsed_time: 2 }];
 		const laps = buildLaps(fitLaps, records);
 		expect(laps[0].endIndex).toBe(2); // record exactly at boundary included
+	});
+});
+
+describe('channelsPresentInRecords', () => {
+	it('channelsPresentInRecords_emptyRecords_returnsEmptySet', () => {
+		const result = channelsPresentInRecords([]);
+		expect(result.size).toBe(0);
+	});
+
+	it('channelsPresentInRecords_recordWithHeartRate_returnsSetContainingHeartRate', () => {
+		const records = [makeRecord({ heartRate: 140 })];
+		const result = channelsPresentInRecords(records);
+		expect(result.has('heartRate')).toBe(true);
+		expect(result.has('power')).toBe(false);
+	});
+
+	it('channelsPresentInRecords_multipleRecordsWithDifferentChannels_returnsUnion', () => {
+		const records = [
+			makeRecord({ heartRate: 140 }),
+			makeRecord({ power: 250 }),
+			makeRecord({ cadence: 90 }),
+		];
+		const result = channelsPresentInRecords(records);
+		expect(result.has('heartRate')).toBe(true);
+		expect(result.has('power')).toBe(true);
+		expect(result.has('cadence')).toBe(true);
+		expect(result.has('altitude')).toBe(false);
+	});
+
+	it('channelsPresentInRecords_channelPresentInOnlyOneRecord_included', () => {
+		const records = [makeRecord({ heartRate: 140 }), makeRecord()];
+		const result = channelsPresentInRecords(records);
+		expect(result.has('heartRate')).toBe(true);
 	});
 });
