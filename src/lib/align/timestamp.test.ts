@@ -23,6 +23,7 @@ function makeActivity(id: string, startTime: Date): Activity {
 		isIndoor: false,
 		// No GPS/timer → fileStart anchor; timestamp must be startTime for fallback to work
 		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: startTime, source: 'fileStart' as const },
+		availableChannels: new Set(),
 	};
 }
 
@@ -212,6 +213,7 @@ function makeActivityWithGps(id: string, records: ActivityRecord[], opts: {
 		isIndoor: false,
 		timerStartTime: opts.timerStartTime ?? null,
 		anchor: { recordIndex: 0, distanceMetres: 0, elapsedSeconds: 0, timestamp: new Date(0), source: 'fileStart' as const },
+		availableChannels: new Set(),
 	};
 	a.anchor = findAnchor(a);
 	return a;
