@@ -73,6 +73,7 @@
 	}
 
 	const availableChannels = $derived(deriveAvailableChannels($activities));
+	const anomalyCounts = $derived(buildAnomalyCounts($activities));
 	const seriesInputs: SeriesInput[] = $derived(
 		$activities.map((a) => ({
 			activity: a,
@@ -261,7 +262,7 @@
 		<div class="charts-panel" class:tab-hidden={activeTab !== 'charts'}>
 			<CollapsiblePanel title="Channels & Options">
 				<div class="toolbar">
-					<ChannelToggleBar channels={availableChannels} />
+					<ChannelToggleBar channels={availableChannels} {anomalyCounts} />
 					<div class="axis-toggle" role="group" aria-label="X-axis mode">
 						<button
 							class="axis-btn"
