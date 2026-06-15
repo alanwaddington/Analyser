@@ -21,6 +21,8 @@
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import type { ChannelKey } from '$lib/types';
 	import { exportActivities } from '$lib/export/exportActivities';
+	import { buildAnomalyCounts } from '$lib/components/ui/DeviceToggleBar.utils';
+	import { groupAnomalyEvents } from '$lib/analytics/anomalies';
 	import { formatPace } from '$lib/utils/formatting';
 	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
@@ -71,6 +73,7 @@
 	}
 
 	const availableChannels = $derived(deriveAvailableChannels($activities));
+	const anomalyCounts = $derived(buildAnomalyCounts($activities));
 	const seriesInputs: SeriesInput[] = $derived(
 		$activities.map((a) => ({
 			activity: a,
@@ -259,7 +262,7 @@
 		<div class="charts-panel" class:tab-hidden={activeTab !== 'charts'}>
 			<CollapsiblePanel title="Channels & Options">
 				<div class="toolbar">
-					<ChannelToggleBar channels={availableChannels} />
+					<ChannelToggleBar channels={availableChannels} {anomalyCounts} />
 					<div class="axis-toggle" role="group" aria-label="X-axis mode">
 						<button
 							class="axis-btn"
@@ -322,6 +325,7 @@
 								{lapMarkers}
 								referenceIndex={$referenceIndex}
 								groupId="event-charts"
+								anomalies={groupAnomalyEvents($activities[0]?.anomalies.filter(a => a.channel === channel) ?? [])}
 								onHoverDistance={chartIdx === 0 ? handleChartHoverDistance : undefined}
 								externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
 							/>

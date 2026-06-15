@@ -46,6 +46,7 @@
 	// All rendered layers — cleared and rebuilt on each polyline effect run
 	let layers: import('leaflet').Layer[] = [];
 	let markers: (import('leaflet').CircleMarker | null)[] = [];
+	let driftMarkers: import('leaflet').CircleMarker[] = [];
 	let resizeObserver: ResizeObserver | undefined;
 
 	// Metric colouring state
@@ -225,9 +226,11 @@
 		void referenceIndex;   // re-render when reference activity changes
 		void metricComputation; // re-render when channel, smoothing, or activity data changes
 
-		// Remove all existing layers
+		// Remove all existing layers and drift markers
 		for (const layer of layers) layer.remove();
 		layers = [];
+		for (const dm of driftMarkers) dm.remove();
+		driftMarkers = [];
 
 		const allPoints: import('leaflet').LatLng[] = [];
 
@@ -354,6 +357,30 @@
 					dashOverlay.addTo(map);
 					layers.push(dashOverlay);
 				}
+			}
+		}
+
+		// GPS drift anomaly markers — red circles at each drift event position
+		for (let i = 0; i < activities.length; i++) {
+			const activity = activities[i];
+			const driftAnomalies = activity.anomalies.filter(a => a.type === 'gps-drift');
+			for (const anomaly of driftAnomalies) {
+				const record = activity.records[anomaly.recordIndex];
+				if (!record?.position) continue;
+				const dm = L.circleMarker(
+					L.latLng(record.position.lat, record.position.lon),
+					{
+						radius: 5,
+						color: '#ef4444',
+						fillColor: '#ef4444',
+						fillOpacity: 0.8,
+						weight: 1.5,
+						interactive: true,
+					}
+				);
+				dm.bindTooltip('GPS drift detected', { sticky: false, opacity: 0.9 });
+				dm.addTo(map);
+				driftMarkers.push(dm);
 			}
 		}
 

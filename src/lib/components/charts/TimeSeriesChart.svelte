@@ -2,12 +2,12 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { ECharts, EChartsOption } from 'echarts';
 	import { loadECharts, type EChartsModule } from './echarts-loader';
-	import type { Activity, ChannelKey } from '$lib/types';
+	import type { Activity, ChannelKey, Anomaly } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
-	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats } from './TimeSeriesChart.utils.ts';
+	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
 	import { downloadPng, localDateString } from '$lib/export/download';
@@ -25,6 +25,7 @@
 		onHoverDistance = undefined,
 		externalHoverDistance = undefined,
 		forceDistanceAxis = false,
+		anomalies = undefined,
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
@@ -37,6 +38,8 @@
 		externalHoverDistance?: number | null;
 		/** When true, always uses distance mode for x-axis regardless of the global xAxisMode store */
 		forceDistanceAxis?: boolean;
+		/** Anomalies for this channel (from the first activity). Rendered as red diamond markPoints. */
+		anomalies?: Anomaly[];
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -80,6 +83,7 @@
 	}
 
 	function buildData(activity: Activity, timeOffset = 0, distanceOffset = 0): [number, number | null][] {
+		if (channel === 'position') return []; // GPS-only channel — no numeric series
 		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
 		if (axisMode === 'distance') {
 			const aligned = interpolateToDistanceAxis(activity, distanceStep(activity.totalDistance), distanceOffset);
@@ -171,55 +175,75 @@
 			},
 			dataZoom: [{ type: 'inside' }],
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			series: ([
-				...(showAltBackdrop && hasAlt ? [{
-					type: 'line' as const,
-					name: '__alt__',
-					yAxisIndex: 1,
-					data: altData,
-					sampling: 'lttb' as const,
-					areaStyle: { color: altFill, origin: 'start' as const },
-					lineStyle: { width: 0.5, color: altLine },
-					symbol: 'none',
-					showSymbol: false,
-					silent: true,
-					z: 0,
-				}] : []),
-				...seriesInputs.map((s, i) => {
-					const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
-					const dashed = isDashed(i, referenceIndex);
-					const seriesData = hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
-					if (seriesData.length > DOWNSAMPLE_THRESHOLD) {
-						console.warn(`[TimeSeriesChart] ${channel}: ${seriesData.length} points — ECharts LTTB sampling active`);
-					}
-					return {
+			series: (() => {
+				const firstVisibleIdx = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
+				return ([
+					...(showAltBackdrop && hasAlt ? [{
 						type: 'line' as const,
-						name: s.label ?? s.activity.filename,
-						yAxisIndex: 0,
-						data: seriesData,
+						name: '__alt__',
+						yAxisIndex: 1,
+						data: altData,
 						sampling: 'lttb' as const,
-						lineStyle: {
-							color: colour,
-							type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
-							width: 1.5,
-						},
-						itemStyle: { color: colour },
+						areaStyle: { color: altFill, origin: 'start' as const },
+						lineStyle: { width: 0.5, color: altLine },
 						symbol: 'none',
 						showSymbol: false,
-						...(i === 0 && lapMarkers.length > 0 ? {
-							markLine: {
-								silent: true,
-								symbol: ['none', 'none'],
-								data: lapMarkers.map(m => ({
-									xAxis: m.value,
-									label: { formatter: m.label, fontSize: 10, color: tc },
-								})),
-								lineStyle: { type: 'dashed' as const, color: gc, width: 1 },
+						silent: true,
+						z: 0,
+					}] : []),
+					...seriesInputs.map((s, i) => {
+						const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
+						const dashed = isDashed(i, referenceIndex);
+						const seriesData = hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
+						if (seriesData.length > DOWNSAMPLE_THRESHOLD) {
+							console.warn(`[TimeSeriesChart] ${channel}: ${seriesData.length} points — ECharts LTTB sampling active`);
+						}
+						return {
+							type: 'line' as const,
+							name: s.label ?? s.activity.filename,
+							yAxisIndex: 0,
+							data: seriesData,
+							sampling: 'lttb' as const,
+							lineStyle: {
+								color: colour,
+								type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
+								width: 1.5,
 							},
-						} : {}),
-					};
-				}),
-			]) as unknown as EChartsOption['series'],
+							itemStyle: { color: colour },
+							symbol: 'none',
+							showSymbol: false,
+							...(i === 0 && lapMarkers.length > 0 ? {
+								markLine: {
+									silent: true,
+									symbol: ['none', 'none'],
+									data: lapMarkers.map(m => ({
+										xAxis: m.value,
+										label: { formatter: m.label, fontSize: 10, color: tc },
+									})),
+									lineStyle: { type: 'dashed' as const, color: gc, width: 1 },
+								},
+							} : {}),
+							...(i === firstVisibleIdx && anomalies && anomalies.length > 0 ? {
+								markPoint: {
+									silent: false,
+									animation: false,
+									data: anomalies.map(a => {
+										const record = s.activity.records[a.recordIndex];
+										const raw = record ? (record as unknown as Record<string, number | undefined>)[channel] : undefined;
+										return {
+											coord: [anomalyXValue(a, s, effectiveAxisMode($xAxisMode, forceDistanceAxis)), raw ?? 0],
+											symbol: 'diamond',
+											symbolSize: 8,
+											itemStyle: { color: '#ef4444' },
+											label: { show: false },
+										};
+									}),
+								},
+							} : {}),
+						};
+					}),
+				]) as unknown as EChartsOption['series'];
+			})(),
 		};
 	}
 
@@ -272,6 +296,20 @@
 			} else {
 				zoomRange = undefined;
 			}
+		});
+
+		// markPoint click → zoom to ±15s (time) or ±0.05km (distance) around the anomaly
+		chart.on('click', { componentType: 'markPoint' }, (params: unknown) => {
+			const coord = (params as { data?: { coord?: [number, number] } }).data?.coord;
+			if (!coord) return;
+			const xVal = coord[0];
+			const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
+			const halfWindow = axisMode === 'time' ? 15 : 0.05;
+			chart?.dispatchAction({
+				type: 'dataZoom',
+				startValue: xVal - halfWindow,
+				endValue: xVal + halfWindow,
+			});
 		});
 
 		resizeObserver = new ResizeObserver(() => chart?.resize());
