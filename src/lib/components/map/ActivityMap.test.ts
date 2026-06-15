@@ -119,8 +119,8 @@ describe('positionAtDistance', () => {
 describe('positionFromPoints', () => {
 	it('positionFromPoints_happyPath_returnsInterpolatedPosition', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 0 },
-			{ lat: 51.01, lon: -1.01, distance: 1000 },
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 0 },
 		];
 		const result = positionFromPoints(points, 500);
 		expect(result).not.toBeNull();
@@ -134,16 +134,16 @@ describe('positionFromPoints', () => {
 
 	it('positionFromPoints_beyondRange_returnsNull', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 0 },
-			{ lat: 51.01, lon: -1.01, distance: 1000 },
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 0 },
 		];
 		expect(positionFromPoints(points, 5000)).toBeNull();
 	});
 
 	it('positionFromPoints_exactMatch_returnsExactPosition', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 0 },
-			{ lat: 51.01, lon: -1.01, distance: 1000 },
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 0 },
 		];
 		const result = positionFromPoints(points, 1000);
 		expect(result!.lat).toBeCloseTo(51.01, 5);
@@ -230,9 +230,9 @@ describe('distanceAtPoint', () => {
 
 	it('distanceAtPoint_exactMatch_returnsDistance', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 0 },
-			{ lat: 51.01, lon: -1.01, distance: 1000 },
-			{ lat: 51.02, lon: -1.02, distance: 2000 },
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 0 },
+			{ lat: 51.02, lon: -1.02, distance: 2000, recordIndex: 0 },
 		];
 		const result = distanceAtPoint(points, 51.01, -1.01);
 		expect(result).toBeCloseTo(1000, 0);
@@ -240,9 +240,9 @@ describe('distanceAtPoint', () => {
 
 	it('distanceAtPoint_nearestPoint_returnsClosestDistance', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 0 },
-			{ lat: 51.01, lon: -1.01, distance: 1000 },
-			{ lat: 51.02, lon: -1.02, distance: 2000 },
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 0 },
+			{ lat: 51.02, lon: -1.02, distance: 2000, recordIndex: 0 },
 		];
 		// Target slightly closer to the middle point
 		const result = distanceAtPoint(points, 51.009, -1.009);
@@ -251,7 +251,7 @@ describe('distanceAtPoint', () => {
 
 	it('distanceAtPoint_singlePoint_returnsThatDistance', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 500 },
+			{ lat: 51.0, lon: -1.0, distance: 500, recordIndex: 0 },
 		];
 		const result = distanceAtPoint(points, 51.0, -1.0);
 		expect(result).toBeCloseTo(500, 0);
@@ -259,8 +259,8 @@ describe('distanceAtPoint', () => {
 
 	it('distanceAtPoint_pointBeyondTraceEnd_returnsLastPointDistance', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 0 },
-			{ lat: 51.01, lon: -1.01, distance: 1000 },
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 0 },
 		];
 		// Target well beyond the end of the trace — nearest is the last point
 		const result = distanceAtPoint(points, 52.0, -2.0);
@@ -269,8 +269,8 @@ describe('distanceAtPoint', () => {
 
 	it('distanceAtPoint_pointBeforeTraceStart_returnsFirstPointDistance', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 100 },
-			{ lat: 51.01, lon: -1.01, distance: 1000 },
+			{ lat: 51.0, lon: -1.0, distance: 100, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 0 },
 		];
 		// Target well before the start — nearest is the first point
 		const result = distanceAtPoint(points, 50.0, 0.0);
@@ -279,8 +279,8 @@ describe('distanceAtPoint', () => {
 
 	it('distanceAtPoint_midpointBetweenTwoPoints_returnsNearer', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 0 },
-			{ lat: 51.02, lon: -1.02, distance: 2000 },
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.02, lon: -1.02, distance: 2000, recordIndex: 0 },
 		];
 		// Just past the halfway mark → nearer to second point
 		const result = distanceAtPoint(points, 51.011, -1.011);
@@ -289,8 +289,8 @@ describe('distanceAtPoint', () => {
 
 	it('distanceAtPoint_firstPointIsNearest_returnsFirstDistance', () => {
 		const points: GpsPointWithDistance[] = [
-			{ lat: 51.0, lon: -1.0, distance: 0 },
-			{ lat: 51.01, lon: -1.01, distance: 1000 },
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 0 },
 		];
 		// Target much closer to first point
 		const result = distanceAtPoint(points, 51.001, -1.001);

@@ -128,8 +128,8 @@ describe('computeMetricRange', () => {
 	it('computeMetricRange_happyPath_returnsMinMax', () => {
 		const points: GpsPointWithMetric[][] = [
 			[
-				{ lat: 51.0, lon: -1.0, distance: 0, metricValue: 140 },
-				{ lat: 51.01, lon: -1.01, distance: 1000, metricValue: 165 },
+				{ lat: 51.0, lon: -1.0, distance: 0, metricValue: 140, recordIndex: 0 },
+				{ lat: 51.01, lon: -1.01, distance: 1000, metricValue: 165, recordIndex: 0 },
 			],
 		];
 
@@ -143,12 +143,12 @@ describe('computeMetricRange', () => {
 	it('computeMetricRange_multipleActivities_computesGlobalRange', () => {
 		const points: GpsPointWithMetric[][] = [
 			[
-				{ lat: 51.0, lon: -1.0, distance: 0, metricValue: 140 },
-				{ lat: 51.01, lon: -1.01, distance: 1000, metricValue: 155 },
+				{ lat: 51.0, lon: -1.0, distance: 0, metricValue: 140, recordIndex: 0 },
+				{ lat: 51.01, lon: -1.01, distance: 1000, metricValue: 155, recordIndex: 0 },
 			],
 			[
-				{ lat: 52.0, lon: -2.0, distance: 0, metricValue: 130 },
-				{ lat: 52.01, lon: -2.01, distance: 1000, metricValue: 180 },
+				{ lat: 52.0, lon: -2.0, distance: 0, metricValue: 130, recordIndex: 0 },
+				{ lat: 52.01, lon: -2.01, distance: 1000, metricValue: 180, recordIndex: 0 },
 			],
 		];
 
@@ -162,8 +162,8 @@ describe('computeMetricRange', () => {
 	it('computeMetricRange_ignoresNullValues', () => {
 		const points: GpsPointWithMetric[][] = [
 			[
-				{ lat: 51.0, lon: -1.0, distance: 0, metricValue: null },
-				{ lat: 51.01, lon: -1.01, distance: 1000, metricValue: 155 },
+				{ lat: 51.0, lon: -1.0, distance: 0, metricValue: null, recordIndex: 0 },
+				{ lat: 51.01, lon: -1.01, distance: 1000, metricValue: 155, recordIndex: 0 },
 			],
 		];
 
@@ -177,8 +177,8 @@ describe('computeMetricRange', () => {
 	it('computeMetricRange_allNullValues_returnsNull', () => {
 		const points: GpsPointWithMetric[][] = [
 			[
-				{ lat: 51.0, lon: -1.0, distance: 0, metricValue: null },
-				{ lat: 51.01, lon: -1.01, distance: 1000, metricValue: null },
+				{ lat: 51.0, lon: -1.0, distance: 0, metricValue: null, recordIndex: 0 },
+				{ lat: 51.01, lon: -1.01, distance: 1000, metricValue: null, recordIndex: 0 },
 			],
 		];
 
@@ -198,7 +198,7 @@ describe('computeMetricRange', () => {
 
 	it('computeMetricRange_singleValue_minEqualsMax', () => {
 		const points: GpsPointWithMetric[][] = [
-			[{ lat: 51.0, lon: -1.0, distance: 0, metricValue: 150 }],
+			[{ lat: 51.0, lon: -1.0, distance: 0, metricValue: 150, recordIndex: 0 }],
 		];
 
 		const result = computeMetricRange(points);
