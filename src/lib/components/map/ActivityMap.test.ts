@@ -193,15 +193,30 @@ describe('extractGpsPoints', () => {
 		expect(extractGpsPoints(activity)).toEqual([]);
 	});
 
-	it('extractGpsPoints_returnsLatLonAndDistance', () => {
+	it('extractGpsPoints_returnsLatLonDistanceAndRecordIndex', () => {
 		const records = [
 			makeRecord(0, 0, 51.5, -0.1),
 			makeRecord(1000, 60, 51.51, -0.11),
 		];
 		const activity = makeActivity(records);
 		const result = extractGpsPoints(activity);
-		expect(result[0]).toEqual({ lat: 51.5, lon: -0.1, distance: 0 });
-		expect(result[1]).toEqual({ lat: 51.51, lon: -0.11, distance: 1000 });
+		expect(result[0]).toEqual({ lat: 51.5, lon: -0.1, distance: 0, recordIndex: 0 });
+		expect(result[1]).toEqual({ lat: 51.51, lon: -0.11, distance: 1000, recordIndex: 1 });
+	});
+
+	it('extractGpsPoints_filtersOutNoPosition_recordIndexReferencesOriginalArray', () => {
+		// Records at index 0 and 2 have GPS; index 1 does not.
+		// The recordIndex in each output point must reference the original array index.
+		const records = [
+			makeRecord(0, 0, 51.0, -1.0),       // index 0 — has GPS
+			makeRecord(500, 30),                  // index 1 — no GPS
+			makeRecord(1000, 60, 51.01, -1.01),  // index 2 — has GPS
+		];
+		const activity = makeActivity(records);
+		const result = extractGpsPoints(activity);
+		expect(result).toHaveLength(2);
+		expect(result[0].recordIndex).toBe(0);
+		expect(result[1].recordIndex).toBe(2);
 	});
 });
 

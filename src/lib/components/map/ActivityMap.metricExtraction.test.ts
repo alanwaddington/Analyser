@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractGpsPointsWithMetric, computeMetricRange } from './ActivityMap.utils.ts';
+import { extractGpsPointsWithMetric, computeMetricRange, metricValuesForGpsPoints } from './ActivityMap.utils.ts';
 import type { GpsPointWithMetric } from './ActivityMap.utils.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
 import { makeBaseActivity } from '$lib/test-utils';
@@ -44,9 +44,9 @@ describe('extractGpsPointsWithMetric', () => {
 		const result = extractGpsPointsWithMetric(activity, smoothed);
 
 		expect(result).toHaveLength(3);
-		expect(result[0]).toEqual({ lat: 51.0, lon: -1.0, distance: 0, metricValue: 140 });
-		expect(result[1]).toEqual({ lat: 51.01, lon: -1.01, distance: 1000, metricValue: 155 });
-		expect(result[2]).toEqual({ lat: 51.02, lon: -1.02, distance: 2000, metricValue: 162 });
+		expect(result[0]).toEqual({ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0, metricValue: 140 });
+		expect(result[1]).toEqual({ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 1, metricValue: 155 });
+		expect(result[2]).toEqual({ lat: 51.02, lon: -1.02, distance: 2000, recordIndex: 2, metricValue: 162 });
 	});
 
 	it('extractGpsPointsWithMetric_recordsWithoutGps_areSkipped', () => {
@@ -206,5 +206,64 @@ describe('computeMetricRange', () => {
 		expect(result).not.toBeNull();
 		expect(result!.min).toBe(150);
 		expect(result!.max).toBe(150);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// metricValuesForGpsPoints
+// ---------------------------------------------------------------------------
+describe('metricValuesForGpsPoints', () => {
+	it('metricValuesForGpsPoints_emptyInput_returnsEmpty', () => {
+		const result = metricValuesForGpsPoints([], []);
+		expect(result).toHaveLength(0);
+	});
+
+	it('metricValuesForGpsPoints_usesRecordIndex_notFilteredIndex', () => {
+		// GPS point with recordIndex=2 should pick up smoothedValues[2], not smoothedValues[0]
+		const gpsPoints = [
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 2 },
+		];
+		const smoothed = [100, 150, 200]; // smoothedValues[2] = 200
+		const result = metricValuesForGpsPoints(gpsPoints, smoothed);
+		expect(result).toHaveLength(1);
+		expect(result[0].metricValue).toBe(200);
+	});
+
+	it('metricValuesForGpsPoints_nullSmoothedValue_returnsNullMetric', () => {
+		const gpsPoints = [
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 1 },
+		];
+		const smoothed = [null, 155];
+		const result = metricValuesForGpsPoints(gpsPoints, smoothed);
+		expect(result).toHaveLength(2);
+		expect(result[0].metricValue).toBeNull();
+		expect(result[1].metricValue).toBe(155);
+	});
+
+	it('metricValuesForGpsPoints_preservesLatLonDistance', () => {
+		const gpsPoints = [
+			{ lat: 51.5, lon: -0.1, distance: 500, recordIndex: 3 },
+		];
+		const smoothed = [0, 0, 0, 140];
+		const result = metricValuesForGpsPoints(gpsPoints, smoothed);
+		expect(result[0].lat).toBe(51.5);
+		expect(result[0].lon).toBe(-0.1);
+		expect(result[0].distance).toBe(500);
+		expect(result[0].metricValue).toBe(140);
+	});
+
+	it('metricValuesForGpsPoints_multiplePoints_mapsEachByRecordIndex', () => {
+		const gpsPoints = [
+			{ lat: 51.0, lon: -1.0, distance: 0, recordIndex: 0 },
+			{ lat: 51.01, lon: -1.01, distance: 1000, recordIndex: 3 },
+			{ lat: 51.02, lon: -1.02, distance: 2000, recordIndex: 6 },
+		];
+		const smoothed = [10, 20, 30, 40, 50, 60, 70]; // indexes 0=10, 3=40, 6=70
+		const result = metricValuesForGpsPoints(gpsPoints, smoothed);
+		expect(result).toHaveLength(3);
+		expect(result[0].metricValue).toBe(10);
+		expect(result[1].metricValue).toBe(40);
+		expect(result[2].metricValue).toBe(70);
 	});
 });

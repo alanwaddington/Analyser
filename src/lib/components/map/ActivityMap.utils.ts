@@ -68,12 +68,18 @@ export interface GpsPointWithDistance {
 	lat: number;
 	lon: number;
 	distance: number;
+	/** Index of the source record in activity.records[]. Preserved through downsampling for O(1) metric lookup. */
+	recordIndex: number;
 }
 
 export function extractGpsPoints(activity: Activity): GpsPointWithDistance[] {
-	return activity.records
-		.filter(r => r.position !== undefined)
-		.map(r => ({ lat: r.position!.lat, lon: r.position!.lon, distance: r.distance }));
+	const result: GpsPointWithDistance[] = [];
+	for (let i = 0; i < activity.records.length; i++) {
+		const r = activity.records[i];
+		if (r.position === undefined) continue;
+		result.push({ lat: r.position.lat, lon: r.position.lon, distance: r.distance, recordIndex: i });
+	}
+	return result;
 }
 
 export function positionFromPoints(
@@ -127,10 +133,29 @@ export function extractGpsPointsWithMetric(
 			lat: record.position.lat,
 			lon: record.position.lon,
 			distance: record.distance,
+			recordIndex: i,
 			metricValue: smoothedValues[i] ?? null,
 		});
 	}
 	return result;
+}
+
+/**
+ * Maps pre-downsampled GPS points to metric values by looking up each point's
+ * source record index in the smoothedValues array. This is the preferred path
+ * for metric-coloured route rendering when GPS has been downsampled.
+ */
+export function metricValuesForGpsPoints(
+	gpsPoints: GpsPointWithDistance[],
+	smoothedValues: (number | null)[],
+): GpsPointWithMetric[] {
+	return gpsPoints.map(p => ({
+		lat: p.lat,
+		lon: p.lon,
+		distance: p.distance,
+		recordIndex: p.recordIndex,
+		metricValue: smoothedValues[p.recordIndex] ?? null,
+	}));
 }
 
 /**
