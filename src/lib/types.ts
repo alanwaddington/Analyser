@@ -98,6 +98,7 @@ export interface Activity {
 	timerStartTime: Date | null;
 	anchor: AlignmentAnchor; // best alignment anchor for this activity, computed at parse time
 	availableChannels: Set<ChannelKey>;
+	anomalies: Anomaly[];
 }
 
 export interface AlignedSeries {
@@ -168,6 +169,26 @@ export const DEVICE_COLOURS = [
 ] as const;
 
 export const MAX_FILES = 6;
+
+export type AnomalyType = 'spike' | 'dropout' | 'gps-drift';
+export type DetectionStrategy = 'threshold-relative' | 'statistical';
+
+export interface Anomaly {
+	channel: ChannelKey;
+	recordIndex: number;
+	type: AnomalyType;
+	value: number;
+	detectionStrategy: DetectionStrategy;
+}
+
+export interface AnomalyDetectionOptions {
+	powerSource?: 'stryd' | 'native';
+	athleteProfile?: {
+		cp?: number;
+		ftp?: number;
+		maxHR?: number;
+	};
+}
 
 export interface GpsPointWithDistance {
 	lat: number;
