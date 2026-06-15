@@ -12,7 +12,7 @@
 		TILE_PROVIDERS,
 	} from './ActivityMap.utils.ts';
 	import { downsampleGps, GPS_MAX_POINTS } from '$lib/analytics/downsample';
-	import type { GpsPointWithMetric } from './ActivityMap.utils.ts';
+	import type { GpsPointWithMetric } from '$lib/types';
 	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils';
 	import { smooth } from '$lib/analytics/smooth';
 	import { valueToColour, formatMetricValue } from './colourScale.ts';
@@ -76,7 +76,7 @@
 
 	// ── Shared metric computation ────────────────────────────────────────────
 	// Computed once and consumed by both the legend and polyline effects,
-	// avoiding duplicate smooth() + extractGpsPointsWithMetric() work.
+	// avoiding duplicate smooth() + metricValuesForGpsPoints() work.
 	interface ActivityMetricData {
 		smoothedValues: (number | null)[] | null; // null = activity has no data for this channel
 		metricGpsPoints: GpsPointWithMetric[];    // empty when smoothedValues is null

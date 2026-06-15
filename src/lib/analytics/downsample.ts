@@ -1,4 +1,4 @@
-import type { GpsPointWithDistance } from '$lib/components/map/ActivityMap.utils';
+import type { GpsPointWithDistance } from '$lib/types';
 
 export const GPS_MAX_POINTS = 500;
 
@@ -21,51 +21,48 @@ function perpDist(
 		const eLon = PLon - ALon;
 		return Math.sqrt(eLat * eLat + eLon * eLon);
 	}
-	// Signed area of triangle ABP × 2 / |AB|
+	// Signed area of triangle ABP x 2 / |AB|
 	const cross = Math.abs(dLat * (ALon - PLon) - (ALat - PLat) * dLon);
 	return cross / Math.sqrt(lenSq);
 }
 
 /**
- * Ramer-Douglas-Peucker simplification. Marks indices in `keep` as retained.
- * Start and end indices are always kept by the caller before this recurses.
+ * Ramer-Douglas-Peucker simplification, iterative (stack-based) to avoid
+ * stack overflow on large or degenerate GPS traces.
  */
-function rdpRecurse(
-	points: GpsPointWithDistance[],
-	epsilon: number,
-	start: number,
-	end: number,
-	keep: boolean[],
-): void {
-	if (end - start < 2) return;
-
-	const A = points[start];
-	const B = points[end];
-	let maxDist = 0;
-	let maxIdx = start;
-
-	for (let i = start + 1; i < end; i++) {
-		const d = perpDist(A.lat, A.lon, B.lat, B.lon, points[i].lat, points[i].lon);
-		if (d > maxDist) {
-			maxDist = d;
-			maxIdx = i;
-		}
-	}
-
-	if (maxDist > epsilon) {
-		keep[maxIdx] = true;
-		rdpRecurse(points, epsilon, start, maxIdx, keep);
-		rdpRecurse(points, epsilon, maxIdx, end, keep);
-	}
-}
-
 function rdp(points: GpsPointWithDistance[], epsilon: number): GpsPointWithDistance[] {
 	if (points.length <= 2) return points;
 
 	const keep = new Array<boolean>(points.length).fill(false);
 	keep[0] = true;
 	keep[points.length - 1] = true;
-	rdpRecurse(points, epsilon, 0, points.length - 1, keep);
+
+	// Stack holds [start, end] index pairs to process
+	const stack: [number, number][] = [[0, points.length - 1]];
+
+	while (stack.length > 0) {
+		const [start, end] = stack.pop()!;
+		if (end - start < 2) continue;
+
+		const A = points[start];
+		const B = points[end];
+		let maxDist = 0;
+		let maxIdx = start;
+
+		for (let i = start + 1; i < end; i++) {
+			const d = perpDist(A.lat, A.lon, B.lat, B.lon, points[i].lat, points[i].lon);
+			if (d > maxDist) {
+				maxDist = d;
+				maxIdx = i;
+			}
+		}
+
+		if (maxDist > epsilon) {
+			keep[maxIdx] = true;
+			stack.push([start, maxIdx]);
+			stack.push([maxIdx, end]);
+		}
+	}
 
 	return points.filter((_, i) => keep[i]);
 }
@@ -94,7 +91,7 @@ function uniformDecimate(points: GpsPointWithDistance[], maxPoints: number): Gps
 export function downsampleGps(
 	points: GpsPointWithDistance[],
 	maxPoints: number,
-	epsilon = 0.00005, // ≈ 5 m at equator in degree units
+	epsilon = 0.00005, // approx 5 m at equator in degree units
 ): GpsPointWithDistance[] {
 	if (points.length <= maxPoints) return points;
 

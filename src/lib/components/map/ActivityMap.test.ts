@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { positionAtDistance, positionFromPoints, extractGpsPoints, distanceAtPoint, TILE_PROVIDERS } from './ActivityMap.utils.ts';
-import type { GpsPointWithDistance } from './ActivityMap.utils.ts';
+import type { GpsPointWithDistance } from '$lib/types';
 import type { Activity, ActivityRecord } from '$lib/types';
 import { makeBaseActivity } from '$lib/test-utils';
 

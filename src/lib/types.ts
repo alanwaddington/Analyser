@@ -168,3 +168,16 @@ export const DEVICE_COLOURS = [
 ] as const;
 
 export const MAX_FILES = 6;
+
+export interface GpsPointWithDistance {
+	lat: number;
+	lon: number;
+	distance: number;
+	/** Index of the source record in activity.records[]. Preserved through downsampling for O(1) metric lookup. */
+	recordIndex: number;
+}
+
+/** GPS point with distance and an optional smoothed metric value. */
+export interface GpsPointWithMetric extends GpsPointWithDistance {
+	metricValue: number | null;
+}

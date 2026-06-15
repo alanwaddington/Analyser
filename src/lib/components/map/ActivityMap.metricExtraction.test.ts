@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractGpsPointsWithMetric, computeMetricRange, metricValuesForGpsPoints } from './ActivityMap.utils.ts';
-import type { GpsPointWithMetric } from './ActivityMap.utils.ts';
+import type { GpsPointWithMetric } from '$lib/types';
 import type { Activity, ActivityRecord } from '$lib/types';
 import { makeBaseActivity } from '$lib/test-utils';
 

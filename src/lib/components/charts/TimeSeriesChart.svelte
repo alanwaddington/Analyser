@@ -70,7 +70,7 @@
 	function buildAltitudeData(activity: Activity, timeOffset = 0, distanceOffset = 0): [number, number | null][] {
 		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
 		if (axisMode === 'distance') {
-			const aligned = interpolateToDistanceAxis(activity, 10, distanceOffset);
+			const aligned = interpolateToDistanceAxis(activity, distanceStep(activity.totalDistance), distanceOffset);
 			const altData = aligned.channels.get('altitude') ?? [];
 			return aligned.axis.map((d, i) => [d / 1000, altData[i]]);
 		}

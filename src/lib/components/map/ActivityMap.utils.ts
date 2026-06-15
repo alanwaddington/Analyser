@@ -1,4 +1,4 @@
-import type { Activity, ActivityRecord, GpsPoint } from '$lib/types';
+import type { Activity, ActivityRecord, GpsPoint, GpsPointWithDistance, GpsPointWithMetric } from '$lib/types';
 import { lowerBound } from '$lib/utils/binarySearch';
 
 // ---------------------------------------------------------------------------
@@ -64,13 +64,7 @@ export const TILE_PROVIDERS: TileProvider[] = [
 	},
 ];
 
-export interface GpsPointWithDistance {
-	lat: number;
-	lon: number;
-	distance: number;
-	/** Index of the source record in activity.records[]. Preserved through downsampling for O(1) metric lookup. */
-	recordIndex: number;
-}
+export type { GpsPointWithDistance, GpsPointWithMetric };
 
 export function extractGpsPoints(activity: Activity): GpsPointWithDistance[] {
 	const result: GpsPointWithDistance[] = [];
@@ -110,11 +104,6 @@ export function positionAtDistance(activity: Activity, targetDist: number): GpsP
 // ---------------------------------------------------------------------------
 // Metric-coloured polyline utilities
 // ---------------------------------------------------------------------------
-
-/** GPS point with distance and an optional smoothed metric value. */
-export interface GpsPointWithMetric extends GpsPointWithDistance {
-	metricValue: number | null;
-}
 
 /**
  * Pairs GPS points from an activity with pre-computed smoothed metric values.

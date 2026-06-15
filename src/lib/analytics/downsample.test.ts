@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { downsampleGps, GPS_MAX_POINTS } from './downsample.ts';
-import type { GpsPointWithDistance } from '$lib/components/map/ActivityMap.utils';
+import type { GpsPointWithDistance } from '$lib/types';
 
 function makePoint(lat: number, lon: number, distance: number, recordIndex: number): GpsPointWithDistance {
 	return { lat, lon, distance, recordIndex };
