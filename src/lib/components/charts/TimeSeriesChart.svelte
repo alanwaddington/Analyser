@@ -174,55 +174,75 @@
 			},
 			dataZoom: [{ type: 'inside' }],
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			series: ([
-				...(showAltBackdrop && hasAlt ? [{
-					type: 'line' as const,
-					name: '__alt__',
-					yAxisIndex: 1,
-					data: altData,
-					sampling: 'lttb' as const,
-					areaStyle: { color: altFill, origin: 'start' as const },
-					lineStyle: { width: 0.5, color: altLine },
-					symbol: 'none',
-					showSymbol: false,
-					silent: true,
-					z: 0,
-				}] : []),
-				...seriesInputs.map((s, i) => {
-					const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
-					const dashed = isDashed(i, referenceIndex);
-					const seriesData = hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
-					if (seriesData.length > DOWNSAMPLE_THRESHOLD) {
-						console.warn(`[TimeSeriesChart] ${channel}: ${seriesData.length} points — ECharts LTTB sampling active`);
-					}
-					return {
+			series: (() => {
+				const firstVisibleIdx = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
+				return ([
+					...(showAltBackdrop && hasAlt ? [{
 						type: 'line' as const,
-						name: s.label ?? s.activity.filename,
-						yAxisIndex: 0,
-						data: seriesData,
+						name: '__alt__',
+						yAxisIndex: 1,
+						data: altData,
 						sampling: 'lttb' as const,
-						lineStyle: {
-							color: colour,
-							type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
-							width: 1.5,
-						},
-						itemStyle: { color: colour },
+						areaStyle: { color: altFill, origin: 'start' as const },
+						lineStyle: { width: 0.5, color: altLine },
 						symbol: 'none',
 						showSymbol: false,
-						...(i === 0 && lapMarkers.length > 0 ? {
-							markLine: {
-								silent: true,
-								symbol: ['none', 'none'],
-								data: lapMarkers.map(m => ({
-									xAxis: m.value,
-									label: { formatter: m.label, fontSize: 10, color: tc },
-								})),
-								lineStyle: { type: 'dashed' as const, color: gc, width: 1 },
+						silent: true,
+						z: 0,
+					}] : []),
+					...seriesInputs.map((s, i) => {
+						const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
+						const dashed = isDashed(i, referenceIndex);
+						const seriesData = hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
+						if (seriesData.length > DOWNSAMPLE_THRESHOLD) {
+							console.warn(`[TimeSeriesChart] ${channel}: ${seriesData.length} points — ECharts LTTB sampling active`);
+						}
+						return {
+							type: 'line' as const,
+							name: s.label ?? s.activity.filename,
+							yAxisIndex: 0,
+							data: seriesData,
+							sampling: 'lttb' as const,
+							lineStyle: {
+								color: colour,
+								type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
+								width: 1.5,
 							},
-						} : {}),
-					};
-				}),
-			]) as unknown as EChartsOption['series'],
+							itemStyle: { color: colour },
+							symbol: 'none',
+							showSymbol: false,
+							...(i === 0 && lapMarkers.length > 0 ? {
+								markLine: {
+									silent: true,
+									symbol: ['none', 'none'],
+									data: lapMarkers.map(m => ({
+										xAxis: m.value,
+										label: { formatter: m.label, fontSize: 10, color: tc },
+									})),
+									lineStyle: { type: 'dashed' as const, color: gc, width: 1 },
+								},
+							} : {}),
+							...(i === firstVisibleIdx && anomalies && anomalies.length > 0 ? {
+								markPoint: {
+									silent: false,
+									animation: false,
+									data: anomalies.map(a => {
+										const record = s.activity.records[a.recordIndex];
+										const raw = record ? (record as unknown as Record<string, number | undefined>)[channel] : undefined;
+										return {
+											coord: [anomalyXValue(a, s, effectiveAxisMode($xAxisMode, forceDistanceAxis)), raw ?? 0],
+											symbol: 'diamond',
+											symbolSize: 8,
+											itemStyle: { color: '#ef4444' },
+											label: { show: false },
+										};
+									}),
+								},
+							} : {}),
+						};
+					}),
+				]) as unknown as EChartsOption['series'];
+			})(),
 		};
 	}
 
