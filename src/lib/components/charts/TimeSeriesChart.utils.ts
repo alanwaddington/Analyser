@@ -1,4 +1,4 @@
-import type { Activity, ActivityRecord, ChannelKey } from '$lib/types';
+import type { Activity, ActivityRecord, ChannelKey, Anomaly } from '$lib/types';
 import { CHANNEL_META } from '$lib/types';
 import { summarise } from '$lib/analytics/summary';
 import { formatPace } from '$lib/utils/formatting';
@@ -99,4 +99,18 @@ export function computeSeriesStats(
 		xMax: xRange?.max ?? points[points.length - 1][0],
 		unit: CHANNEL_META[channel].unit,
 	};
+}
+
+/** Computes the x-axis value for an anomaly marker in the given axis mode. */
+export function anomalyXValue(
+	anomaly: Anomaly,
+	s: SeriesInput,
+	axisMode: 'time' | 'distance',
+): number {
+	const record = s.activity.records[anomaly.recordIndex];
+	if (!record) return 0;
+	if (axisMode === 'distance') {
+		return (record.distance + (s.distanceOffset ?? 0)) / 1000;
+	}
+	return record.elapsedSeconds + (s.timeOffset ?? 0);
 }

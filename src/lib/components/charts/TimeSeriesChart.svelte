@@ -2,12 +2,12 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { ECharts, EChartsOption } from 'echarts';
 	import { loadECharts, type EChartsModule } from './echarts-loader';
-	import type { Activity, ChannelKey } from '$lib/types';
+	import type { Activity, ChannelKey, Anomaly } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
-	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats } from './TimeSeriesChart.utils.ts';
+	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
 	import { downloadPng, localDateString } from '$lib/export/download';
@@ -25,6 +25,7 @@
 		onHoverDistance = undefined,
 		externalHoverDistance = undefined,
 		forceDistanceAxis = false,
+		anomalies = undefined,
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
@@ -37,6 +38,8 @@
 		externalHoverDistance?: number | null;
 		/** When true, always uses distance mode for x-axis regardless of the global xAxisMode store */
 		forceDistanceAxis?: boolean;
+		/** Anomalies for this channel (from the first activity). Rendered as red diamond markPoints. */
+		anomalies?: Anomaly[];
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -272,6 +275,20 @@
 			} else {
 				zoomRange = undefined;
 			}
+		});
+
+		// markPoint click → zoom to ±15s (time) or ±0.05km (distance) around the anomaly
+		chart.on('click', { componentType: 'markPoint' }, (params: unknown) => {
+			const coord = (params as { data?: { coord?: [number, number] } }).data?.coord;
+			if (!coord) return;
+			const xVal = coord[0];
+			const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
+			const halfWindow = axisMode === 'time' ? 15 : 0.05;
+			chart?.dispatchAction({
+				type: 'dataZoom',
+				startValue: xVal - halfWindow,
+				endValue: xVal + halfWindow,
+			});
 		});
 
 		resizeObserver = new ResizeObserver(() => chart?.resize());
