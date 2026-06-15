@@ -5,6 +5,7 @@ import type { ChannelKey } from '../types';
 import { applyLabels } from '../stores/deviceLabels';
 import { addToast } from '../stores/toast';
 import { findAnchor } from '../align/anchor';
+import { detectAnomalies } from '../analytics/anomalies';
 
 export const DISTANCE_EPSILON_M = 0.5;
 
@@ -384,6 +385,8 @@ function normalise(data: FitData, filename: string): Activity {
 		removeCyclingPace(records);
 	}
 
+	const anomalies = detectAnomalies(records);
+
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
 
 	// Deduplicate device_infos: some FIT files include the same device_index
@@ -435,6 +438,7 @@ function normalise(data: FitData, filename: string): Activity {
 		timerStartTime,
 		anchor,
 		availableChannels,
+		anomalies,
 	};
 }
 
