@@ -7,10 +7,11 @@
 		positionFromPoints,
 		extractGpsPoints,
 		distanceAtPoint,
-		extractGpsPointsWithMetric,
+		metricValuesForGpsPoints,
 		computeMetricRange,
 		TILE_PROVIDERS,
 	} from './ActivityMap.utils.ts';
+	import { downsampleGps, GPS_MAX_POINTS } from '$lib/analytics/downsample';
 	import type { GpsPointWithMetric } from './ActivityMap.utils.ts';
 	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils';
 	import { smooth } from '$lib/analytics/smooth';
@@ -37,7 +38,7 @@
 		onMetricChannelChange?: (channel: ChannelKey | null) => void;
 	} = $props();
 
-	const gpsCache = $derived(activities.map(a => extractGpsPoints(a)));
+	const gpsCache = $derived(activities.map(a => downsampleGps(extractGpsPoints(a), GPS_MAX_POINTS)));
 
 	let container: HTMLDivElement;
 	let L = $state<typeof import('leaflet') | undefined>(undefined);
@@ -90,7 +91,7 @@
 		if (!metricChannel) return null;
 		const ch = metricChannel;
 
-		const perActivity: ActivityMetricData[] = activities.map(activity => {
+		const perActivity: ActivityMetricData[] = activities.map((activity, idx) => {
 			const raw = extractChannel(activity.records, ch);
 			const smoothedVals = smooth(raw, $smoothing);
 			if (!smoothedVals.some(v => v !== null)) {
@@ -98,7 +99,7 @@
 			}
 			return {
 				smoothedValues: smoothedVals,
-				metricGpsPoints: extractGpsPointsWithMetric(activity, smoothedVals),
+				metricGpsPoints: metricValuesForGpsPoints(gpsCache[idx], smoothedVals),
 			};
 		});
 
