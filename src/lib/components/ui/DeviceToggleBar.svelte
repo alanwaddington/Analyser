@@ -8,10 +8,13 @@
 		isComparableGroup,
 	} from '$lib/utils/deviceChannels';
 	import { setDeviceLabel, removeDeviceLabel, deviceStorageKey } from '$lib/stores/deviceLabels';
+	import { buildAnomalyCounts } from './DeviceToggleBar.utils';
+	import type { AnomalyCount } from './DeviceToggleBar.utils';
 
-	let { streams, multiFile = false }: {
+	let { streams, multiFile = false, anomalyCounts = undefined }: {
 		streams: CrossFileStream[];
 		multiFile?: boolean;
+		anomalyCounts?: Map<string, AnomalyCount>;
 	} = $props();
 
 	// Which devices measure 3+ channels — shown as a single expandable pill
@@ -212,6 +215,15 @@
 		<span class="group-label">
 			{CHANNEL_META[group.channelKey as keyof typeof CHANNEL_META]?.label ?? group.channelKey}
 			{#if group.comparable}<span class="comparable-dot" title="Multiple devices — comparable">✦</span>{/if}
+			{#if anomalyCounts?.get(group.channelKey)?.total}
+				{@const ac = anomalyCounts.get(group.channelKey)!}
+				{@const parts = [
+					ac.spikes > 0 ? `${ac.spikes} spike${ac.spikes > 1 ? 's' : ''}` : '',
+					ac.dropouts > 0 ? `${ac.dropouts} dropout${ac.dropouts > 1 ? 's' : ''}` : '',
+					ac.drifts > 0 ? `${ac.drifts} drift${ac.drifts > 1 ? 's' : ''}` : '',
+				].filter(Boolean)}
+				<span class="anomaly-badge" title={parts.join(', ')}>⚠ {ac.total}</span>
+			{/if}
 		</span>
 		<div class="group-pills">
 			{#each group.streams as cfs (cfs.key)}
@@ -399,6 +411,17 @@
 	.comparable-dot {
 		color: #3b82f6;
 		font-size: 0.6rem;
+	}
+
+	.anomaly-badge {
+		color: #ef4444;
+		background: rgba(239, 68, 68, 0.12);
+		font-size: 0.6rem;
+		font-weight: 600;
+		border-radius: 3px;
+		padding: 0 3px;
+		line-height: 1.4;
+		white-space: nowrap;
 	}
 
 	.group-pills {

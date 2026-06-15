@@ -20,6 +20,7 @@
 	import type { AnchorSource } from '$lib/types';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
+	import { buildAnomalyCounts } from '$lib/components/ui/DeviceToggleBar.utils';
 	import { exportActivities } from '$lib/export/exportActivities';
 	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
@@ -71,6 +72,7 @@
 
 	// True when more than one file is loaded
 	const multiFile = $derived($activities.length > 1);
+	const anomalyCounts = $derived(buildAnomalyCounts($activities));
 
 	// Flat list of all CrossFileStream objects across all loaded activities
 	const crossFileStreams = $derived.by<CrossFileStream[]>(() => {
@@ -354,7 +356,7 @@
 		<div class="charts-panel" class:tab-hidden={activeTab !== 'charts'}>
 			<CollapsiblePanel title="Devices & Options">
 				<div class="toolbar">
-					<DeviceToggleBar streams={crossFileStreams} {multiFile} />
+					<DeviceToggleBar streams={crossFileStreams} {multiFile} {anomalyCounts} />
 					{#if multiFile && $xAxisMode === 'time'}
 						<div class="toc-wrap">
 							<TimeOffsetControl activities={$activities} {autoOffsets} {anchorSources} />
