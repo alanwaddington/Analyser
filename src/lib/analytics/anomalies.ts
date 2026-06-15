@@ -112,7 +112,7 @@ function detectDropouts(records: ActivityRecord[], channel: DropoutChannel): Ano
 						recordIndex: j,
 						type: 'dropout',
 						value: records[j][channel] as number ?? 0,
-						detectionStrategy: 'statistical',
+						detectionStrategy: 'threshold-relative',
 					});
 				}
 			}
@@ -143,11 +143,11 @@ function detectGpsDrift(records: ActivityRecord[]): Anomaly[] {
 
 		if (impliedSpeedKmh > GPS_DRIFT_SPEED_FACTOR * curr.speed) {
 			anomalies.push({
-				channel: 'speed',
+				channel: 'position',
 				recordIndex: i,
 				type: 'gps-drift',
 				value: impliedSpeedKmh,
-				detectionStrategy: 'statistical',
+				detectionStrategy: 'threshold-relative',
 			});
 		}
 	}
@@ -171,6 +171,31 @@ export function detectAnomalies(records: ActivityRecord[], options?: AnomalyDete
 	return all.sort((a, b) => a.recordIndex - b.recordIndex);
 }
 
+
+/** Returns only the first anomaly of each contiguous same-channel, same-type event.
+ * Consecutive anomalies (recordIndex difference ≤ 1) of the same channel and type
+ * are collapsed to a single entry (the first record of the event). This converts
+ * per-record counts (e.g. 40 dropout records) into per-event counts (1 dropout event).
+ */
+export function groupAnomalyEvents(anomalies: Anomaly[]): Anomaly[] {
+	if (anomalies.length === 0) return [];
+	const events: Anomaly[] = [];
+	let lastSeen: Anomaly | null = null;
+	for (const a of anomalies) {
+		if (
+			lastSeen !== null &&
+			a.channel === lastSeen.channel &&
+			a.type === lastSeen.type &&
+			a.recordIndex - lastSeen.recordIndex <= 1
+		) {
+			lastSeen = a; // advance window but don't push
+		} else {
+			events.push(a);
+			lastSeen = a;
+		}
+	}
+	return events;
+}
 export function groupAnomaliesByChannel(anomalies: Anomaly[]): Map<ChannelKey, Anomaly[]> {
 	const map = new Map<ChannelKey, Anomaly[]>();
 	for (const a of anomalies) {

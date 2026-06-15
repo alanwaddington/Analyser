@@ -21,6 +21,8 @@
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import type { ChannelKey } from '$lib/types';
 	import { exportActivities } from '$lib/export/exportActivities';
+	import { buildAnomalyCounts } from '$lib/components/ui/DeviceToggleBar.utils';
+	import { groupAnomalyEvents } from '$lib/analytics/anomalies';
 	import { formatPace } from '$lib/utils/formatting';
 	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
@@ -322,6 +324,7 @@
 								{lapMarkers}
 								referenceIndex={$referenceIndex}
 								groupId="event-charts"
+								anomalies={groupAnomalyEvents($activities[0]?.anomalies.filter(a => a.channel === channel) ?? [])}
 								onHoverDistance={chartIdx === 0 ? handleChartHoverDistance : undefined}
 								externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
 							/>

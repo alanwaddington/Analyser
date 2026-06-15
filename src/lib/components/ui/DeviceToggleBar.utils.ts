@@ -1,4 +1,5 @@
 import type { Activity, ChannelKey } from '$lib/types';
+import { groupAnomalyEvents } from '$lib/analytics/anomalies';
 
 export interface AnomalyCount {
 	total: number;
@@ -10,7 +11,7 @@ export interface AnomalyCount {
 export function buildAnomalyCounts(activities: Activity[]): Map<ChannelKey, AnomalyCount> {
 	const map = new Map<ChannelKey, AnomalyCount>();
 	for (const activity of activities) {
-		for (const anomaly of activity.anomalies) {
+		for (const anomaly of groupAnomalyEvents(activity.anomalies)) {
 			const existing = map.get(anomaly.channel) ?? { total: 0, spikes: 0, dropouts: 0, drifts: 0 };
 			map.set(anomaly.channel, {
 				total: existing.total + 1,

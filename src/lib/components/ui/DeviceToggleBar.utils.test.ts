@@ -44,22 +44,23 @@ describe('buildAnomalyCounts', () => {
 
 	it('buildAnomalyCounts_gpsDrift_returnsDriftsOne', () => {
 		const activity = makeBaseActivity({
-			anomalies: [makeAnomaly({ channel: 'speed', type: 'gps-drift' })],
+			anomalies: [makeAnomaly({ channel: 'position', type: 'gps-drift' })],
 		});
 		const result = buildAnomalyCounts([activity]);
-		expect(result.get('speed')).toEqual({ total: 1, spikes: 0, dropouts: 0, drifts: 1 });
+		expect(result.get('position')).toEqual({ total: 1, spikes: 0, dropouts: 0, drifts: 1 });
 	});
 
-	it('buildAnomalyCounts_multipleTypesOnChannel_sumsAllCounts', () => {
+	it('buildAnomalyCounts_multipleTypesOnChannel_countsEventsNotRecords', () => {
+		// Two spikes at recordIndex=0 collapse to 1 spike event; dropout at recordIndex=0 is a separate event
 		const activity = makeBaseActivity({
 			anomalies: [
-				makeAnomaly({ channel: 'heartRate', type: 'spike' }),
-				makeAnomaly({ channel: 'heartRate', type: 'spike' }),
-				makeAnomaly({ channel: 'heartRate', type: 'dropout' }),
+				makeAnomaly({ channel: 'heartRate', type: 'spike', recordIndex: 0 }),
+				makeAnomaly({ channel: 'heartRate', type: 'spike', recordIndex: 1 }),
+				makeAnomaly({ channel: 'heartRate', type: 'dropout', recordIndex: 50 }),
 			],
 		});
 		const result = buildAnomalyCounts([activity]);
-		expect(result.get('heartRate')).toEqual({ total: 3, spikes: 2, dropouts: 1, drifts: 0 });
+		expect(result.get('heartRate')).toEqual({ total: 2, spikes: 1, dropouts: 1, drifts: 0 });
 	});
 
 	it('buildAnomalyCounts_multipleChannels_separateEntriesPerChannel', () => {

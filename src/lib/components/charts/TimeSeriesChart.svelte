@@ -83,6 +83,7 @@
 	}
 
 	function buildData(activity: Activity, timeOffset = 0, distanceOffset = 0): [number, number | null][] {
+		if (channel === 'position') return []; // GPS-only channel — no numeric series
 		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
 		if (axisMode === 'distance') {
 			const aligned = interpolateToDistanceAxis(activity, distanceStep(activity.totalDistance), distanceOffset);

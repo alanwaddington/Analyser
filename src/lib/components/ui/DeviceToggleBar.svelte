@@ -330,6 +330,17 @@
 			<!-- Connected devices that recorded no data -->
 			{@render noDataSection(noDataStreams)}
 		{/if}
+
+		{#if anomalyCounts?.get('position')?.total}
+			{@const ac = anomalyCounts.get('position')!}
+			{@const label = ac.drifts === 1 ? '1 drift event' : `${ac.drifts} drift events`}
+			<div class="channel-group">
+				<span class="group-label">
+					GPS
+					<span class="anomaly-badge" title={label}>⚠ {ac.total}</span>
+				</span>
+			</div>
+		{/if}
 	</div>
 {/if}
 

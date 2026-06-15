@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectAnomalies, groupAnomaliesByChannel } from './anomalies.ts';
+import { detectAnomalies, groupAnomaliesByChannel, groupAnomalyEvents } from './anomalies.ts';
 import type { ActivityRecord } from '$lib/types';
 
 function makeRecord(
@@ -197,7 +197,8 @@ describe('detectAnomalies — GPS drift', () => {
 		const anomalies = detectAnomalies(records);
 		const drifts = anomalies.filter(a => a.type === 'gps-drift');
 		expect(drifts.length).toBeGreaterThan(0);
-		expect(drifts[0].detectionStrategy).toBe('statistical');
+		expect(drifts[0].channel).toBe('position');
+		expect(drifts[0].detectionStrategy).toBe('threshold-relative');
 	});
 
 	it('detectAnomalies_normalGpsMovement_notFlagged', () => {
@@ -277,5 +278,85 @@ describe('groupAnomaliesByChannel', () => {
 
 	it('groupAnomaliesByChannel_emptyInput_returnsEmptyMap', () => {
 		expect(groupAnomaliesByChannel([])).toEqual(new Map());
+	});
+});
+
+// --------------------------------------------------------------------------
+// groupAnomalyEvents
+// --------------------------------------------------------------------------
+
+describe('groupAnomalyEvents', () => {
+	it('groupAnomalyEvents_emptyInput_returnsEmptyArray', () => {
+		expect(groupAnomalyEvents([])).toEqual([]);
+	});
+
+	it('groupAnomalyEvents_allDifferentChannels_noGrouping', () => {
+		const anomalies = [
+			{ channel: 'heartRate' as const, recordIndex: 10, type: 'spike' as const, value: 200, detectionStrategy: 'statistical' as const },
+			{ channel: 'power' as const, recordIndex: 11, type: 'spike' as const, value: 2000, detectionStrategy: 'statistical' as const },
+		];
+		expect(groupAnomalyEvents(anomalies)).toHaveLength(2);
+	});
+
+	it('groupAnomalyEvents_consecutiveSameTypeSameChannel_collapsedToOne', () => {
+		// Dropout spanning records 40–60 (21 records) → 1 event
+		const anomalies = Array.from({ length: 21 }, (_, i) => ({
+			channel: 'heartRate' as const,
+			recordIndex: 40 + i,
+			type: 'dropout' as const,
+			value: 0,
+			detectionStrategy: 'threshold-relative' as const,
+		}));
+		const events = groupAnomalyEvents(anomalies);
+		expect(events).toHaveLength(1);
+		expect(events[0].recordIndex).toBe(40); // first record of the event
+	});
+
+	it('groupAnomalyEvents_gapInSequence_createsMultipleEvents', () => {
+		// Two separate dropout windows: 40–45 and 70–75
+		const window1 = Array.from({ length: 6 }, (_, i) => ({
+			channel: 'cadence' as const,
+			recordIndex: 40 + i,
+			type: 'dropout' as const,
+			value: 0,
+			detectionStrategy: 'threshold-relative' as const,
+		}));
+		const window2 = Array.from({ length: 6 }, (_, i) => ({
+			channel: 'cadence' as const,
+			recordIndex: 70 + i,
+			type: 'dropout' as const,
+			value: 0,
+			detectionStrategy: 'threshold-relative' as const,
+		}));
+		const events = groupAnomalyEvents([...window1, ...window2]);
+		expect(events).toHaveLength(2);
+		expect(events[0].recordIndex).toBe(40);
+		expect(events[1].recordIndex).toBe(70);
+	});
+
+	it('groupAnomalyEvents_differentTypeSameChannel_notGrouped', () => {
+		const anomalies = [
+			{ channel: 'heartRate' as const, recordIndex: 10, type: 'spike' as const, value: 200, detectionStrategy: 'statistical' as const },
+			{ channel: 'heartRate' as const, recordIndex: 11, type: 'dropout' as const, value: 0, detectionStrategy: 'threshold-relative' as const },
+		];
+		const events = groupAnomalyEvents(anomalies);
+		expect(events).toHaveLength(2);
+	});
+
+	it('groupAnomalyEvents_singleSpike_returnsItUnchanged', () => {
+		const a = { channel: 'power' as const, recordIndex: 30, type: 'spike' as const, value: 9999, detectionStrategy: 'statistical' as const };
+		const events = groupAnomalyEvents([a]);
+		expect(events).toHaveLength(1);
+		expect(events[0]).toBe(a);
+	});
+
+	it('groupAnomalyEvents_realDropoutFromDetector_collapsedToEvent', () => {
+		// Simulate what detectAnomalies produces for a 20-second cadence dropout
+		const records = cadenceRecordsWithDropout(40, 60);
+		const rawAnomalies = detectAnomalies(records);
+		const dropouts = rawAnomalies.filter(a => a.channel === 'cadence' && a.type === 'dropout');
+		expect(dropouts.length).toBeGreaterThan(1); // raw: many records
+		const events = groupAnomalyEvents(dropouts);
+		expect(events).toHaveLength(1); // grouped: 1 event
 	});
 });

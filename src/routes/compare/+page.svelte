@@ -21,6 +21,7 @@
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import { buildAnomalyCounts } from '$lib/components/ui/DeviceToggleBar.utils';
+	import { groupAnomalyEvents } from '$lib/analytics/anomalies';
 	import { exportActivities } from '$lib/export/exportActivities';
 	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
@@ -420,6 +421,7 @@
 									{seriesInputs}
 									{lapMarkers}
 									groupId="compare-charts"
+									anomalies={groupAnomalyEvents($activities[0]?.anomalies.filter(a => a.channel === channel) ?? [])}
 									onHoverDistance={chartIdx === 0 ? handleChartHoverDistance : undefined}
 									externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
 								/>

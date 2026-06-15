@@ -128,7 +128,8 @@ export type ChannelKey =
 	| 'skinTemperature'
 	| 'verticalOscillation'
 	| 'groundContactTime'
-	| 'strideLength';
+	| 'strideLength'
+	| 'position';
 
 export const CHANNEL_META: Record<ChannelKey, { label: string; unit: string }> = {
 	heartRate:           { label: 'Heart Rate',        unit: 'bpm' },
@@ -145,6 +146,7 @@ export const CHANNEL_META: Record<ChannelKey, { label: string; unit: string }> =
 	verticalOscillation: { label: 'Vert. Oscillation', unit: 'mm'  },
 	groundContactTime:   { label: 'Ground Contact',    unit: 'ms'  },
 	strideLength:        { label: 'Stride Length',     unit: 'mm'  },
+	position:            { label: 'GPS',               unit: ''    },
 };
 
 export const FILE_COLOURS = [
