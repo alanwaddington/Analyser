@@ -58,3 +58,16 @@ function lerp(records: ActivityRecord[], targetDist: number, key: ChannelKey): n
 	const t = (targetDist - a.distance) / span;
 	return aVal + t * (bVal - aVal);
 }
+
+export const LONG_ACTIVITY_THRESHOLD_M = 50_000;
+export const STEP_SHORT_M = 10;
+export const STEP_LONG_M = 20;
+
+/**
+ * Returns the distance-axis interpolation step in metres based on activity length.
+ * Long activities (> 50 km) use a 20 m step to halve the interpolated point count;
+ * shorter activities use 10 m for finer resolution.
+ */
+export function distanceStep(totalDistanceMetres: number): number {
+	return totalDistanceMetres > LONG_ACTIVITY_THRESHOLD_M ? STEP_LONG_M : STEP_SHORT_M;
+}

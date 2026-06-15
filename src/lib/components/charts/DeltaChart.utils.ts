@@ -1,5 +1,6 @@
 import type { Activity } from '$lib/types';
 import { computeTimeDelta } from '$lib/compare';
+import { distanceStep } from '$lib/align/distance';
 
 export interface DeltaSeriesInput {
 	activity: Activity;
@@ -27,7 +28,7 @@ export function buildDeltaData(
 	refDistanceOffset = 0,
 	candDistanceOffset = 0,
 ): [number, number][] {
-	const deltas = computeTimeDelta(ref, candidate, 10, refDistanceOffset, candDistanceOffset);
+	const deltas = computeTimeDelta(ref, candidate, distanceStep(maxDist), refDistanceOffset, candDistanceOffset);
 	const filtered = deltas.filter(d => d.distance <= maxDist);
 	return filtered.map(d => [
 		mode === 'distance' ? d.distance / 1000 : d.distance,

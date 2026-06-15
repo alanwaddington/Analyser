@@ -58,7 +58,12 @@ src/
 ├── lib/
 │   ├── fit/          # FIT file parsing (Web Worker, normalisation, device classification)
 │   ├── align/        # Activity alignment (timestamp sync, distance interpolation)
+│   │                 # - distance.ts: interpolateToDistanceAxis, distanceStep(totalDistanceMetres)
+│   │                 #   distanceStep: ≤50 km → 10 m step; >50 km → 20 m step (halves point count)
 │   ├── analytics/    # Smoothing, mean/max curves, summary statistics
+│   │                 # - downsample.ts: downsampleGps(points, maxPoints, epsilon) — GPS polyline
+│   │                 #   simplification; GPS_MAX_POINTS=500 hard cap; iterative RDP (explicit stack,
+│   │                 #   no recursion limit) with uniform-decimate fallback if RDP still exceeds cap
 │   ├── compare/      # Delta computation, segment analysis
 │   ├── export/       # Client-side data export
 │   │   ├── excel.ts           # buildWorkbook(activities) → ArrayBuffer (.xlsx via SheetJS)
@@ -69,12 +74,16 @@ src/
 │   │   │             # - echarts-loader.ts: singleton loadECharts() — one dynamic import, cached for session
 │   │   │             # - chart-skeleton.css: shared shimmer skeleton styles used by all four chart components
 │   │   │             # - TimeSeriesChart.svelte: per-series stats row (min/avg/max, zoom-aware; pace inverted)
+│   │   │             #   All line series use sampling: 'lttb' (Largest-Triangle-Three-Buckets) for
+│   │   │             #   automatic ECharts-side downsampling on large datasets (>2000 points warns)
 │   │   │             # - TimeSeriesChart.utils.ts: computeSeriesStats(), formatStatValue(), SeriesStats
 │   │   │             # - StripChart.svelte: metric strip chart wrapper (map tab)
 │   │   │             # - StripToggle.svelte: line/gradient pill toggle
 │   │   │             # - StripChart.utils.ts: shouldShowGradient(), GRADIENT_COLOUR_TOKEN
 │   │   │             # - png-btn.css: shared PNG download button styles
 │   │   ├── map/      # Leaflet map + ActivityMap.component.test.ts (jsdom)
+│   │   │             # - ActivityMap.utils.ts: extractGpsPoints, metricValuesForGpsPoints(gpsPoints,
+│   │   │             #   smoothedValues) — maps downsampled GPS points to metric values via recordIndex
 │   │   └── ui/       # Layout components, controls, SyncPanel
 │   ├── server/
 │   │   └── redis.ts  # Upstash Redis singleton (server-only)
@@ -96,6 +105,8 @@ src/
 │   │                 # - segments.ts: buildSegments()
 │   ├── validation.ts # Shared regex constants (UUID, short code)
 │   └── types.ts      # Domain types
+│                     # - GpsPointWithDistance: lat, lon, distance, recordIndex (O(1) metric lookup)
+│                     # - GpsPointWithMetric extends GpsPointWithDistance: metricValue
 └── routes/
     ├── api/
     │   └── labels/

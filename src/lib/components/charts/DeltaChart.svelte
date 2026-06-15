@@ -52,6 +52,7 @@
 					type: 'line' as const,
 					name: s.activity.filename,
 					data,
+					sampling: 'lttb' as const,
 					lineStyle: { color: colour, type: 'solid' as const, width: 1.5 },
 					itemStyle: { color: colour },
 					symbol: 'none',

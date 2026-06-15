@@ -1,4 +1,4 @@
-import type { Activity, ActivityRecord, GpsPoint } from '$lib/types';
+import type { Activity, ActivityRecord, GpsPoint, GpsPointWithDistance, GpsPointWithMetric } from '$lib/types';
 import { lowerBound } from '$lib/utils/binarySearch';
 
 // ---------------------------------------------------------------------------
@@ -64,16 +64,16 @@ export const TILE_PROVIDERS: TileProvider[] = [
 	},
 ];
 
-export interface GpsPointWithDistance {
-	lat: number;
-	lon: number;
-	distance: number;
-}
+export type { GpsPointWithDistance, GpsPointWithMetric };
 
 export function extractGpsPoints(activity: Activity): GpsPointWithDistance[] {
-	return activity.records
-		.filter(r => r.position !== undefined)
-		.map(r => ({ lat: r.position!.lat, lon: r.position!.lon, distance: r.distance }));
+	const result: GpsPointWithDistance[] = [];
+	for (let i = 0; i < activity.records.length; i++) {
+		const r = activity.records[i];
+		if (r.position === undefined) continue;
+		result.push({ lat: r.position.lat, lon: r.position.lon, distance: r.distance, recordIndex: i });
+	}
+	return result;
 }
 
 export function positionFromPoints(
@@ -105,11 +105,6 @@ export function positionAtDistance(activity: Activity, targetDist: number): GpsP
 // Metric-coloured polyline utilities
 // ---------------------------------------------------------------------------
 
-/** GPS point with distance and an optional smoothed metric value. */
-export interface GpsPointWithMetric extends GpsPointWithDistance {
-	metricValue: number | null;
-}
-
 /**
  * Pairs GPS points from an activity with pre-computed smoothed metric values.
  * Records without a GPS position are skipped; the smoothedValues array must be
@@ -127,10 +122,29 @@ export function extractGpsPointsWithMetric(
 			lat: record.position.lat,
 			lon: record.position.lon,
 			distance: record.distance,
+			recordIndex: i,
 			metricValue: smoothedValues[i] ?? null,
 		});
 	}
 	return result;
+}
+
+/**
+ * Maps pre-downsampled GPS points to metric values by looking up each point's
+ * source record index in the smoothedValues array. This is the preferred path
+ * for metric-coloured route rendering when GPS has been downsampled.
+ */
+export function metricValuesForGpsPoints(
+	gpsPoints: GpsPointWithDistance[],
+	smoothedValues: (number | null)[],
+): GpsPointWithMetric[] {
+	return gpsPoints.map(p => ({
+		lat: p.lat,
+		lon: p.lon,
+		distance: p.distance,
+		recordIndex: p.recordIndex,
+		metricValue: smoothedValues[p.recordIndex] ?? null,
+	}));
 }
 
 /**

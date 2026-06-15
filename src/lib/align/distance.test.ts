@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { interpolateToDistanceAxis } from './distance.ts';
+import { interpolateToDistanceAxis, distanceStep, LONG_ACTIVITY_THRESHOLD_M, STEP_SHORT_M, STEP_LONG_M } from './distance.ts';
 import type { Activity, ActivityRecord } from '$lib/types';
 import { makeBaseActivity } from '$lib/test-utils';
 
@@ -187,5 +187,30 @@ describe('computeTimeDelta — distanceOffset', () => {
 		// At the same adjusted distance, times should match closely (same pace)
 		const mid = deltas[Math.floor(deltas.length / 2)];
 		expect(Math.abs(mid.cumulativeDeltaSeconds)).toBeLessThan(1);
+	});
+});
+
+describe('distanceStep', () => {
+	it('distanceStep_shortActivity_returns10', () => {
+		expect(distanceStep(10_000)).toBe(STEP_SHORT_M);
+		expect(distanceStep(10_000)).toBe(10);
+	});
+
+	it('distanceStep_exactThreshold_returns10', () => {
+		// Exactly at threshold is NOT long — threshold is exclusive
+		expect(distanceStep(LONG_ACTIVITY_THRESHOLD_M)).toBe(STEP_SHORT_M);
+	});
+
+	it('distanceStep_longActivity_returns20', () => {
+		expect(distanceStep(50_001)).toBe(STEP_LONG_M);
+		expect(distanceStep(50_001)).toBe(20);
+	});
+
+	it('distanceStep_veryLongActivity_returns20', () => {
+		expect(distanceStep(200_000)).toBe(STEP_LONG_M);
+	});
+
+	it('distanceStep_zero_returns10', () => {
+		expect(distanceStep(0)).toBe(STEP_SHORT_M);
 	});
 });

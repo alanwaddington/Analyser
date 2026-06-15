@@ -9,10 +9,12 @@
 	import { smooth } from '$lib/analytics/smooth';
 	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
-	import { interpolateToDistanceAxis } from '$lib/align/distance';
+	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
 	import { downloadPng, localDateString } from '$lib/export/download';
 	import './png-btn.css';
 	import './chart-skeleton.css';
+
+	const DOWNSAMPLE_THRESHOLD = 2000;
 
 	let {
 		channel,
@@ -68,7 +70,7 @@
 	function buildAltitudeData(activity: Activity, timeOffset = 0, distanceOffset = 0): [number, number | null][] {
 		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
 		if (axisMode === 'distance') {
-			const aligned = interpolateToDistanceAxis(activity, 10, distanceOffset);
+			const aligned = interpolateToDistanceAxis(activity, distanceStep(activity.totalDistance), distanceOffset);
 			const altData = aligned.channels.get('altitude') ?? [];
 			return aligned.axis.map((d, i) => [d / 1000, altData[i]]);
 		}
@@ -80,7 +82,7 @@
 	function buildData(activity: Activity, timeOffset = 0, distanceOffset = 0): [number, number | null][] {
 		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
 		if (axisMode === 'distance') {
-			const aligned = interpolateToDistanceAxis(activity, 10, distanceOffset);
+			const aligned = interpolateToDistanceAxis(activity, distanceStep(activity.totalDistance), distanceOffset);
 			const channelData = aligned.channels.get(channel) ?? [];
 			const smoothed = smooth(channelData, $smoothing);
 			return aligned.axis.map((d, i) => [d / 1000, smoothed[i]]);
@@ -175,6 +177,7 @@
 					name: '__alt__',
 					yAxisIndex: 1,
 					data: altData,
+					sampling: 'lttb' as const,
 					areaStyle: { color: altFill, origin: 'start' as const },
 					lineStyle: { width: 0.5, color: altLine },
 					symbol: 'none',
@@ -185,11 +188,16 @@
 				...seriesInputs.map((s, i) => {
 					const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
 					const dashed = isDashed(i, referenceIndex);
+					const seriesData = hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
+					if (seriesData.length > DOWNSAMPLE_THRESHOLD) {
+						console.warn(`[TimeSeriesChart] ${channel}: ${seriesData.length} points — ECharts LTTB sampling active`);
+					}
 					return {
 						type: 'line' as const,
 						name: s.label ?? s.activity.filename,
 						yAxisIndex: 0,
-						data: hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0),
+						data: seriesData,
+						sampling: 'lttb' as const,
 						lineStyle: {
 							color: colour,
 							type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
