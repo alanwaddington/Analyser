@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.7 · **Last updated:** June 2026
+> **Version:** 1.8 · **Last updated:** June 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -29,6 +29,7 @@ This guide covers the technical internals of the Analyser application for contri
 3b. [Data Export](#3b-data-export)
 3c. [Chart Stats Row](#3c-chart-stats-row)
 3d. [Activity Alignment — GPS Anchor](#3d-activity-alignment--gps-anchor)
+3e. [Data Anomaly Detection](#3e-data-anomaly-detection)
 4. [Responsive Layout](#4-responsive-layout)
 5. [FIT Parsing](#5-fit-parsing)
 6. [Testing](#6-testing)
@@ -60,7 +61,9 @@ src/
 │   ├── align/        # Activity alignment (timestamp sync, distance interpolation)
 │   │                 # - distance.ts: interpolateToDistanceAxis, distanceStep(totalDistanceMetres)
 │   │                 #   distanceStep: ≤50 km → 10 m step; >50 km → 20 m step (halves point count)
-│   ├── analytics/    # Smoothing, mean/max curves, summary statistics
+│   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection
+│   │                 # - anomalies.ts: detectAnomalies(), groupAnomalyEvents(), groupAnomaliesByChannel()
+│   │                 # - stats.ts: mean(), stdDev() — population statistics ignoring null/NaN
 │   │                 # - downsample.ts: downsampleGps(points, maxPoints, epsilon) — GPS polyline
 │   │                 #   simplification; GPS_MAX_POINTS=500 hard cap; iterative RDP (explicit stack,
 │   │                 #   no recursion limit) with uniform-decimate fallback if RDP still exceeds cap
@@ -84,6 +87,8 @@ src/
 │   │   ├── map/      # Leaflet map + ActivityMap.component.test.ts (jsdom)
 │   │   │             # - ActivityMap.utils.ts: extractGpsPoints, metricValuesForGpsPoints(gpsPoints,
 │   │   │             #   smoothedValues) — maps downsampled GPS points to metric values via recordIndex
+│   │                 # - DeviceToggleBar.utils.ts: buildAnomalyCounts(activities) → Map<ChannelKey, AnomalyCount>
+│   │                 #   aggregates event-level anomaly counts across all activities for badge rendering
 │   │   └── ui/       # Layout components, controls, SyncPanel
 │   ├── server/
 │   │   └── redis.ts  # Upstash Redis singleton (server-only)
@@ -105,6 +110,8 @@ src/
 │   │                 # - segments.ts: buildSegments()
 │   ├── validation.ts # Shared regex constants (UUID, short code)
 │   └── types.ts      # Domain types
+│                     # - Anomaly, AnomalyType, DetectionStrategy, AnomalyDetectionOptions
+│                     # - ChannelKey now includes 'position' (GPS-only; no numeric series, badge-only via DeviceToggleBar GPS section)
 │                     # - GpsPointWithDistance: lat, lon, distance, recordIndex (O(1) metric lookup)
 │                     # - GpsPointWithMetric extends GpsPointWithDistance: metricValue
 └── routes/
@@ -737,6 +744,94 @@ CSS for the banners is in `src/routes/indoor-warning.css` (shared by both pages)
 
 `anchorsAreDistant(activities)` returns `true` when any two GPS-anchored activities have anchor positions more than `GPS_PROXIMITY_THRESHOLD_M` (50 m) apart. Both pages show a dismissible amber banner. Indoor activities whose anchors have no GPS position are excluded from the comparison, so a pure-TR file (no GPS) paired with a Zwift file never triggers a false proximity warning.
 
+## 3e. Data Anomaly Detection
+
+PR #147 added a data quality layer that detects sensor anomalies at parse time and surfaces them in the UI.
+
+### Detection engine — `src/lib/analytics/anomalies.ts`
+
+`detectAnomalies(records, options?)` is called once in `normalise()` and returns a sorted `Anomaly[]` stored on `Activity.anomalies`. Detection is O(n) per channel.
+
+**Types and strategies:**
+
+```ts
+type AnomalyType       = 'spike' | 'dropout' | 'gps-drift';
+type DetectionStrategy = 'threshold-relative' | 'statistical';
+
+interface Anomaly {
+  channel:           ChannelKey;
+  recordIndex:       number;
+  type:              AnomalyType;
+  value:             number;          // raw sensor value at that record
+  detectionStrategy: DetectionStrategy;
+}
+```
+
+**Spike detection** — channels: `heartRate`, `power`, `cadence`
+
+| Condition | Threshold | Strategy |
+|-----------|-----------|----------|
+| HR + `options.athleteProfile.maxHR` set | `maxHR + 10 bpm` | `threshold-relative` |
+| Power + `options.powerSource === 'stryd'` + `cp` set | `cp × 1.5` | `threshold-relative` |
+| Fallback (no profile) | `mean + 4σ` | `statistical` |
+
+A run above threshold must last ≤ 3 s to be flagged as a spike (longer sustained high values are real effort, not glitches).
+
+**Dropout detection** — channels: `heartRate`, `power`, `cadence`
+
+A channel value of `0` or `null` for more than 10 consecutive seconds mid-activity (excluding the first/last 30 s warmup/cooldown) is flagged as `type: 'dropout'`, `detectionStrategy: 'threshold-relative'`.
+
+**GPS drift detection** — channel: `position`
+
+Consecutive GPS positions are compared using the Haversine formula. If the implied speed between two points exceeds 3× the recorded device speed, the record is flagged as `type: 'gps-drift'`, `detectionStrategy: 'threshold-relative'`. GPS drift anomalies use the `'position'` ChannelKey — a GPS-only channel with no numeric chart series. They surface only through the DeviceToggleBar GPS section and as red circle markers on the map.
+
+**Options pattern** — `AnomalyDetectionOptions`:
+
+```ts
+interface AnomalyDetectionOptions {
+  powerSource?:   'stryd' | 'native';
+  athleteProfile?: { cp?: number; ftp?: number; maxHR?: number; };
+}
+```
+
+Currently `detectAnomalies(records)` is called without options from `parser.ts` (statistical fallback for all channels). When issue #112 (athlete profile) and #117 (power source) ship, only the call site changes — the detection logic itself is unchanged.
+
+### Event grouping — `groupAnomalyEvents()`
+
+`detectAnomalies` returns one `Anomaly` per record. A 40-second dropout produces 40 entries. `groupAnomalyEvents(anomalies)` collapses contiguous runs of the same channel + type (consecutive `recordIndex` values differing by ≤ 1) into a single entry (the first record of each run). This converts per-record counts to per-event counts for badge display.
+
+```ts
+// 40 dropout records → 1 dropout event
+groupAnomalyEvents(activity.anomalies.filter(a => a.channel === 'heartRate'))
+// → [Anomaly { recordIndex: startOfDropout, type: 'dropout', ... }]
+```
+
+Both Compare and Event pages call `groupAnomalyEvents()` before passing anomalies to `TimeSeriesChart` (one `markPoint` per event, not per record).
+
+### UI surfaces
+
+**DeviceToggleBar badges** (`src/lib/components/ui/DeviceToggleBar.svelte`)
+
+`buildAnomalyCounts(activities)` in `DeviceToggleBar.utils.ts` aggregates event-level counts across all activities and returns a `Map<ChannelKey, AnomalyCount>`. The badge `⚠ N` is rendered next to each channel label that has anomalies. Tooltip breaks down counts (e.g. `"2 spikes, 1 dropout"`). A standalone **GPS** section appears at the bottom when `anomalyCounts.get('position')` is non-zero — GPS drift anomalies are surfaced here rather than in any numeric channel group.
+
+**ChannelToggleBar badges** (`src/lib/components/ui/ChannelToggleBar.svelte`)
+
+The Event page passes `anomalyCounts` to `ChannelToggleBar`. Each channel pill shows an inline `⚠N` badge when that channel has anomaly events. No GPS section (Event page has no ActivityMap drift markers).
+
+**TimeSeriesChart markPoints** (`src/lib/components/charts/TimeSeriesChart.svelte`)
+
+`TimeSeriesChart` accepts `anomalies?: Anomaly[]` (pre-filtered to the chart's channel and pre-grouped via `groupAnomalyEvents`). A red diamond `markPoint` is rendered at each anomaly's x-axis position on the **first visible series**. Positions use `anomalyXValue()` from `TimeSeriesChart.utils.ts` — which returns `elapsedSeconds` in time mode and kilometres in distance mode. Clicking a markPoint zooms the chart to ±15 s (time mode) or ±50 m (distance mode) around the anomaly.
+
+**ActivityMap drift circles** (`src/lib/components/map/ActivityMap.svelte`)
+
+`ActivityMap` reads `activity.anomalies` directly (no separate prop). GPS-drift anomalies are filtered by `a.type === 'gps-drift'`, and each anomaly's corresponding `ActivityRecord.position` is rendered as a red `L.circleMarker` (radius 5, `#ef4444`). Non-GPS anomalies are ignored on the map.
+
+### `position` ChannelKey
+
+`'position'` was added to the `ChannelKey` union to give GPS drift anomalies a first-class channel assignment. It does NOT appear in `ALL_RECORD_CHANNELS` (the ordered list used by `channelsPresentInRecords`), so it is never returned by `deriveAvailableChannels()` and never rendered as a chart series. Its sole purpose is to carry GPS drift anomaly data through `buildAnomalyCounts` to the DeviceToggleBar GPS section.
+
+---
+
 ---
 
 ## 4. Responsive Layout
@@ -792,6 +887,8 @@ Both functions are exported from `parser.ts` for unit testing. Well-formed files
 **Lap building** is handled by `buildLaps(fitLaps, records)`, which is also exported for direct unit testing. It derives `startDistance` and `endDistance` from the running cursor position in the records array rather than from the FIT lap's `start_distance` field. This makes it resilient to Garmin devices that write `start_distance = 0` for every lap (per-lap relative) rather than cumulative from the session start. Laps with `total_distance = 0` are returned as zero-length entries (`startIndex === endIndex`, `startDistance === endDistance`) without advancing the cursor.
 
 The cursor advancement uses `records[cursor].distance <= targetDist + DISTANCE_EPSILON_M` (where `DISTANCE_EPSILON_M = 0.5`) to absorb GPS floating-point drift at lap boundaries. The constant is exported for use in tests and any future callers that need the same tolerance.
+
+**Anomaly detection** is called at the end of `normalise()` after sport-specific post-processing and before `buildLaps()`. See [section 3e](#3e-data-anomaly-detection) for details.
 
 **Available channel pre-computation** — `channelsPresentInRecords(records)` scans each `ActivityRecord` once across all 14 channel keys and returns a `Set<ChannelKey>` of those with at least one non-null value. It is called once inside `normalise()` and the result is stored on `Activity` as `availableChannels: Set<ChannelKey>` (PR #108).
 
@@ -859,6 +956,6 @@ import { makeBaseActivity } from '$lib/test-utils';
 const activity = makeBaseActivity({ id: 'run-1', records: [/* ... */] });
 ```
 
-The factory fills every required `Activity` field with safe defaults and computes `availableChannels` automatically via `channelsPresentInRecords(records)`. Pass `overrides.availableChannels` to supply a manual set when the test is specifically about channel visibility rather than parser behaviour.
+The factory fills every required `Activity` field with safe defaults and computes `availableChannels` automatically via `channelsPresentInRecords(records)`. It also sets `anomalies: []` as the default empty anomaly list, matching `normalise()`'s initial state before `detectAnomalies()` is called. Pass `overrides.availableChannels` to supply a manual set when the test is specifically about channel visibility rather than parser behaviour.
 
 All test files should import this helper rather than duplicating the full `Activity` literal — it prevents future interface changes from requiring edits across every test file.

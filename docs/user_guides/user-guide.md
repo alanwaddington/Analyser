@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 1.9 · **Last updated:** May 2026
+> **Version:** 2.0 · **Last updated:** June 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -116,6 +116,10 @@ The Device Toggle Bar sits at the top of the content area and lists every sensor
 - **Multi-metric devices** (devices recording 3+ channels, such as a Garmin watch) appear as a single expandable pill. Click the **▾** arrow to see the individual channels.
 - Devices that were connected but recorded no data are shown as dashed, semi-transparent pills and cannot be toggled.
 
+**Data quality warnings:**
+
+When Analyser detects sensor anomalies (signal spikes, data dropouts, or GPS drift), a red **⚠ N** badge appears next to the affected channel label, where N is the number of anomaly events detected. Hover the badge to see a breakdown (e.g. "2 spikes, 1 dropout"). If GPS position anomalies are detected, a separate **GPS ⚠ N** section appears at the bottom of the bar. See [section 3.2](#32-charts-tab) for anomaly markers on charts and [section 3.5](#35-map-tab) for GPS drift circles on the map.
+
 **Renaming a device:**
 
 Double-click any device pill to rename it. Type the new label and press **Enter** to confirm, or **Escape** to cancel. Labels are saved locally in your browser and are restored automatically the next time you load a file from the same device — this works for all device types, including Garmin watches, Stryd pods, ANT+ sensors, and BLE devices.
@@ -156,6 +160,17 @@ Below each chart, a compact stats row shows the **minimum**, **average**, and **
 - **Zoom-aware:** when you zoom into a region, the stats recalculate using only the visible data. Zoom back out (or double-click) to see full-activity stats.
 
 > **Note:** Stats in this row reflect the current smoothing and axis mode (distance or time) and may differ slightly from the Summary tab, which uses the raw unsmoothed data from the original file.
+
+**Data quality markers:**
+
+When Analyser detects sensor anomalies in the active channel, red **◆ diamond markers** appear on the chart at the positions where anomalies occurred. These highlight:
+
+- **Spikes** — brief, implausibly high values (e.g. a momentary heart rate reading of 220 bpm)
+- **Dropouts** — gaps where the sensor stopped transmitting (value 0 or absent for 10+ seconds mid-activity)
+
+**Click a diamond marker** to zoom the chart to ±15 seconds (or ±50 metres in distance mode) around the anomaly, making it easy to inspect the surrounding data in context. Double-click the chart to zoom back out.
+
+> GPS drift anomalies (where the GPS signal jumped to an implausible position) are shown on the **Map tab** as red circles, not on time-series charts.
 
 **Smoothing:**
 
@@ -215,6 +230,10 @@ A **Map Layer** panel is always visible in the **top-left** corner of the map. C
 | **Topo** | Hilly routes — contour lines visible |
 | **Cycling** | Bike-specific road markings |
 | **Dark** | Low-glare, high-contrast viewing |
+
+**GPS drift indicators:**
+
+If Analyser detects GPS position anomalies (points where the GPS signal jumped to an implausible location), small **red circles** appear on the map route at those positions. Hover a circle to see the implied speed that triggered the detection. These markers help you identify segments where GPS accuracy was poor, so you can discount those portions of the route.
 
 **Metric colouring:**
 
