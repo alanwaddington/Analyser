@@ -47,7 +47,7 @@
 		// Reference line: FTP for cycling, CP for running
 		const isCycling = sport !== 'running';
 		const refValue = isCycling ? athleteProfile.ftp : athleteProfile.cp;
-		const refLabel = isCycling ? 'FTP' : 'CP';
+		const refLabel = isCycling ? 'FTP' : 'Critical Power';
 
 		// Find first visible series index for markLine attachment
 		const firstVisible = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));

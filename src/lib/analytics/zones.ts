@@ -31,13 +31,21 @@ export function hrZoneFromLTHR(bpm: number, lthr: number): HrZone {
 	return 5;
 }
 
-// Sport-aware HR zone: picks maxHrCycling or maxHrRunning, falls back to LTHR.
-// Returns null when no threshold is configured.
+// Sport-aware HR zone: picks the primary sport's maxHR, falls back to the other
+// sport's maxHR, then falls back to LTHR. Returns null when no threshold is configured.
 export function hrZone(bpm: number, profile: AthleteProfile, sport: string): HrZone | null {
-	const maxHR = sport === 'cycling' ? profile.maxHrCycling : profile.maxHrRunning;
+	const primaryMaxHR  = sport === 'cycling' ? profile.maxHrCycling : profile.maxHrRunning;
+	const fallbackMaxHR = sport === 'cycling' ? profile.maxHrRunning  : profile.maxHrCycling;
+	const maxHR = primaryMaxHR ?? fallbackMaxHR;
 	if (maxHR != null) return hrZoneFromMaxHR(bpm, maxHR);
 	if (profile.lthr != null) return hrZoneFromLTHR(bpm, profile.lthr);
 	return null;
+}
+
+// Estimate maxHR from LTHR — LTHR is approximately 92% of maxHR (Friel/Coggan convention).
+// Use only when maxHR is not directly available.
+export function lthrToEstimatedMaxHR(lthr: number): number {
+	return lthr / 0.92;
 }
 
 // CP zone — Stryd 5-zone model
@@ -51,18 +59,21 @@ export function cpZone(watts: number, cp: number): CpZone {
 	return 5;
 }
 
-// Percentage of FTP — returns rounded integer
+// Percentage of FTP — returns rounded integer; returns 0 when ftp ≤ 0
 export function ftpPct(watts: number, ftp: number): number {
+	if (ftp <= 0) return 0;
 	return Math.round((watts / ftp) * 100);
 }
 
-// Percentage of CP — returns rounded integer
+// Percentage of CP — returns rounded integer; returns 0 when cp ≤ 0
 export function cpPct(watts: number, cp: number): number {
+	if (cp <= 0) return 0;
 	return Math.round((watts / cp) * 100);
 }
 
-// Watts per kilogram — returns 1 decimal place
+// Watts per kilogram — returns 1 decimal place; returns 0 when weightKg ≤ 0
 export function wPerKg(watts: number, weightKg: number): number {
+	if (weightKg <= 0) return 0;
 	return Math.round((watts / weightKg) * 10) / 10;
 }
 

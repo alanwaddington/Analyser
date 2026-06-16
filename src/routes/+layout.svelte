@@ -76,7 +76,7 @@
 
 	onMount(async () => {
 		initTheme();
-		initAthleteProfile();
+		initAthleteProfile(); // same lazy-load-from-localStorage pattern as initSync / initTheme
 
 		// Handle ?sync={uuid} linking URL (from QR scan, pasted link, or typed code).
 		// adoptSyncIdentity stores the UUID and pulls labels from the remote store.

@@ -4,7 +4,7 @@
 	import { loadECharts, type EChartsModule } from './echarts-loader';
 	import type { Activity, ChannelKey, Anomaly, AthleteProfile } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
-	import { hrZoneBoundaries, cpZoneBoundaries } from '$lib/analytics/zones';
+	import { hrZoneBoundaries, cpZoneBoundaries, lthrToEstimatedMaxHR } from '$lib/analytics/zones';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
@@ -204,7 +204,7 @@
 					if (maxHR != null) {
 						zoneBands = hrZoneBoundaries(maxHR);
 					} else if (athleteProfile?.lthr != null) {
-						zoneBands = hrZoneBoundaries(athleteProfile.lthr / 0.92);
+						zoneBands = hrZoneBoundaries(lthrToEstimatedMaxHR(athleteProfile.lthr));
 					}
 				} else if (channel === 'power' && activeSport === 'running' && athleteProfile?.cp != null) {
 					zoneBands = cpZoneBoundaries(athleteProfile.cp);

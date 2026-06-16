@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 
+vi.mock('./toast', () => ({ addToast: vi.fn() }));
+
 // Mock localStorage before importing the module — same pattern as theme.test.ts
 const localStorageMock = (() => {
 	let store: Record<string, string> = {};
@@ -15,6 +17,7 @@ const localStorageMock = (() => {
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true });
 
 const { athleteProfile, setProfileField, initAthleteProfile } = await import('./athleteProfile.ts');
+const { addToast } = await import('./toast');
 
 const STORAGE_KEY = 'analyser-athlete-profile';
 
@@ -23,6 +26,7 @@ describe('athleteProfile store', () => {
 		localStorageMock.clear();
 		localStorageMock.getItem.mockClear();
 		localStorageMock.setItem.mockClear();
+		vi.mocked(addToast).mockClear();
 		athleteProfile.set({});
 	});
 
@@ -82,6 +86,17 @@ describe('athleteProfile store', () => {
 	it('setProfileField_nan_treatedAsUndefined', () => {
 		setProfileField('ftp', NaN);
 		expect(get(athleteProfile).ftp).toBeUndefined();
+	});
+
+	it('setProfileField_quotaExceeded_showsWarningToast', () => {
+		localStorageMock.setItem.mockImplementationOnce(() => {
+			throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+		});
+		setProfileField('ftp', 250);
+		expect(vi.mocked(addToast)).toHaveBeenCalledWith(
+			'Athlete profile could not be saved — storage full',
+			'warning',
+		);
 	});
 
 	// ---------------------------------------------------------------------------

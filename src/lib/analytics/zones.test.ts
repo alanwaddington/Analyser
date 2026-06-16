@@ -3,6 +3,7 @@ import {
 	hrZoneFromMaxHR,
 	hrZoneFromLTHR,
 	hrZone,
+	lthrToEstimatedMaxHR,
 	cpZone,
 	ftpPct,
 	cpPct,
@@ -102,6 +103,18 @@ describe('hrZone', () => {
 		expect(hrZone(134, profile, 'running')).toBe(2);
 	});
 
+	it('hrZone_cyclingFallsBackToRunningMaxHR_whenCyclingMaxHRAbsent', () => {
+		const profile: AthleteProfile = { maxHrRunning: 190 }; // no maxHrCycling
+		// 171 bpm = 90% of 190 → Z5
+		expect(hrZone(171, profile, 'cycling')).toBe(5);
+	});
+
+	it('hrZone_runningFallsBackToCyclingMaxHR_whenRunningMaxHRAbsent', () => {
+		const profile: AthleteProfile = { maxHrCycling: 190 }; // no maxHrRunning
+		// 152 bpm = 80% of 190 → Z4
+		expect(hrZone(152, profile, 'running')).toBe(4);
+	});
+
 	it('hrZone_noThreshold_returnsNull', () => {
 		const profile: AthleteProfile = { ftp: 250, cp: 280 };
 		expect(hrZone(160, profile, 'cycling')).toBeNull();
@@ -109,6 +122,21 @@ describe('hrZone', () => {
 
 	it('hrZone_emptyProfile_returnsNull', () => {
 		expect(hrZone(160, {}, 'running')).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// lthrToEstimatedMaxHR
+// ---------------------------------------------------------------------------
+
+describe('lthrToEstimatedMaxHR', () => {
+	it('lthrToEstimatedMaxHR_165lthr_returnsApprox179', () => {
+		// 165 / 0.92 ≈ 179.35
+		expect(lthrToEstimatedMaxHR(165)).toBeCloseTo(179.35, 1);
+	});
+
+	it('lthrToEstimatedMaxHR_resultIsGreaterThanLTHR', () => {
+		expect(lthrToEstimatedMaxHR(160)).toBeGreaterThan(160);
 	});
 });
 
@@ -159,6 +187,10 @@ describe('ftpPct', () => {
 	it('ftpPct_belowFTP_returnsUnder100', () => {
 		expect(ftpPct(200, 250)).toBe(80);
 	});
+
+	it('ftpPct_zeroFtp_returnsZero', () => {
+		expect(ftpPct(250, 0)).toBe(0);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -172,6 +204,10 @@ describe('cpPct', () => {
 
 	it('cpPct_aboveCP_returnsOver100', () => {
 		expect(cpPct(336, 300)).toBe(112);
+	});
+
+	it('cpPct_zeroCp_returnsZero', () => {
+		expect(cpPct(300, 0)).toBe(0);
 	});
 });
 
@@ -190,6 +226,10 @@ describe('wPerKg', () => {
 
 	it('wPerKg_zeroWatts_returnsZero', () => {
 		expect(wPerKg(0, 70)).toBe(0);
+	});
+
+	it('wPerKg_zeroWeight_returnsZero', () => {
+		expect(wPerKg(250, 0)).toBe(0);
 	});
 });
 
