@@ -2,8 +2,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { ECharts, EChartsOption } from 'echarts';
 	import { loadECharts, type EChartsModule } from './echarts-loader';
-	import type { Activity, ChannelKey, Anomaly } from '$lib/types';
+	import type { Activity, ChannelKey, Anomaly, AthleteProfile } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
+	import { hrZoneBoundaries, cpZoneBoundaries } from '$lib/analytics/zones';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
@@ -26,6 +27,8 @@
 		externalHoverDistance = undefined,
 		forceDistanceAxis = false,
 		anomalies = undefined,
+		athleteProfile = {} as AthleteProfile,
+		sport = '',
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
@@ -40,6 +43,10 @@
 		forceDistanceAxis?: boolean;
 		/** Anomalies for this channel (from the first activity). Rendered as red diamond markPoints. */
 		anomalies?: Anomaly[];
+		/** Athlete profile for threshold reference lines and zone shading. */
+		athleteProfile?: AthleteProfile;
+		/** Sport of the primary activity — used to pick the right HR threshold. */
+		sport?: string;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -177,6 +184,39 @@
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			series: (() => {
 				const firstVisibleIdx = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
+
+				// Zone band colours — low-opacity, readable on dark and light backgrounds
+				const ZONE_COLOURS: Record<number, string> = {
+					1: 'rgba(148,163,184,0.07)',
+					2: 'rgba(96,165,250,0.07)',
+					3: 'rgba(74,222,128,0.07)',
+					4: 'rgba(251,191,36,0.09)',
+					5: 'rgba(248,113,113,0.11)',
+				};
+
+				// Determine zone bands for this channel/sport combination
+				const activeSport = sport ?? 'cycling';
+				let zoneBands: { min: number; max: number; zone: number }[] | null = null;
+				if (channel === 'heartRate') {
+					const maxHR = activeSport === 'cycling'
+						? (athleteProfile?.maxHrCycling ?? athleteProfile?.maxHrRunning)
+						: (athleteProfile?.maxHrRunning ?? athleteProfile?.maxHrCycling);
+					if (maxHR != null) {
+						zoneBands = hrZoneBoundaries(maxHR);
+					} else if (athleteProfile?.lthr != null) {
+						zoneBands = hrZoneBoundaries(athleteProfile.lthr / 0.92);
+					}
+				} else if (channel === 'power' && activeSport === 'running' && athleteProfile?.cp != null) {
+					zoneBands = cpZoneBoundaries(athleteProfile.cp);
+				}
+
+				const markAreaData = zoneBands
+					? zoneBands.map(b => [
+						{ yAxis: b.min, itemStyle: { color: ZONE_COLOURS[b.zone] } },
+						{ yAxis: b.max === Infinity ? Infinity : b.max },
+					  ])
+					: null;
+
 				return ([
 					...(showAltBackdrop && hasAlt ? [{
 						type: 'line' as const,
@@ -238,6 +278,12 @@
 											label: { show: false },
 										};
 									}),
+								},
+							} : {}),
+							...(i === firstVisibleIdx && markAreaData ? {
+								markArea: {
+									silent: true,
+									data: markAreaData,
 								},
 							} : {}),
 						};
@@ -346,6 +392,8 @@
 		void forceDistanceAxis;
 		void seriesInputs;
 		void referenceIndex;
+		void athleteProfile;
+		void sport;
 		zoomRange = undefined;
 		chart?.setOption(buildOption(), { notMerge: true });
 	});

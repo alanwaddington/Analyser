@@ -22,6 +22,9 @@
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import { buildAnomalyCounts } from '$lib/components/ui/DeviceToggleBar.utils';
 	import { groupAnomalyEvents } from '$lib/analytics/anomalies';
+	import { ftpPct, cpPct, wPerKg, hrZone } from '$lib/analytics/zones';
+	import { athleteProfile } from '$lib/stores/athleteProfile';
+	import type { AthleteProfile } from '$lib/types';
 	import { exportActivities } from '$lib/export/exportActivities';
 	import type { ExportFormat } from '$lib/export/columns';
 	import { untrack } from 'svelte';
@@ -194,6 +197,28 @@
 	let locationWarningDismissed = $state(false);
 
 	const indoor = createIndoorWarnings(() => $activities);
+
+	// ── Summary table contextual stats ───────────────────────────────────────
+
+	type CellContext = { pctLabel?: string; wkg?: string; zone?: number } | null;
+
+	function buildCellContext(ch: ChannelKey, avg: number, sport: string | undefined, profile: AthleteProfile): CellContext {
+		if (ch === 'power') {
+			const isCycling = sport !== 'running';
+			const pctLabel = isCycling && profile.ftp
+				? `${ftpPct(avg, profile.ftp)}% FTP`
+				: !isCycling && profile.cp
+					? `${cpPct(avg, profile.cp)}% CP`
+					: undefined;
+			const wkg = profile.weight ? wPerKg(avg, profile.weight).toFixed(1) : undefined;
+			return (pctLabel || wkg) ? { pctLabel, wkg } : null;
+		}
+		if (ch === 'heartRate') {
+			const zone = hrZone(avg, profile, sport ?? 'cycling');
+			return zone != null ? { zone } : null;
+		}
+		return null;
+	}
 
 	// Reset location warning whenever the file set changes
 	$effect(() => { void $activities; locationWarningDismissed = false; });
@@ -450,6 +475,8 @@
 									anomalies={groupAnomalyEvents($activities[0]?.anomalies.filter(a => a.channel === channel) ?? [])}
 									onHoverDistance={chartIdx === 0 ? handleChartHoverDistance : undefined}
 									externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
+									athleteProfile={$athleteProfile}
+									sport={$activities[0]?.sport ?? ''}
 								/>
 							</div>
 						{/if}
@@ -489,7 +516,11 @@
 		{#if activeTab === 'meanmax'}
 			<div class="cards-scroll">
 				<div class="card card--meanmax">
-					<MeanMaxChart seriesInputs={meanMaxSeriesInputs} />
+					<MeanMaxChart
+					seriesInputs={meanMaxSeriesInputs}
+					athleteProfile={$athleteProfile}
+					sport={$activities[0]?.sport ?? ''}
+				/>
 				</div>
 			</div>
 
@@ -534,9 +565,18 @@
 									<td class="cell-label">{CHANNEL_META[ch].label}</td>
 									{#each activeCrossFileStreams as cfs}
 										{@const s = summarise(extractChannel(cfs.activity.records, ch))}
+										{@const ctx = s ? buildCellContext(ch, s.avg, cfs.activity.sport, $athleteProfile) : null}
 										<td class="cell-stat">
 											{#if s}
 												{s.avg.toFixed(1)} / {s.max.toFixed(1)} / {s.min.toFixed(1)}
+												{#if ctx}
+													<span class="cell-context">
+														{#if ctx.pctLabel}{ctx.pctLabel}{/if}
+														{#if ctx.pctLabel && ctx.wkg}&ensp;·&ensp;{/if}
+														{#if ctx.wkg}{ctx.wkg} w/kg{/if}
+														{#if ctx.zone}<span class="zone-badge zone-badge--{ctx.zone}">Z{ctx.zone}</span>{/if}
+													</span>
+												{/if}
 											{:else}
 												—
 											{/if}
@@ -934,6 +974,36 @@
 		color: var(--color-text);
 		white-space: nowrap;
 	}
+
+	.cell-context {
+		display: block;
+		font-size: 0.68rem;
+		color: var(--color-muted);
+		margin-top: 2px;
+		white-space: nowrap;
+		font-family: inherit;
+	}
+
+	.zone-badge {
+		display: inline-block;
+		padding: 1px 5px;
+		border-radius: 3px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		line-height: 1.4;
+		font-family: inherit;
+	}
+
+	.zone-badge--1 { background: rgba(100,116,139,0.2);  color: #94a3b8; }
+	.zone-badge--2 { background: rgba(96,165,250,0.15);  color: #60a5fa; }
+	.zone-badge--3 { background: rgba(74,222,128,0.15);  color: #4ade80; }
+	.zone-badge--4 { background: rgba(251,191,36,0.18);  color: #fbbf24; }
+	.zone-badge--5 { background: rgba(248,113,113,0.18); color: #f87171; }
+
+	:global([data-theme="light"]) .zone-badge--2 { color: #2563eb; }
+	:global([data-theme="light"]) .zone-badge--3 { color: #16a34a; }
+	:global([data-theme="light"]) .zone-badge--4 { color: #d97706; }
+	:global([data-theme="light"]) .zone-badge--5 { color: #dc2626; }
 
 	.row-alt {
 		background: color-mix(in srgb, var(--color-border) 30%, transparent);

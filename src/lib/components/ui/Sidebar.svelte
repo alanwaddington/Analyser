@@ -10,6 +10,7 @@
 	import SmoothingSlider from '$lib/components/ui/SmoothingSlider.svelte';
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 	import SyncPanel from '$lib/components/ui/SyncPanel.svelte';
+	import AthleteProfilePanel from '$lib/components/ui/AthleteProfilePanel.svelte';
 
 	const indicatorState = $derived.by((): 'syncing' | 'error' | 'ok' | 'muted' => {
 		if ($syncStatus.syncing)    return 'syncing';
@@ -126,6 +127,7 @@
 			</span>
 			<span class="sync-indicator__text">{statusText}</span>
 		</div>
+		<AthleteProfilePanel />
 		<SyncPanel />
 	</div>
 </nav>
