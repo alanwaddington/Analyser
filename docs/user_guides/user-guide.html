@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Analyser — User Guide</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    color: #1a1a2e;
+    line-height: 1.65;
+  }
+
+  body {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 2.5rem;
+  }
+
+  h1 { font-size: 22pt; margin-bottom: 6pt; padding-bottom: 6pt; border-bottom: 2px solid #3b82f6; color: #1e3a5f; }
+  h2 { font-size: 15pt; margin-top: 22pt; margin-bottom: 8pt; padding-bottom: 4pt; border-bottom: 1px solid #d1d5db; color: #1e3a5f; }
+  h3 { font-size: 12pt; margin-top: 16pt; margin-bottom: 6pt; color: #1e3a5f; }
+  h4 { font-size: 10.5pt; margin-top: 12pt; margin-bottom: 4pt; color: #374151; }
+
+  p  { margin-bottom: 8pt; }
+  ul, ol { margin: 6pt 0 10pt 20pt; }
+  li { margin-bottom: 3pt; }
+
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  blockquote {
+    margin: 10pt 0;
+    padding: 8pt 12pt;
+    border-left: 3px solid #3b82f6;
+    background: #eff6ff;
+    border-radius: 0 4px 4px 0;
+    color: #374151;
+  }
+  blockquote p { margin: 0; }
+
+  code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 9pt;
+    background: #f3f4f6;
+    padding: 1pt 4pt;
+    border-radius: 3px;
+  }
+  pre {
+    background: #f3f4f6;
+    padding: 10pt 14pt;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 10pt 0;
+  }
+  pre code { background: none; padding: 0; font-size: 9pt; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10pt 0 14pt;
+    font-size: 9.5pt;
+  }
+  th {
+    background: #1e3a5f;
+    color: #ffffff;
+    text-align: left;
+    padding: 5pt 8pt;
+    font-weight: 600;
+  }
+  td {
+    padding: 5pt 8pt;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  tr:nth-child(even) td { background: #f9fafb; }
+  tr:last-child td { border-bottom: none; }
+
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 12pt auto;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 18pt 0;
+  }
+
+  @media print {
+    body { max-width: 100%; padding: 20mm 22mm; }
+    h2 { page-break-before: auto; }
+    h2:first-of-type { page-break-before: avoid; }
+    img, table, blockquote { page-break-inside: avoid; }
+    a { color: #1e3a5f; }
+  }
+</style>
+</head>
+<body>
+<h1>Analyser — User Guide</h1>
+<blockquote>
+<p><strong>Version:</strong> 2.0 · <strong>Last updated:</strong> June 2026</p>
+</blockquote>
+<p>Analyser is a browser-based tool for inspecting and comparing <code>.fit</code> activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.</p>
+<hr>
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#1-getting-started">Getting Started</a></li>
+<li><a href="#2-the-interface">The Interface</a></li>
+<li><a href="#3-device-comparison--single-file">Device Comparison — Single File</a><ul>
+<li>3.1 <a href="#31-device-toggle-bar">Device Toggle Bar</a></li>
+<li>3.2 <a href="#32-charts-tab">Charts Tab</a></li>
+<li>3.3 <a href="#33-summary-tab">Summary Tab</a></li>
+<li>3.4 <a href="#34-meanmax-tab">Mean/Max Tab</a></li>
+<li>3.5 <a href="#35-map-tab">Map Tab</a></li>
+</ul>
+</li>
+<li><a href="#4-device-comparison--multiple-files">Device Comparison — Multiple Files</a><ul>
+<li>4.1 <a href="#41-loading-multiple-files">Loading Multiple Files</a></li>
+<li>4.2 <a href="#42-different-session-files">Different-Session Files</a></li>
+<li>4.3 <a href="#43-multi-file-device-bar">Multi-File Device Bar</a></li>
+<li>4.4 <a href="#44-fine-tuning-timing">Fine-Tuning Timing</a></li>
+</ul>
+</li>
+<li><a href="#5-event-comparison">Event Comparison</a></li>
+<li><a href="#6-exporting-data">Exporting Data</a><ul>
+<li>6.1 <a href="#61-csv-export">CSV Export</a></li>
+<li>6.2 <a href="#62-excel-export">Excel Export</a></li>
+<li>6.3 <a href="#63-png-chart-export">PNG Chart Export</a></li>
+</ul>
+</li>
+<li><a href="#7-syncing-device-labels-across-devices">Syncing Device Labels Across Devices</a><ul>
+<li>7.1 <a href="#71-how-sync-works">How Sync Works</a></li>
+<li>7.2 <a href="#72-linking-a-second-device">Linking a Second Device</a></li>
+<li>7.3 <a href="#73-sync-status-and-errors">Sync Status and Errors</a></li>
+<li>7.4 <a href="#74-resetting-your-sync-identity">Resetting Your Sync Identity</a></li>
+</ul>
+</li>
+<li><a href="#8-reference">Reference</a></li>
+</ol>
+<hr>
+<h2>1. Getting Started</h2>
+<p>Open Analyser in your browser. You are greeted with the landing page, which contains a drop zone and a file picker.</p>
+<p><img src="screenshots/01-landing-page.png" alt="Landing page showing the drop zone"></p>
+<p><strong>To load a file:</strong></p>
+<ul>
+<li><strong>Drag and drop</strong> one or more <code>.fit</code> files onto the drop zone, or</li>
+<li>Click <strong>Choose files</strong> to open the system file picker.</li>
+</ul>
+<p>You can load <strong>up to 6 files</strong> at once. Once the files are parsed, you are taken directly to the <strong>Device Comparison</strong> view.</p>
+<blockquote>
+<p><strong>Supported format:</strong> <code>.fit</code> (Flexible and Interoperable Data Transfer — the standard format exported by Garmin watches, Wahoo computers, and most ANT+ devices). Files from <code>.tcx</code> and <code>.gpx</code> sources are not currently supported.</p>
+</blockquote>
+<hr>
+<h2>2. The Interface</h2>
+<p>After loading a file, the application has two main views:</p>
+<table>
+<thead>
+<tr>
+<th>View</th>
+<th>What it shows</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>⚡ <strong>Device Comparison</strong></td>
+<td>Sensor streams from one or more files displayed side-by-side on a shared time or distance axis</td>
+</tr>
+<tr>
+<td>🏃 <strong>Event Comparison</strong></td>
+<td>Two or more runs of the same course aligned by distance, showing where time was gained or lost</td>
+</tr>
+</tbody></table>
+<p>The <strong>Device Comparison</strong> view (described in sections 3–4) is the primary view and opens automatically when you load a file.</p>
+<h3>Navigation</h3>
+<p>On a <strong>desktop</strong> browser, the two views are accessible from the left sidebar. Click <strong>⚡ Device Comparison</strong> or <strong>🏃 Event Comparison</strong> to switch modes.</p>
+<p>On a <strong>tablet or phone</strong>, the sidebar is hidden by default. Tap the <strong>☰ menu button</strong> in the top-left corner to slide out the navigation drawer. Tap any item or tap outside the drawer to close it. You can also swipe left across the drawer to close it.</p>
+<p>On a <strong>phone</strong> (narrow screen), a <strong>bottom navigation bar</strong> appears at the foot of the screen with the same ⚡ Device and 🏃 Event buttons for quick switching without opening the drawer.</p>
+<h3>Toolbar Controls</h3>
+<p>On tablet and phone, the toolbar controls (Device Toggle Bar, Channel Toggle Bar, Fine-tune timing) are hidden behind a collapsible panel. Tap the <strong>Devices &amp; Options</strong> (or <strong>Channels &amp; Options</strong>) button to expand or collapse the controls. On desktop the controls are always visible.</p>
+<h3>Theme</h3>
+<p>The <strong>Theme</strong> control is in the bottom of the sidebar (or navigation drawer), between the X-axis toggle and the Smoothing slider.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>🖥 Sys</strong> (default)</td>
+<td>Follows your operating system&#39;s dark/light preference</td>
+</tr>
+<tr>
+<td><strong>☀ Lit</strong></td>
+<td>Forces the light theme regardless of OS setting</td>
+</tr>
+<tr>
+<td><strong>🌙 Drk</strong></td>
+<td>Forces the dark theme regardless of OS setting</td>
+</tr>
+</tbody></table>
+<p>Your choice is saved in your browser and restored the next time you open Analyser.</p>
+<hr>
+<h2>3. Device Comparison — Single File</h2>
+<p>Loading a single file opens the Device Comparison view with all detected sensor streams active.</p>
+<p><img src="screenshots/02-compare-overview.png" alt="Device Comparison overview with a single Ayr Parkrun FIT file loaded"></p>
+<p>The view is divided into:</p>
+<ul>
+<li><strong>Left sidebar</strong> — navigation and file controls</li>
+<li><strong>Device Toggle Bar</strong> — sensors detected in the file, grouped by channel</li>
+<li><strong>Tab panel</strong> — Charts, Summary, Mean/Max, and Map tabs</li>
+</ul>
+<hr>
+<h3>3.1 Device Toggle Bar</h3>
+<p>The Device Toggle Bar sits at the top of the content area and lists every sensor stream detected in the loaded file.</p>
+<p><img src="screenshots/03-device-toggle-bar.png" alt="Device Toggle Bar showing sensors grouped by channel"></p>
+<p><strong>Key concepts:</strong></p>
+<ul>
+<li>Each <strong>pill</strong> represents one device contributing to a channel (e.g. a Polar H10 contributing Heart Rate).</li>
+<li><strong>Active</strong> devices (highlighted in blue) are included in all charts and statistics. Click a pill to toggle it on or off.</li>
+<li>Channels with a <strong>✦</strong> indicator have data from two or more devices — these are directly comparable.</li>
+<li><strong>Multi-metric devices</strong> (devices recording 3+ channels, such as a Garmin watch) appear as a single expandable pill. Click the <strong>▾</strong> arrow to see the individual channels.</li>
+<li>Devices that were connected but recorded no data are shown as dashed, semi-transparent pills and cannot be toggled.</li>
+</ul>
+<p><strong>Data quality warnings:</strong></p>
+<p>When Analyser detects sensor anomalies (signal spikes, data dropouts, or GPS drift), a red <strong>⚠ N</strong> badge appears next to the affected channel label, where N is the number of anomaly events detected. Hover the badge to see a breakdown (e.g. &quot;2 spikes, 1 dropout&quot;). If GPS position anomalies are detected, a separate <strong>GPS ⚠ N</strong> section appears at the bottom of the bar. See <a href="#32-charts-tab">section 3.2</a> for anomaly markers on charts and <a href="#35-map-tab">section 3.5</a> for GPS drift circles on the map.</p>
+<p><strong>Renaming a device:</strong></p>
+<p>Double-click any device pill to rename it. Type the new label and press <strong>Enter</strong> to confirm, or <strong>Escape</strong> to cancel. Labels are saved locally in your browser and are restored automatically the next time you load a file from the same device — this works for all device types, including Garmin watches, Stryd pods, ANT+ sensors, and BLE devices.</p>
+<hr>
+<h3>3.2 Charts Tab</h3>
+<p>The Charts tab displays time-series data for every active channel.</p>
+<p><img src="screenshots/04-charts-tab.png" alt="Charts tab showing heart rate, power, and cadence over time"></p>
+<p><strong>Reading the charts:</strong></p>
+<ul>
+<li>Each chart plots one channel (e.g. Heart Rate, Power, Pace).</li>
+<li>The <strong>X axis</strong> is either elapsed time or distance — toggle between them with the <strong>Time / Distance</strong> buttons at the top.</li>
+<li>Multiple devices contributing to the same channel each appear as a separate line.</li>
+<li><strong>Pace</strong> uses an inverted Y axis — faster pace (lower min/km) appears higher on the chart, which matches the intuition of &quot;going faster&quot;. Pace is only shown for running activities; it is suppressed for cycling files where it is not meaningful.</li>
+</ul>
+<p><strong>Interacting with the charts:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Hover</td>
+<td>Tooltip shows exact values across all series at that position</td>
+</tr>
+<tr>
+<td>Click + drag</td>
+<td>Zoom in on a time/distance range</td>
+</tr>
+<tr>
+<td>Double-click</td>
+<td>Reset zoom</td>
+</tr>
+<tr>
+<td>Scroll wheel</td>
+<td>Zoom in/out (all charts stay synchronised)</td>
+</tr>
+</tbody></table>
+<p><strong>Lap markers</strong> appear as faint vertical lines across all charts. Hover a marker to see the lap number and split time.</p>
+<p><strong>Per-series statistics:</strong></p>
+<p>Below each chart, a compact stats row shows the <strong>minimum</strong>, <strong>average</strong>, and <strong>maximum</strong> for every active device series:</p>
+<ul>
+<li>Each entry is colour-coded with a dot matching the chart line so you can immediately associate the number with the series.</li>
+<li>Pace values are formatted as M:SS. Because pace is an inverted metric (lower min/km = faster), the labels are reversed: <strong>max</strong> shows the fastest pace and <strong>min</strong> shows the slowest, displayed as <code>max / avg / min</code>. Numbers still read ascending left-to-right.</li>
+<li>Hover any entry to see the exact sample count and x-axis range it covers.</li>
+<li><strong>Zoom-aware:</strong> when you zoom into a region, the stats recalculate using only the visible data. Zoom back out (or double-click) to see full-activity stats.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> Stats in this row reflect the current smoothing and axis mode (distance or time) and may differ slightly from the Summary tab, which uses the raw unsmoothed data from the original file.</p>
+</blockquote>
+<p><strong>Data quality markers:</strong></p>
+<p>When Analyser detects sensor anomalies in the active channel, red <strong>◆ diamond markers</strong> appear on the chart at the positions where anomalies occurred. These highlight:</p>
+<ul>
+<li><strong>Spikes</strong> — brief, implausibly high values (e.g. a momentary heart rate reading of 220 bpm)</li>
+<li><strong>Dropouts</strong> — gaps where the sensor stopped transmitting (value 0 or absent for 10+ seconds mid-activity)</li>
+</ul>
+<p><strong>Click a diamond marker</strong> to zoom the chart to ±15 seconds (or ±50 metres in distance mode) around the anomaly, making it easy to inspect the surrounding data in context. Double-click the chart to zoom back out.</p>
+<blockquote>
+<p>GPS drift anomalies (where the GPS signal jumped to an implausible position) are shown on the <strong>Map tab</strong> as red circles, not on time-series charts.</p>
+</blockquote>
+<p><strong>Smoothing:</strong></p>
+<p>A smoothing control lets you apply a rolling average to reduce sensor noise. Increase the window (in seconds) to smooth out spikes; set it to 1 s for raw data. Smoothing applies to all channels simultaneously.</p>
+<hr>
+<h3>3.3 Summary Tab</h3>
+<p>The Summary tab shows aggregate statistics for every active device and channel.</p>
+<p><img src="screenshots/05-summary-tab.png" alt="Summary tab showing per-device statistics"></p>
+<p>For each channel, the table shows:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Device</strong></td>
+<td>The sensor that recorded this channel</td>
+</tr>
+<tr>
+<td><strong>Avg</strong></td>
+<td>Time-weighted average over the active portion of the activity</td>
+</tr>
+<tr>
+<td><strong>Max</strong></td>
+<td>Peak value recorded</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td>Cumulative value (distance, calories) — shown where applicable</td>
+</tr>
+</tbody></table>
+<p>Toggling devices in the Device Toggle Bar updates the Summary table immediately.</p>
+<hr>
+<h3>3.4 Mean/Max Tab</h3>
+<p>The Mean/Max tab plots the <strong>best average power</strong> (or other metric) over every possible duration, from one second up to the full activity length.</p>
+<p><img src="screenshots/06-meanmax-tab.png" alt="Mean/Max tab showing power curve"></p>
+<p>This is the standard &quot;Critical Power curve&quot; or &quot;Power Duration curve&quot; used in cycling and running:</p>
+<ul>
+<li>The Y axis is the best average power achieved for the duration on the X axis.</li>
+<li>A high, flat curve indicates sustained high output; a steep drop-off indicates strength over short durations but limited endurance.</li>
+<li>When multiple files are loaded, each file produces its own curve — load two sessions to compare fitness progress.</li>
+</ul>
+<hr>
+<h3>3.5 Map Tab</h3>
+<p>The Map tab renders the GPS route recorded in the activity.</p>
+<p><img src="screenshots/07-map-basic.png" alt="Map tab showing GPS route from the Ayr Parkrun"></p>
+<p><strong>Tile layers:</strong></p>
+<p>A <strong>Map Layer</strong> panel is always visible in the <strong>top-left</strong> corner of the map. Click any layer name to switch the base map:</p>
+<p><img src="screenshots/08-map-tile-switcher.png" alt="Map showing the always-visible tile layer panel with five providers"></p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Streets</strong> (default)</td>
+<td>Road runs, orientating yourself</td>
+</tr>
+<tr>
+<td><strong>Satellite</strong></td>
+<td>Seeing the actual terrain</td>
+</tr>
+<tr>
+<td><strong>Topo</strong></td>
+<td>Hilly routes — contour lines visible</td>
+</tr>
+<tr>
+<td><strong>Cycling</strong></td>
+<td>Bike-specific road markings</td>
+</tr>
+<tr>
+<td><strong>Dark</strong></td>
+<td>Low-glare, high-contrast viewing</td>
+</tr>
+</tbody></table>
+<p><strong>GPS drift indicators:</strong></p>
+<p>If Analyser detects GPS position anomalies (points where the GPS signal jumped to an implausible location), small <strong>red circles</strong> appear on the map route at those positions. Hover a circle to see the implied speed that triggered the detection. These markers help you identify segments where GPS accuracy was poor, so you can discount those portions of the route.</p>
+<p><strong>Metric colouring:</strong></p>
+<p>Use the <strong>Colour by</strong> dropdown in the <strong>top-right</strong> of the map to shade the route by a metric such as pace, heart rate, or power. The colour gradient runs from blue (low values) to red (high values). A legend appears in the bottom-right showing the value range.</p>
+<p><strong>Metric strip chart:</strong></p>
+<p>When you select a metric in the <strong>Colour by</strong> dropdown, a strip chart slides in below the map showing that channel&#39;s values plotted against <strong>distance</strong>. The strip chart occupies approximately 30% of the map panel height; the map retains the remaining 70%.</p>
+<ul>
+<li>Select <strong>None</strong> in the dropdown to hide the strip chart and return the map to full height.</li>
+<li>On <strong>tablet and phone</strong> the strip chart is collapsed by default — tap the <strong>Metric Chart ▾</strong> header to expand it.</li>
+<li>A <strong>line / gradient</strong> toggle button in the strip chart header switches between a standard line and a spectral gradient style that matches the map route colouring (single-file only; gradient is disabled when multiple files are loaded).</li>
+</ul>
+<p><strong>Bidirectional hover sync:</strong></p>
+<p>The map and strip chart are linked in both directions:</p>
+<ul>
+<li>Hover over the <strong>map route</strong> — a crosshair appears on the strip chart at the corresponding distance.</li>
+<li>Hover over the <strong>strip chart</strong> — the position marker on the map moves to the corresponding GPS location on the route.</li>
+<li>Move off either surface to clear the cursor on the other.</li>
+</ul>
+<p><strong>Hover interaction (Charts tab):</strong></p>
+<p>Hovering over the map route also shows a crosshair on all open Charts-tab charts, letting you pinpoint exactly what your metrics were at a specific GPS location.</p>
+<hr>
+<h2>4. Device Comparison — Multiple Files</h2>
+<p>Analyser supports loading up to <strong>6 files simultaneously</strong>, enabling you to compare sensor data across different activities or devices.</p>
+<h3>4.1 Loading Multiple Files</h3>
+<p>Select multiple <code>.fit</code> files in the file picker (hold Shift or Cmd/Ctrl to select more than one), or drag and drop multiple files onto the drop zone at once.</p>
+<p><img src="screenshots/09-multifile-overview.png" alt="Multi-file compare overview with two Zwift TrainerRoad sessions loaded"></p>
+<blockquote>
+<p><strong>Note:</strong> If the loaded files are from different sessions (start times more than 1 hour apart), Device Comparison will be unavailable — see <a href="#42-different-session-files">section 4.2</a>.</p>
+</blockquote>
+<hr>
+<h3>4.2 Different-Session Files</h3>
+<p>Device Comparison is designed for files recorded <strong>during the same session</strong> — for example, two devices worn simultaneously on the same run. Comparing files from completely different activities (different days, different events) produces charts with no meaningful relationship between the data streams.</p>
+<p>If you load two or more files whose start times are more than 1 hour apart, Analyser detects this and shows an explanation panel instead of charts:</p>
+<p><img src="screenshots/15-different-sessions-gate.png" alt="Gate panel shown when files are from different sessions"></p>
+<p>The <strong>⚡ Device Comparison</strong> button in the sidebar also appears greyed-out with a tooltip explaining why it is unavailable.</p>
+<p><strong>What to do:</strong></p>
+<ul>
+<li>Click <strong>Switch to Event Comparison →</strong> to use the 🏃 Event Comparison view, which is designed for comparing runs of the same course across different sessions.</li>
+<li>Or remove one of the loaded files (using the × button in the sidebar) until the remaining files are from the same session.</li>
+</ul>
+<p>Once the remaining files overlap in time (within 1 hour), Device Comparison becomes available again automatically.</p>
+<hr>
+<h3>4.3 Multi-File Device Bar</h3>
+<p>In multi-file mode the Device Toggle Bar groups sensors by their source file, with a coloured left-border header for each file.</p>
+<p><img src="screenshots/10-multifile-device-bar.png" alt="Multi-file device bar grouped by file with colour-coded headers"></p>
+<ul>
+<li>Each file gets a unique <strong>colour</strong> (blue, orange, green, purple, …). All chart series from that file share the same colour.</li>
+<li>Channels with data from two or more files display the <strong>✦</strong> comparable indicator — these are the most valuable channels to compare.</li>
+<li>Use the <strong>Select all / Deselect all</strong> button to quickly show or hide everything.</li>
+</ul>
+<hr>
+<h3>4.4 Fine-Tuning Timing</h3>
+<p>Even when files are from the same session, GPS clocks sometimes drift by a few seconds. The <strong>Fine-tune timing</strong> control lets you shift any file forwards or backwards in time to align the traces precisely.</p>
+<p><img src="screenshots/12-time-offset-control.png" alt="Fine-tune timing panel with per-file offset controls"></p>
+<p>Click the <strong>⏱ Fine-tune timing</strong> button (below the Device Toggle Bar, visible in multi-file + time-axis mode) to expand the panel. This control is only relevant when files are from the <strong>same session</strong> — if they are from different sessions, the gate panel is shown instead (see <a href="#42-different-session-files">section 4.2</a>).</p>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Function</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>−10 / −1</strong> buttons</td>
+<td>Shift the file 10 s or 1 s earlier</td>
+</tr>
+<tr>
+<td><strong>+1 / +10</strong> buttons</td>
+<td>Shift the file 1 s or 10 s later</td>
+</tr>
+<tr>
+<td><strong>Numeric input</strong></td>
+<td>Type an exact offset in seconds</td>
+</tr>
+<tr>
+<td><strong>↺</strong> (Reset)</td>
+<td>Return to the GPS-anchored auto-computed offset</td>
+</tr>
+</tbody></table>
+<p>The first loaded file is always the <strong>reference</strong> (offset = 0). All other files are shifted relative to it. The offset is shown in the <strong>N adjusted</strong> badge on the toggle button.</p>
+<p><strong>Anchor source badge:</strong></p>
+<p>Next to each filename in the expanded panel, a small coloured badge shows how Analyser determined the auto alignment for that file:</p>
+<table>
+<thead>
+<tr>
+<th>Badge</th>
+<th>Colour</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Timer</strong></td>
+<td>Blue</td>
+<td>Aligned to the FIT timer-start event — highest accuracy</td>
+</tr>
+<tr>
+<td><strong>GPS move</strong></td>
+<td>Blue</td>
+<td>Aligned to the first GPS record with movement — typical outdoor</td>
+</tr>
+<tr>
+<td><strong>GPS fix</strong></td>
+<td>Amber</td>
+<td>Aligned to the first GPS fix (stationary) — slightly less precise</td>
+</tr>
+<tr>
+<td><strong>File start</strong></td>
+<td>Grey</td>
+<td>No GPS and no timer — aligned by file start time only</td>
+</tr>
+<tr>
+<td><strong>Workout</strong></td>
+<td>Green</td>
+<td>Aligned to the first structured workout step (indoor)</td>
+</tr>
+<tr>
+<td><strong>Indoor</strong></td>
+<td>Green</td>
+<td>Aligned to the first movement detected (speed/power/cadence)</td>
+</tr>
+</tbody></table>
+<p>Blue and green badges indicate good-quality alignment. An amber or grey badge on one file while others are blue or green may explain a small residual offset — use the nudge buttons to correct it.</p>
+<p><strong>Location mismatch warning:</strong></p>
+<p>If Analyser detects that the GPS start points of the loaded files are more than 50 m apart, an amber banner appears at the top of the charts area:</p>
+<blockquote>
+<p>⚠ GPS anchor points are more than 50m apart — these files may be from different locations. Distance comparison may not reflect a shared course.</p>
+</blockquote>
+<p>This can occur if you accidentally loaded files from two different events. Dismiss the banner with the <strong>✕</strong> button, or remove the mismatched file from the sidebar.</p>
+<p><strong>Indoor and mixed-session warnings:</strong></p>
+<p>When Analyser detects that some or all of the loaded files are indoor activities (turbo trainer, treadmill, Zwift, TrainerRoad), it shows one of two banners:</p>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Banner</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Indoor + outdoor files loaded together</td>
+<td>⚠ Amber warning</td>
+<td>Distance mode disabled — the Distance button is greyed out with a tooltip. The axis switches to Time automatically.</td>
+</tr>
+<tr>
+<td>All files are indoor (2+ files)</td>
+<td>ℹ Blue info</td>
+<td>Informational only — distance comparison still works but values are device-estimated, not GPS-measured.</td>
+</tr>
+</tbody></table>
+<p>Both banners are dismissible and reset automatically when you change the loaded files.</p>
+<hr>
+<h2>5. Event Comparison</h2>
+<p>The <strong>Event Comparison</strong> view (🏃) is designed for comparing multiple runs of the same course — for example, several parkruns on the same route — aligned by <strong>distance</strong> to show exactly where time was gained or lost.</p>
+<p><img src="screenshots/14-event-comparison.png" alt="Event Comparison view"></p>
+<p>Load two or more <code>.fit</code> files, then switch to the Event Comparison tab. The view provides:</p>
+<ul>
+<li><strong>Time delta plot</strong> — cumulative seconds gained or lost versus distance. Positive values mean you were ahead of the reference run; negative values mean you were behind.</li>
+<li><strong>Overlaid time-series charts</strong> — pace, speed, heart rate, and power for all files on a shared distance axis.</li>
+<li><strong>Segment bar chart</strong> — per-kilometre or per-lap time difference, highlighting your best and worst segments.</li>
+</ul>
+<blockquote>
+<p><strong>Tip:</strong> Select a reference run using the controls in the sidebar. The time delta is calculated relative to the reference. Try different reference runs to understand where you consistently gain or lose time.</p>
+</blockquote>
+<hr>
+<h2>6. Exporting Data</h2>
+<p>Analyser can export your loaded activity data in three formats: a CSV file, an Excel workbook, and PNG screenshots of individual charts.</p>
+<hr>
+<h3>6.1 CSV Export</h3>
+<p>The tab bar on both the Device Comparison and Event Comparison pages contains a <strong>CSV / Excel</strong> format toggle and an <strong>Export Data</strong> button. CSV is selected by default.</p>
+<p>Clicking <strong>Export Data</strong> with CSV selected downloads a plain-text <code>.csv</code> file immediately — no server involved.</p>
+<p><strong>File structure:</strong></p>
+<ul>
+<li><strong>Single file loaded</strong> — one header row followed by one row per recorded data point. No activity column.</li>
+<li><strong>Multiple files loaded</strong> — one header row followed by all records from all files in load order. An <code>activity</code> column (the source filename) is prepended as the first column so rows can be filtered by file in any spreadsheet tool.</li>
+</ul>
+<p><strong>Columns:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>activity</code></td>
+<td>Source filename — only present when multiple files are loaded</td>
+</tr>
+<tr>
+<td><code>Timestamp</code></td>
+<td>ISO 8601 date-time of the sample (e.g. <code>2026-01-15T09:00:00.000Z</code>)</td>
+</tr>
+<tr>
+<td><code>Elapsed (s)</code></td>
+<td>Seconds since activity start</td>
+</tr>
+<tr>
+<td><code>Distance (m)</code></td>
+<td>Cumulative distance in metres</td>
+</tr>
+<tr>
+<td><em>(channel columns)</em></td>
+<td>One column per channel with at least one non-null value across all loaded files</td>
+</tr>
+</tbody></table>
+<p>The same channel columns as Excel apply: Heart Rate (bpm), Power (W), Cadence (rpm), Speed (km/h), Pace (min/km), Altitude (m), Temperature (°C), and others where available. Channels with no data in any loaded file are omitted. Pace values are formatted as <strong>M:SS strings</strong> (e.g. <code>5:15</code>).</p>
+<p>The file uses <strong>RFC 4180 formatting</strong>: CRLF line endings, quoted fields where values contain commas or quotes.</p>
+<p><strong>Downloaded filename:</strong> <code>analyser-export-YYYY-MM-DD.csv</code> using your local date.</p>
+<hr>
+<h3>6.2 Excel Export</h3>
+<p>Select <strong>Excel</strong> in the format toggle, then click <strong>Export Data</strong> to download an <code>.xlsx</code> workbook — no server involved.</p>
+<p><strong>Workbook structure:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Sheet</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Summary</strong></td>
+<td>One row per loaded file: filename, sport, start time, total distance (km), and elapsed time</td>
+</tr>
+<tr>
+<td><strong>Per-activity sheets</strong></td>
+<td>One sheet per file, named after the filename (truncated to 31 characters; duplicates are suffixed <code>(2)</code>, <code>(3)</code>, etc.)</td>
+</tr>
+</tbody></table>
+<p><strong>Per-activity sheet columns:</strong></p>
+<p>Each activity sheet contains one row per recorded data point with the following columns:</p>
+<ul>
+<li><strong>Timestamp</strong> — wall-clock date and time of the sample (Excel datetime format)</li>
+<li><strong>Elapsed (s)</strong> — seconds since the activity start</li>
+<li><strong>Distance (m)</strong> — cumulative distance in metres</li>
+<li>One column per channel that has at least one non-null value: Heart Rate (bpm), Power (W), Left Power (W), Right Power (W), Cadence (rpm), Speed (km/h), Pace (min/km), Altitude (m), Temperature (°C), Core Temperature (°C), Skin Temperature (°C), Vertical Oscillation (mm), Ground Contact Time (ms), Stride Length (m)</li>
+</ul>
+<p>Channels with no data at all in a given file are omitted from that file&#39;s sheet. Pace values are formatted as <strong>M:SS strings</strong> (e.g. <code>5:15</code>) rather than decimal numbers.</p>
+<p><strong>Downloaded filename:</strong> <code>analyser-export-YYYY-MM-DD.xlsx</code> using your local date.</p>
+<hr>
+<h3>6.3 PNG Chart Export</h3>
+<p>Every chart card has a <strong>⬇ PNG</strong> download button in its header row. Clicking it downloads a PNG screenshot of that chart at <strong>2× pixel density</strong> for sharp rendering on high-DPI displays.</p>
+<p>The PNG uses the chart&#39;s current theme (light or dark) as the background, so what you see is what you get.</p>
+<p><strong>Downloaded filenames</strong> follow the pattern <code>channel-name-YYYY-MM-DD.png</code> (e.g. <code>heart-rate-2026-05-26.png</code>).</p>
+<p>PNG export is available for all four chart types: Time Series, Mean/Max, Time Delta, and Segment Bar.</p>
+<hr>
+<h2>7. Syncing Device Labels Across Devices</h2>
+<p>Device labels you create (by double-clicking a sensor pill) are saved in your browser&#39;s local storage. The <strong>Sync</strong> feature lets you share those labels across multiple browsers or devices — for example, so your phone and laptop both show &quot;Polar H10&quot; instead of &quot;Device 1&quot;.</p>
+<p>Sync is <strong>automatic and account-free</strong>. No sign-in is required. Each browser is assigned a private sync identity (a UUID stored in local storage) the first time it loads Analyser.</p>
+<h3>7.1 How Sync Works</h3>
+<ol>
+<li>On first load, Analyser generates a unique sync identity (UUID) for your browser and pushes your current labels to a cloud key-value store under that identity.</li>
+<li>On every subsequent load, Analyser pulls the latest labels from the cloud and applies them locally — the cloud is the source of truth.</li>
+<li>Whenever you rename or remove a device label, the change is automatically pushed to the cloud in the background.</li>
+<li>All data is keyed by your private UUID. No one else can read or modify your labels without that UUID.</li>
+</ol>
+<blockquote>
+<p><strong>Privacy note:</strong> Labels are stored in Upstash Redis and expire automatically after <strong>90 days</strong> of inactivity. No personal information is stored — only the device labels you assign (e.g. &quot;Polar H10&quot;, &quot;Assioma Duo&quot;) keyed by a randomly generated UUID.</p>
+</blockquote>
+<h3>7.2 Linking a Second Device</h3>
+<p>To share your labels with a second browser or device:</p>
+<ol>
+<li>Open the <strong>Sync</strong> panel in the sidebar footer (click the ☁ Sync toggle).</li>
+<li>On the first device:<ul>
+<li><strong>Scan the QR code</strong> with the second device&#39;s camera app — this opens Analyser with the sync identity pre-loaded.</li>
+<li>Or click <strong>📋 Copy link</strong> and paste the URL into the second device&#39;s browser.</li>
+<li>Or note the <strong>short sync code</strong> (format: <code>XXX-XXXXX</code>, e.g. <code>E6Y-NXEMF</code>).</li>
+</ul>
+</li>
+<li>On the second device, open Analyser and expand the Sync panel:<ul>
+<li>If you used the QR code or copied link, Analyser automatically pulls labels from the first device&#39;s identity — no further action needed.</li>
+<li>If using the short code, type it into the <strong>Link another device</strong> input and press <strong>→</strong> (or Enter). Analyser resolves the code and pulls labels.</li>
+</ul>
+</li>
+</ol>
+<p>After linking, both devices share the same sync identity and labels stay in sync automatically.</p>
+<blockquote>
+<p><strong>Tip:</strong> The QR code and copy-link methods are the most convenient. Use the short code when typing a URL isn&#39;t practical.</p>
+</blockquote>
+<h3>7.3 Sync Status and Errors</h3>
+<p>The Sync panel shows a status line:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>☁ Syncing across devices ✓ · <em>N min ago</em></td>
+<td>Labels synced successfully; time since last sync</td>
+</tr>
+<tr>
+<td>Setting up sync…</td>
+<td>Initial sync in progress (first visit)</td>
+</tr>
+<tr>
+<td>⚠ Sync error — retry</td>
+<td>A push or pull failed; click <strong>retry</strong> to try again</td>
+</tr>
+</tbody></table>
+<p>Network errors are non-fatal — if a push fails, your local labels are unchanged and the error is shown in the panel. Analyser will retry automatically on the next label change.</p>
+<h3>7.4 Resetting Your Sync Identity</h3>
+<p>If you want to <strong>break the link</strong> between devices (e.g. after lending your laptop to someone):</p>
+<ol>
+<li>Open the Sync panel and click <strong>Reset sync identity</strong> at the bottom.</li>
+<li>Confirm when prompted.</li>
+</ol>
+<p>A new UUID is generated and your current labels are pushed under the new identity. Devices still using the old identity will no longer receive your label updates.</p>
+<blockquote>
+<p><strong>Note:</strong> Resetting does not delete the old identity from the cloud — it simply stops being used. The old data will expire after 90 days of inactivity.</p>
+</blockquote>
+<hr>
+<h2>8. Reference</h2>
+<h3>Sync — Quick Reference</h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Open Sync panel</td>
+<td>Click <strong>☁ Sync</strong> in the sidebar footer</td>
+</tr>
+<tr>
+<td>Share labels with another device</td>
+<td>QR code, Copy link, or short code</td>
+</tr>
+<tr>
+<td>Enter a short code</td>
+<td>Type <code>XXX-XXXXX</code> in the <strong>Link another device</strong> input and press →</td>
+</tr>
+<tr>
+<td>Break the link / start fresh</td>
+<td><strong>Reset sync identity</strong> in the Sync panel</td>
+</tr>
+<tr>
+<td>Check last sync time</td>
+<td>Status line in the Sync panel</td>
+</tr>
+</tbody></table>
+<h3>Keyboard Shortcuts</h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Double-click</strong> a chart</td>
+<td>Reset zoom</td>
+</tr>
+<tr>
+<td><strong>Enter</strong> (in rename input)</td>
+<td>Confirm device rename</td>
+</tr>
+<tr>
+<td><strong>Escape</strong> (in rename input)</td>
+<td>Cancel device rename</td>
+</tr>
+<tr>
+<td><strong>Enter</strong> (in offset input)</td>
+<td>Confirm time offset</td>
+</tr>
+</tbody></table>
+<h3>Supported Sensor Types</h3>
+<table>
+<thead>
+<tr>
+<th>Sensor</th>
+<th>Channels recorded</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Heart Rate Monitor (HRM)</td>
+<td>Heart Rate</td>
+</tr>
+<tr>
+<td>Power Meter (bike)</td>
+<td>Power, Left/Right balance</td>
+</tr>
+<tr>
+<td>Stryd Running Power</td>
+<td>Power, Form Power, Ground Contact Time, Stride Length</td>
+</tr>
+<tr>
+<td>Core Body Temperature</td>
+<td>Core Temperature, Skin Temperature</td>
+</tr>
+<tr>
+<td>Speed/Cadence Sensor</td>
+<td>Speed, Cadence</td>
+</tr>
+<tr>
+<td>Running Dynamics Pod</td>
+<td>Vertical Oscillation, Ground Contact Time, Stride Length</td>
+</tr>
+<tr>
+<td>Watch / Primary device</td>
+<td>All remaining channels: GPS, Altitude, Speed, Pace, Temperature</td>
+</tr>
+</tbody></table>
+<h3>File Limits</h3>
+<ul>
+<li><strong>Maximum files per session:</strong> 6</li>
+<li><strong>Supported format:</strong> <code>.fit</code> (ANT/Garmin FIT protocol)</li>
+<li>All parsing happens <strong>locally in your browser</strong> — no data is uploaded to any server.</li>
+</ul>
+<h3>Troubleshooting</h3>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>File loads but no charts appear</td>
+<td>No sensor data in the file</td>
+<td>Check the Device Toggle Bar — all devices may be deselected or no-data</td>
+</tr>
+<tr>
+<td>Device Comparison shows &quot;unavailable&quot; panel</td>
+<td>Files are from different sessions (start times &gt;1 hour apart)</td>
+<td>Use <strong>Event Comparison</strong> (🏃) to compare runs of the same course, or remove the out-of-session file</td>
+</tr>
+<tr>
+<td>Two same-session files don&#39;t align on the time axis</td>
+<td>GPS clock drift between devices</td>
+<td>Check the anchor source badges in Fine-tune timing (section 4.4); files with grey or amber badges may need a small manual nudge</td>
+</tr>
+<tr>
+<td>Location mismatch warning appears</td>
+<td>Files are from different GPS locations (anchors &gt;50 m apart)</td>
+<td>Check the files loaded — you may have mixed files from different events; dismiss the banner or remove the mismatched file</td>
+</tr>
+<tr>
+<td>Map shows no route</td>
+<td>FIT file has no GPS data</td>
+<td>Some indoor activities (pure TrainerRoad, treadmill) do not record GPS. Zwift files do have a map (virtual route).</td>
+</tr>
+<tr>
+<td>Distance button greyed out</td>
+<td>Indoor and outdoor files loaded together</td>
+<td>Distance axes are incompatible — use Time mode for this comparison, or load only one type of activity</td>
+</tr>
+<tr>
+<td>&quot;All files are indoor&quot; banner appears</td>
+<td>All loaded files are indoor activities</td>
+<td>Informational only — distance comparison still works but is device-estimated. Dismiss or ignore.</td>
+</tr>
+<tr>
+<td>Pace chart looks upside-down</td>
+<td>Expected — faster pace (lower min/km) is plotted higher</td>
+<td>This is correct; it matches the intuition of &quot;going faster = higher on chart&quot;</td>
+</tr>
+<tr>
+<td>Device name shows as &quot;Device N&quot;</td>
+<td>Device not yet labelled</td>
+<td>Double-click the pill to rename it; the label is saved in your browser and restored for future sessions with any device of the same type</td>
+</tr>
+<tr>
+<td>Sync panel shows &quot;⚠ Sync error&quot;</td>
+<td>Network error or server unavailable</td>
+<td>Click <strong>retry</strong> in the Sync panel; your local labels are unaffected</td>
+</tr>
+<tr>
+<td>Short code entry says &quot;Code not found&quot;</td>
+<td>Code is invalid, mistyped, or the 90-day TTL has expired</td>
+<td>Check the code format (<code>XXX-XXXXX</code>) and re-copy it from the originating device</td>
+</tr>
+<tr>
+<td>Labels on second device are out of date</td>
+<td>Sync has not triggered yet</td>
+<td>Open the Sync panel — pulling happens automatically on load; refresh the page if needed</td>
+</tr>
+<tr>
+<td>Sync panel shows &quot;Setting up sync…&quot; for a long time</td>
+<td>Connectivity issue on first visit</td>
+<td>Check your network; the sync identity is assigned locally first so labels still work offline</td>
+</tr>
+</tbody></table>
+<hr>
+<p><em>Screenshots taken using real activity files: Ayr Parkrun and Zwift/TrainerRoad sessions.</em></p>
+
+</body>
+</html>

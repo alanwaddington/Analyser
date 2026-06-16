@@ -12,7 +12,8 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"docs:pdf": "node --experimental-strip-types scripts/generate-docs-pdf.ts"
+		"docs:build": "node --experimental-strip-types scripts/generate-docs.ts",
+		"docs:pdf": "node --experimental-strip-types scripts/generate-docs.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",

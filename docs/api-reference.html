@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Analyser — API Reference</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    color: #1a1a2e;
+    line-height: 1.65;
+  }
+
+  body {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 2.5rem;
+  }
+
+  h1 { font-size: 22pt; margin-bottom: 6pt; padding-bottom: 6pt; border-bottom: 2px solid #3b82f6; color: #1e3a5f; }
+  h2 { font-size: 15pt; margin-top: 22pt; margin-bottom: 8pt; padding-bottom: 4pt; border-bottom: 1px solid #d1d5db; color: #1e3a5f; }
+  h3 { font-size: 12pt; margin-top: 16pt; margin-bottom: 6pt; color: #1e3a5f; }
+  h4 { font-size: 10.5pt; margin-top: 12pt; margin-bottom: 4pt; color: #374151; }
+
+  p  { margin-bottom: 8pt; }
+  ul, ol { margin: 6pt 0 10pt 20pt; }
+  li { margin-bottom: 3pt; }
+
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  blockquote {
+    margin: 10pt 0;
+    padding: 8pt 12pt;
+    border-left: 3px solid #3b82f6;
+    background: #eff6ff;
+    border-radius: 0 4px 4px 0;
+    color: #374151;
+  }
+  blockquote p { margin: 0; }
+
+  code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 9pt;
+    background: #f3f4f6;
+    padding: 1pt 4pt;
+    border-radius: 3px;
+  }
+  pre {
+    background: #f3f4f6;
+    padding: 10pt 14pt;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 10pt 0;
+  }
+  pre code { background: none; padding: 0; font-size: 9pt; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10pt 0 14pt;
+    font-size: 9.5pt;
+  }
+  th {
+    background: #1e3a5f;
+    color: #ffffff;
+    text-align: left;
+    padding: 5pt 8pt;
+    font-weight: 600;
+  }
+  td {
+    padding: 5pt 8pt;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  tr:nth-child(even) td { background: #f9fafb; }
+  tr:last-child td { border-bottom: none; }
+
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 12pt auto;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 18pt 0;
+  }
+
+  @media print {
+    body { max-width: 100%; padding: 20mm 22mm; }
+    h2 { page-break-before: auto; }
+    h2:first-of-type { page-break-before: avoid; }
+    img, table, blockquote { page-break-inside: avoid; }
+    a { color: #1e3a5f; }
+  }
+</style>
+</head>
+<body>
+<h1>Analyser — API Reference</h1>
+<blockquote>
+<p><strong>Version:</strong> 1.0 · <strong>Last updated:</strong> May 2026</p>
+</blockquote>
+<p>The Analyser API provides server-side endpoints for the cross-device label sync feature (PR #80). All routes are SvelteKit server endpoints located under <code>src/routes/api/</code>.</p>
+<hr>
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#1-authentication">Authentication</a></li>
+<li><a href="#2-endpoints">Endpoints</a><ul>
+<li><a href="#get-apilabelsuuid">GET /api/labels/[uuid]</a></li>
+<li><a href="#put-apilabelsuuid">PUT /api/labels/[uuid]</a></li>
+<li><a href="#get-apilabelsresolvecode">GET /api/labels/resolve/[code]</a></li>
+</ul>
+</li>
+<li><a href="#3-error-responses">Error Responses</a></li>
+<li><a href="#4-rate-limiting">Rate Limiting</a></li>
+<li><a href="#5-data-expiry">Data Expiry</a></li>
+</ol>
+<hr>
+<h2>1. Authentication</h2>
+<p>These endpoints use no authentication tokens or API keys. Access control is by obscurity of the UUID — only a client that knows the UUID can read or write its labels.</p>
+<p>UUIDs are randomly generated (<code>crypto.randomUUID()</code>) in the browser and stored in <code>localStorage</code>. They are never transmitted except in the URL path of these API calls and in the <code>?sync=</code> query parameter used for device-linking.</p>
+<hr>
+<h2>2. Endpoints</h2>
+<h3>GET /api/labels/[uuid]</h3>
+<p>Returns the stored label map for a sync identity.</p>
+<p><strong>Path parameter</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>uuid</code></td>
+<td>UUIDv4 (<code>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</code>)</td>
+<td>The sync identity UUID</td>
+</tr>
+</tbody></table>
+<p><strong>Responses</strong></p>
+<p><code>200 OK</code></p>
+<pre><code class="language-json">{
+  &quot;labels&quot;: {
+    &quot;garmin:3151:120&quot;: &quot;Polar H10&quot;,
+    &quot;garmin:3151:11&quot;:  &quot;Assioma Duo&quot;
+  }
+}
+</code></pre>
+<p>The <code>labels</code> object is a <code>Record&lt;string, string&gt;</code> mapping device keys (as produced by <code>deviceKey()</code> in <code>src/lib/utils/deviceChannels.ts</code>) to user-assigned label strings.</p>
+<p><code>400 Bad Request</code> — UUID does not match the expected format.</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Invalid UUID format&quot; }
+</code></pre>
+<p><code>404 Not Found</code> — No labels stored for this UUID (new identity, or TTL expired).</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Not found&quot; }
+</code></pre>
+<p><code>500 Internal Server Error</code> — Redis credentials not configured or database unreachable.</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Internal server error&quot; }
+</code></pre>
+<hr>
+<h3>PUT /api/labels/[uuid]</h3>
+<p>Stores or overwrites the label map for a sync identity. Also refreshes the short-code reverse-lookup index.</p>
+<p>This endpoint is called by <code>pushLabels()</code> in <code>src/lib/stores/sync.ts</code> — once on first visit to seed the remote, then automatically after every device label change.</p>
+<p><strong>Path parameter</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>uuid</code></td>
+<td>UUIDv4</td>
+<td>The sync identity UUID</td>
+</tr>
+</tbody></table>
+<p><strong>Request body</strong> (<code>Content-Type: application/json</code>)</p>
+<pre><code class="language-json">{
+  &quot;labels&quot;: {
+    &quot;garmin:3151:120&quot;: &quot;Polar H10&quot;
+  },
+  &quot;shortCode&quot;: &quot;E6Y-NXEMF&quot;
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>labels</code></td>
+<td><code>Record&lt;string, string&gt;</code></td>
+<td>All values must be strings</td>
+</tr>
+<tr>
+<td><code>shortCode</code></td>
+<td><code>string</code></td>
+<td>Must match <code>XXX-XXXXX</code> (3 alphanumeric, dash, 5 alphanumeric)</td>
+</tr>
+</tbody></table>
+<p><strong>Responses</strong></p>
+<p><code>200 OK</code></p>
+<pre><code class="language-json">{ &quot;ok&quot;: true }
+</code></pre>
+<p><code>400 Bad Request</code> — Invalid UUID, malformed JSON, or body fails validation.</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Body must contain a labels object (string → string) and a shortCode string (XXX-XXXXX)&quot; }
+</code></pre>
+<p><code>500 Internal Server Error</code></p>
+<p><strong>Side effects</strong></p>
+<p>Two Redis keys are written (or refreshed) atomically:</p>
+<ul>
+<li><code>labels:{uuid}</code> — the label map, with a rolling 90-day TTL</li>
+<li><code>code:{shortCode}</code> — the UUID string, with a rolling 90-day TTL</li>
+</ul>
+<hr>
+<h3>GET /api/labels/resolve/[code]</h3>
+<p>Resolves a short sync code to its full UUID. Used when a user types a short code in the Sync panel&#39;s &quot;Link another device&quot; input.</p>
+<p><strong>Path parameter</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>code</code></td>
+<td><code>XXX-XXXXX</code> (e.g. <code>E6Y-NXEMF</code>)</td>
+<td>The short sync code</td>
+</tr>
+</tbody></table>
+<p><strong>Responses</strong></p>
+<p><code>200 OK</code></p>
+<pre><code class="language-json">{ &quot;uuid&quot;: &quot;a1b2c3d4-e5f6-7890-abcd-ef1234567890&quot; }
+</code></pre>
+<p><code>400 Bad Request</code> — Code does not match the expected format.</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Invalid sync code format — expected XXX-XXXXX (8 alphanumeric chars with dash)&quot; }
+</code></pre>
+<p><code>404 Not Found</code> — Code not found in Redis (never stored, or 90-day TTL expired).</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Sync code not found or expired&quot; }
+</code></pre>
+<p><code>429 Too Many Requests</code> — Rate limit exceeded (10 requests per minute per IP).</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Too many requests — please wait before trying again&quot; }
+</code></pre>
+<p>Response includes <code>Retry-After: 60</code> header.</p>
+<p><code>500 Internal Server Error</code></p>
+<hr>
+<h2>3. Error Responses</h2>
+<p>All error responses follow the same shape:</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Human-readable description&quot; }
+</code></pre>
+<p>HTTP status codes used:</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>400</td>
+<td>Invalid input (bad UUID format, malformed body, invalid short code)</td>
+</tr>
+<tr>
+<td>404</td>
+<td>Resource not found (no data for UUID, unknown short code)</td>
+</tr>
+<tr>
+<td>429</td>
+<td>Rate limit exceeded</td>
+</tr>
+<tr>
+<td>500</td>
+<td>Server error (Redis unavailable or misconfigured)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>4. Rate Limiting</h2>
+<p>The resolve endpoint (<code>GET /api/labels/resolve/[code]</code>) is rate-limited to <strong>10 requests per minute per IP address</strong> to deter brute-force code enumeration.</p>
+<p>The rate limiter is <strong>Redis-backed</strong> (Upstash) and enforced globally across all Vercel serverless instances. It uses an atomic <code>INCR</code> + <code>EXPIRE</code> pipeline per IP key (<code>ratelimit:resolve:{ip}</code>), so the limit cannot be bypassed by routing requests to different function instances. If Redis is unavailable, the limiter <strong>fails open</strong> — requests are allowed through rather than blocked, preserving availability.</p>
+<p>The <code>Retry-After</code> header value is derived from the Redis key&#39;s remaining TTL at the time of the 429 response.</p>
+<p>The <code>GET /api/labels/[uuid]</code> and <code>PUT /api/labels/[uuid]</code> endpoints are not rate-limited. The UUID namespace (36^8 × 36^8 entries) makes enumeration infeasible.</p>
+<hr>
+<h2>5. Data Expiry</h2>
+<p>All Redis entries use a <strong>90-day rolling TTL</strong>. The TTL is refreshed on every successful PUT, so active users never lose their labels. Inactive identities expire automatically with no explicit cleanup required.</p>
+<p>After expiry:</p>
+<ul>
+<li><code>GET /api/labels/{uuid}</code> returns 404 — treated by the client as &quot;no remote data yet&quot;</li>
+<li><code>GET /api/labels/resolve/{code}</code> returns 404 — user sees &quot;Code not found or expired&quot;</li>
+</ul>
+
+</body>
+</html>

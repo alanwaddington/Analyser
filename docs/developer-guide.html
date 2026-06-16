@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Analyser — Developer Guide</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    color: #1a1a2e;
+    line-height: 1.65;
+  }
+
+  body {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 2.5rem;
+  }
+
+  h1 { font-size: 22pt; margin-bottom: 6pt; padding-bottom: 6pt; border-bottom: 2px solid #3b82f6; color: #1e3a5f; }
+  h2 { font-size: 15pt; margin-top: 22pt; margin-bottom: 8pt; padding-bottom: 4pt; border-bottom: 1px solid #d1d5db; color: #1e3a5f; }
+  h3 { font-size: 12pt; margin-top: 16pt; margin-bottom: 6pt; color: #1e3a5f; }
+  h4 { font-size: 10.5pt; margin-top: 12pt; margin-bottom: 4pt; color: #374151; }
+
+  p  { margin-bottom: 8pt; }
+  ul, ol { margin: 6pt 0 10pt 20pt; }
+  li { margin-bottom: 3pt; }
+
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  blockquote {
+    margin: 10pt 0;
+    padding: 8pt 12pt;
+    border-left: 3px solid #3b82f6;
+    background: #eff6ff;
+    border-radius: 0 4px 4px 0;
+    color: #374151;
+  }
+  blockquote p { margin: 0; }
+
+  code {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 9pt;
+    background: #f3f4f6;
+    padding: 1pt 4pt;
+    border-radius: 3px;
+  }
+  pre {
+    background: #f3f4f6;
+    padding: 10pt 14pt;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 10pt 0;
+  }
+  pre code { background: none; padding: 0; font-size: 9pt; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10pt 0 14pt;
+    font-size: 9.5pt;
+  }
+  th {
+    background: #1e3a5f;
+    color: #ffffff;
+    text-align: left;
+    padding: 5pt 8pt;
+    font-weight: 600;
+  }
+  td {
+    padding: 5pt 8pt;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  tr:nth-child(even) td { background: #f9fafb; }
+  tr:last-child td { border-bottom: none; }
+
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 12pt auto;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 18pt 0;
+  }
+
+  @media print {
+    body { max-width: 100%; padding: 20mm 22mm; }
+    h2 { page-break-before: auto; }
+    h2:first-of-type { page-break-before: avoid; }
+    img, table, blockquote { page-break-inside: avoid; }
+    a { color: #1e3a5f; }
+  }
+</style>
+</head>
+<body>
+<h1>Analyser — Developer Guide</h1>
+<blockquote>
+<p><strong>Version:</strong> 1.8 · <strong>Last updated:</strong> June 2026</p>
+</blockquote>
+<p>This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.</p>
+<hr>
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#1-project-setup">Project Setup</a></li>
+<li><a href="#2-architecture-overview">Architecture Overview</a><ul>
+<li>2.1 <a href="#21-echarts-lazy-loading">ECharts Lazy-Loading</a></li>
+</ul>
+</li>
+<li><a href="#3-cross-device-label-sync">Cross-Device Label Sync</a><ul>
+<li>3.1 <a href="#31-design-goals">Design Goals</a></li>
+<li>3.2 <a href="#32-data-model-in-redis">Data Model in Redis</a></li>
+<li>3.3 <a href="#33-identity-lifecycle">Identity Lifecycle</a></li>
+<li>3.4 <a href="#34-sync-store-syncts">Sync Store (<code>sync.ts</code>)</a></li>
+<li>3.4a <a href="#34a-retry--backoff-fetchwithretry">Retry / Backoff (<code>fetchWithRetry</code>)</a></li>
+<li>3.4b <a href="#34b-sidebar-sync-indicator">Sidebar Sync Indicator</a></li>
+<li>3.5 <a href="#35-devicelabels-integration">DeviceLabels Integration</a></li>
+<li>3.6 <a href="#36-api-routes">API Routes</a></li>
+<li>3.7 <a href="#37-syncpanel-component">SyncPanel Component</a></li>
+<li>3.8 <a href="#38-layout-wiring">Layout Wiring</a></li>
+<li>3.9 <a href="#39-validation">Validation</a></li>
+<li>3.10 <a href="#310-environment-variables">Environment Variables</a></li>
+<li>3.11 <a href="#311-local-development-setup">Local Development Setup</a>
+3a. <a href="#3a-map-tab--metric-strip-chart">Map Tab — Metric Strip Chart</a>
+3b. <a href="#3b-data-export">Data Export</a>
+3c. <a href="#3c-chart-stats-row">Chart Stats Row</a>
+3d. <a href="#3d-activity-alignment--gps-anchor">Activity Alignment — GPS Anchor</a>
+3e. <a href="#3e-data-anomaly-detection">Data Anomaly Detection</a></li>
+</ul>
+</li>
+<li><a href="#4-responsive-layout">Responsive Layout</a></li>
+<li><a href="#5-fit-parsing">FIT Parsing</a></li>
+<li><a href="#6-testing">Testing</a></li>
+</ol>
+<hr>
+<h2>1. Project Setup</h2>
+<pre><code class="language-bash">npm install
+npm run dev        # dev server on http://localhost:5173
+npm run build      # production build — also generates stats.html bundle report
+npm run check      # svelte-check + tsc
+npm test           # vitest unit tests
+</code></pre>
+<p><code>npm run build</code> generates <code>stats.html</code> (via <code>rollup-plugin-visualizer</code>) in the project root. Open it in a browser after any build to inspect chunk sizes and identify modules that have regressed into the initial bundle. The file is gitignored.</p>
+<p>The app uses <strong>SvelteKit</strong> with the <strong>Vercel adapter</strong> (<code>@sveltejs/adapter-vercel</code>). Deployment is to Vercel via GitHub Actions on push to <code>main</code>.</p>
+<hr>
+<h2>2. Architecture Overview</h2>
+<pre><code>src/
+├── lib/
+│   ├── fit/          # FIT file parsing (Web Worker, normalisation, device classification)
+│   ├── align/        # Activity alignment (timestamp sync, distance interpolation)
+│   │                 # - distance.ts: interpolateToDistanceAxis, distanceStep(totalDistanceMetres)
+│   │                 #   distanceStep: ≤50 km → 10 m step; &gt;50 km → 20 m step (halves point count)
+│   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection
+│   │                 # - anomalies.ts: detectAnomalies(), groupAnomalyEvents(), groupAnomaliesByChannel()
+│   │                 # - stats.ts: mean(), stdDev() — population statistics ignoring null/NaN
+│   │                 # - downsample.ts: downsampleGps(points, maxPoints, epsilon) — GPS polyline
+│   │                 #   simplification; GPS_MAX_POINTS=500 hard cap; iterative RDP (explicit stack,
+│   │                 #   no recursion limit) with uniform-decimate fallback if RDP still exceeds cap
+│   ├── compare/      # Delta computation, segment analysis
+│   ├── export/       # Client-side data export
+│   │   ├── columns.ts         # Shared column utilities: CHANNEL_KEYS, presentChannels(), buildHeaderLabel(),
+│   │   │                      #   formatCellValue(), escapeCsvField(); ExportFormat type (&#39;csv&#39; | &#39;xlsx&#39;)
+│   │   ├── csv.ts             # buildCsv(activities) → RFC 4180 string; single-file omits activity column,
+│   │   │                      #   multi-file prepends it; CRLF line endings; channels with all-null omitted
+│   │   ├── excel.ts           # buildWorkbook(activities) → ArrayBuffer (.xlsx via SheetJS)
+│   │   ├── exportActivities.ts # exportActivities(activities, format): lazy-loads csv.ts or excel.ts,
+│   │   │                      #   triggers download; format defaults to &#39;csv&#39;
+│   │   └── download.ts        # triggerDownload(), downloadPng(), localDateString()
+│   ├── components/
+│   │   ├── charts/   # ECharts wrappers (ECharts is lazy-loaded — see §2.1)
+│   │   │             # - echarts-loader.ts: singleton loadECharts() — one dynamic import, cached for session
+│   │   │             # - chart-skeleton.css: shared shimmer skeleton styles used by all four chart components
+│   │   │             # - TimeSeriesChart.svelte: per-series stats row (min/avg/max, zoom-aware; pace inverted)
+│   │   │             #   All line series use sampling: &#39;lttb&#39; (Largest-Triangle-Three-Buckets) for
+│   │   │             #   automatic ECharts-side downsampling on large datasets (&gt;2000 points warns)
+│   │   │             # - TimeSeriesChart.utils.ts: computeSeriesStats(), formatStatValue(), SeriesStats
+│   │   │             # - StripChart.svelte: metric strip chart wrapper (map tab)
+│   │   │             # - StripToggle.svelte: line/gradient pill toggle
+│   │   │             # - StripChart.utils.ts: shouldShowGradient(), GRADIENT_COLOUR_TOKEN
+│   │   │             # - png-btn.css: shared PNG download button styles
+│   │   ├── map/      # Leaflet map + ActivityMap.component.test.ts (jsdom)
+│   │   │             # - ActivityMap.utils.ts: extractGpsPoints, metricValuesForGpsPoints(gpsPoints,
+│   │   │             #   smoothedValues) — maps downsampled GPS points to metric values via recordIndex
+│   │                 # - DeviceToggleBar.utils.ts: buildAnomalyCounts(activities) → Map&lt;ChannelKey, AnomalyCount&gt;
+│   │                 #   aggregates event-level anomaly counts across all activities for badge rendering
+│   │   └── ui/       # Layout components, controls, SyncPanel
+│   ├── server/
+│   │   └── redis.ts  # Upstash Redis singleton (server-only)
+│   ├── stores/
+│   │   ├── deviceLabels.ts  # Device label persistence (localStorage)
+│   │   ├── sync.ts          # Cross-device sync logic
+│   │   ├── session.ts       # Activity session state; activityColourMap assigns stable colours by activity.id
+│   │   ├── toast.ts         # Transient toast notification store (addToast, removeToast, auto-dismiss)
+│   │   └── viewport.ts      # Responsive breakpoint store
+│   ├── utils/        # Pure utility functions
+│   │                 # - binarySearch.ts: lowerBound&lt;T&gt;(arr, key, target) — shared lower-bound binary search
+│   │                 # - channels.ts: deriveAvailableChannels()
+│   │                 # - deviceChannels.ts: deviceKey(), deriveDeviceLabel(), groupStreamsByChannel(), isComparableGroup()
+│   │                 # - fetchWithRetry.ts: fetchWithRetry(), isRetryable(), computeDelay() — retry with backoff
+│   │                 # - formatAge.ts: formatAge(ts) → human-readable relative time string
+│   │                 # - formatting.ts: formatPace(decimalMinutes) → &quot;M:SS&quot; string — single source of truth for pace display
+│   │                 # - indoorWarnings.svelte.ts: createIndoorWarnings() composable
+│   │                 # - lapMarkers.ts: buildLapMarkers()
+│   │                 # - segments.ts: buildSegments()
+│   ├── validation.ts # Shared regex constants (UUID, short code)
+│   └── types.ts      # Domain types
+│                     # - Anomaly, AnomalyType, DetectionStrategy, AnomalyDetectionOptions
+│                     # - ChannelKey now includes &#39;position&#39; (GPS-only; no numeric series, badge-only via DeviceToggleBar GPS section)
+│                     # - GpsPointWithDistance: lat, lon, distance, recordIndex (O(1) metric lookup)
+│                     # - GpsPointWithMetric extends GpsPointWithDistance: metricValue
+└── routes/
+    ├── api/
+    │   └── labels/
+    │       ├── [uuid]/+server.ts          # GET / PUT label store
+    │       └── resolve/[code]/+server.ts  # GET short-code resolver
+    ├── export-btn.css   # Shared CSS for the Export Data button in tab bars
+    ├── map-panel.css    # Shared CSS for Map tab layout (.map-wrap--has-strip, .strip-wrap)
+    ├── +layout.svelte   # App shell, initSync, ?sync= param
+    ├── +page.svelte     # Landing / drop zone
+    ├── compare/+page.svelte
+    └── event/+page.svelte
+</code></pre>
+<h3>2.1 ECharts Lazy-Loading</h3>
+<p>ECharts (≈1.1 MB / 374 kB gzipped) is <strong>not in the initial bundle</strong>. It is deferred to a separate async chunk and fetched only when the first chart component mounts.</p>
+<h4>How it works</h4>
+<p>All four chart components (<code>TimeSeriesChart</code>, <code>DeltaChart</code>, <code>MeanMaxChart</code>, <code>SegmentChart</code>) import ECharts through a shared singleton loader:</p>
+<pre><code class="language-ts">// src/lib/components/charts/echarts-loader.ts
+import type * as EChartsNamespace from &#39;echarts&#39;;
+export type EChartsModule = typeof EChartsNamespace;
+
+let cached: Promise&lt;EChartsModule&gt; | null = null;
+
+export function loadECharts(): Promise&lt;EChartsModule&gt; {
+  if (!cached) {
+    cached = import(&#39;echarts&#39;) as Promise&lt;EChartsModule&gt;;
+  }
+  return cached;
+}
+</code></pre>
+<p>Each chart component calls <code>loadECharts()</code> inside an <code>async onMount</code>:</p>
+<pre><code class="language-ts">onMount(async () =&gt; {
+  ec = await loadECharts();               // dynamic import (first call fetches; subsequent calls return cache)
+  chart = ec.init(container, undefined, { renderer: &#39;canvas&#39; });
+  chart.setOption(buildOption(), { notMerge: true }); // explicit initial render
+  // ... event binding, ResizeObserver, etc.
+  ready = true;
+});
+</code></pre>
+<h4>Why <code>chart.setOption()</code> is called explicitly in <code>onMount</code></h4>
+<p>Three of the four chart components (<code>TimeSeriesChart</code>, <code>DeltaChart</code>, <code>SegmentChart</code>) declare <code>chart</code> as a plain <code>let</code> variable rather than <code>$state</code>. Because <code>chart</code> is not reactive, the Svelte <code>$effect</code> that normally calls <code>chart?.setOption()</code> fires <em>before</em> the <code>await loadECharts()</code> resolves — hitting a no-op. The explicit <code>setOption</code> call immediately after <code>ec.init()</code> guarantees the first render regardless of reactive timing.</p>
+<p><code>MeanMaxChart</code> uses <code>let chart = $state&lt;ECharts | undefined&gt;(undefined)</code> — assigning the chart instance triggers the <code>$effect</code> reactively — but still includes the explicit <code>setOption</code> call for consistency and to make all four components follow the same pattern.</p>
+<h4>Loading skeleton</h4>
+<p>While <code>loadECharts()</code> is in flight the chart canvas (<code>bind:this={container}</code>) stays in the DOM with <code>visibility: hidden</code> so <code>ec.init()</code> can be called on an element with real dimensions. A shimmer placeholder div replaces the visual space:</p>
+<pre><code class="language-svelte">{#if !ready}
+  &lt;div class=&quot;chart-canvas chart-skeleton&quot; aria-hidden=&quot;true&quot;&gt;&lt;/div&gt;
+{/if}
+&lt;div bind:this={container} class=&quot;chart-canvas&quot; style:visibility={ready ? &#39;visible&#39; : &#39;hidden&#39;}&gt;&lt;/div&gt;
+</code></pre>
+<p>Skeleton styles live in <code>src/lib/components/charts/chart-skeleton.css</code> (imported by all four chart components) and use CSS custom properties defined in <code>src/routes/layout.css</code>:</p>
+<pre><code class="language-css">/* dark theme (default) */
+--skeleton-from: #1e293b;
+--skeleton-to:   #334155;
+
+/* light theme */
+--skeleton-from: #e2e8f0;
+--skeleton-to:   #f1f5f9;
+</code></pre>
+<h4>Bundle verification</h4>
+<p><code>rollup-plugin-visualizer</code> is configured in <code>vite.config.ts</code>. Every <code>npm run build</code> writes <code>stats.html</code> to the project root (gitignored). Open it to verify ECharts appears only as a dynamic entry (<code>isDynamicEntry: true</code> in the Vite manifest) and is absent from all entry-point sync dependency trees.</p>
+<h4>Adding a new chart component</h4>
+<p>If you add a fifth chart component:</p>
+<ol>
+<li>Import from the shared loader: <code>import { loadECharts, type EChartsModule } from &#39;./echarts-loader&#39;</code></li>
+<li>Keep <code>import type { ECharts, EChartsOption } from &#39;echarts&#39;</code> — type-only imports are erased at compile time and do not create a bundle dependency</li>
+<li>Use <code>async onMount</code>, call <code>loadECharts()</code>, call <code>chart.setOption(buildOption(), { notMerge: true })</code> immediately after <code>ec.init()</code></li>
+<li>Import <code>chart-skeleton.css</code> and add the skeleton/visibility template pattern</li>
+</ol>
+<hr>
+<h2>3. Cross-Device Label Sync</h2>
+<p>PR #80 added cross-device sync for device labels. Users rename sensor pills (e.g. &quot;Device 1&quot; → &quot;Polar H10&quot;) and those names are shared across all their browsers and devices without requiring an account.</p>
+<h3>3.1 Design Goals</h3>
+<ul>
+<li><strong>Account-free</strong> — identity is a randomly generated UUID stored in <code>localStorage</code>, not tied to any login.</li>
+<li><strong>Cloud-authoritative</strong> — the Upstash Redis store is treated as the source of truth; local state is overwritten on pull.</li>
+<li><strong>Fire-and-forget pushes</strong> — label changes auto-push in the background; errors surface in the UI but never block local usage.</li>
+<li><strong>Human-readable codes</strong> — a short 8-character code (e.g. <code>E6Y-NXEMF</code>) derived from the UUID lets users type the code on another device instead of scanning a QR.</li>
+<li><strong>90-day TTL</strong> — entries in Redis expire after 90 days of inactivity with no explicit deletion needed.</li>
+</ul>
+<h3>3.2 Data Model in Redis</h3>
+<p>Two key types are stored:</p>
+<table>
+<thead>
+<tr>
+<th>Key pattern</th>
+<th>Value</th>
+<th>TTL</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>labels:{uuid}</code></td>
+<td>JSON object: <code>{ [antDeviceKey]: labelString }</code></td>
+<td>90 days, rolling</td>
+</tr>
+<tr>
+<td><code>code:{shortCode}</code></td>
+<td>UUID string</td>
+<td>90 days, rolling</td>
+</tr>
+</tbody></table>
+<p>Both keys are refreshed together on every PUT, so activity on one extends the other&#39;s TTL automatically.</p>
+<p>The <code>antDeviceKey</code> format is defined by <code>deviceKey()</code> in <code>src/lib/utils/deviceChannels.ts</code> — it encodes manufacturer, product ID, and device type into a stable string used as the label map key.</p>
+<h3>3.3 Identity Lifecycle</h3>
+<pre><code>First visit:
+  crypto.randomUUID() → uuid
+  deriveShortCode(uuid) → shortCode
+  localStorage: SYNC_ID_KEY, SYNC_CODE_KEY
+  PUT /api/labels/{uuid} → seed remote with current labels
+
+Returning visit:
+  Read uuid / shortCode from localStorage
+  GET /api/labels/{uuid} → pull remote labels → replaceAllLabels()
+
+Label change (any visit):
+  setOnLabelChange hook → pushLabels(uuid, shortCode) [fire and forget]
+
+Adopt external identity (QR / copy-link / short code):
+  adoptSyncIdentity(uuid) → store uuid in localStorage → pullLabels(uuid)
+
+Reset identity:
+  crypto.randomUUID() → new uuid
+  localStorage cleared of old identity
+  pushLabels(newUuid, newShortCode) → seed remote under new identity
+</code></pre>
+<h3>3.4 Sync Store (<code>sync.ts</code>)</h3>
+<p><strong>Location:</strong> <code>src/lib/stores/sync.ts</code></p>
+<p>Exports:</p>
+<table>
+<thead>
+<tr>
+<th>Export</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>syncStatus</code></td>
+<td><code>Writable&lt;SyncStatus&gt;</code></td>
+<td>Reactive store for UI state (uuid, shortCode, lastSynced, error, syncing)</td>
+</tr>
+<tr>
+<td><code>initSync()</code></td>
+<td><code>async () =&gt; (() =&gt; void) | undefined</code></td>
+<td>Idempotent — safe to call multiple times; second call is a no-op. Returns a cleanup function on first call (call in <code>onDestroy</code> to deregister hook and allow HMR reinit); returns <code>undefined</code> if already initialised. SSR-safe.</td>
+</tr>
+<tr>
+<td><code>pushLabels(uuid, shortCode)</code></td>
+<td><code>async</code></td>
+<td>Upload current labels to Redis. Retries up to 3× on transient errors. Sets <code>syncStatus.syncing</code> while in progress. Errors update <code>syncStatus.error</code>.</td>
+</tr>
+<tr>
+<td><code>pullLabels(uuid)</code></td>
+<td><code>async</code></td>
+<td>Download labels from Redis. Retries up to 3× on transient errors. Sets <code>syncStatus.syncing</code> while in progress.</td>
+</tr>
+<tr>
+<td><code>resolveCode(code)</code></td>
+<td><code>async → uuid</code></td>
+<td>Resolve short code to UUID via API. Retries up to 3× on transient errors. Throws on 404.</td>
+</tr>
+<tr>
+<td><code>adoptSyncIdentity(uuid)</code></td>
+<td><code>async</code></td>
+<td>Replace local identity with external UUID and pull.</td>
+</tr>
+<tr>
+<td><code>resetSyncIdentity()</code></td>
+<td><code>async</code></td>
+<td>Generate fresh UUID, push current labels under it.</td>
+</tr>
+<tr>
+<td><code>deriveShortCode(uuid)</code></td>
+<td><code>string</code></td>
+<td>Pure function: BigInt base-36 encode of UUID, 8 chars, <code>XXX-XXXXX</code>.</td>
+</tr>
+<tr>
+<td><code>getSyncStatus()</code></td>
+<td><code>SyncStatus</code></td>
+<td>Non-reactive snapshot (for use outside Svelte components).</td>
+</tr>
+</tbody></table>
+<p><strong><code>SyncStatus</code> shape:</strong></p>
+<pre><code class="language-ts">type SyncStatus = {
+  uuid:       string | null;
+  shortCode:  string | null;
+  lastSynced: string | null; // ISO timestamp
+  error:      string | null;
+  syncing:    boolean;       // true while any sync operation is in flight (including retries)
+};
+</code></pre>
+<h3>3.4a Retry / Backoff (<code>fetchWithRetry</code>)</h3>
+<p><strong>Location:</strong> <code>src/lib/utils/fetchWithRetry.ts</code></p>
+<p>All three sync network calls (<code>pushLabels</code>, <code>pullLabels</code>, <code>resolveCode</code>) use a shared retry utility rather than bare <code>fetch</code>:</p>
+<pre><code class="language-ts">fetchWithRetry(input, init?, opts?): Promise&lt;Response&gt;
+</code></pre>
+<p><strong>Default options:</strong> <code>maxRetries: 3</code>, <code>baseDelayMs: 1000</code>, <code>jitter: 0.25</code> (±25%).</p>
+<p><strong>Retry classification (<code>isRetryable</code>):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Response / Error</th>
+<th>Retried?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Network error (<code>TypeError</code>)</td>
+<td>✅ Yes</td>
+</tr>
+<tr>
+<td>5xx</td>
+<td>✅ Yes</td>
+</tr>
+<tr>
+<td>429</td>
+<td>✅ Yes</td>
+</tr>
+<tr>
+<td>4xx (except 429)</td>
+<td>❌ No</td>
+</tr>
+<tr>
+<td>2xx / 3xx</td>
+<td>❌ No</td>
+</tr>
+</tbody></table>
+<p><strong>Backoff schedule</strong> (zero jitter, for clarity):</p>
+<table>
+<thead>
+<tr>
+<th>Attempt</th>
+<th>Delay</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0 → 1</td>
+<td>~1 s</td>
+</tr>
+<tr>
+<td>1 → 2</td>
+<td>~2 s</td>
+</tr>
+<tr>
+<td>2 → 3</td>
+<td>~4 s</td>
+</tr>
+</tbody></table>
+<p>When the server returns a <code>429</code> with a <code>Retry-After</code> header, that value (in seconds) overrides the exponential delay for that attempt, preventing wasted retries within the rate-limit window.</p>
+<p>After all retries are exhausted: the last <code>Response</code> is returned for HTTP errors; the last network error is thrown.</p>
+<p><strong>Test isolation:</strong> <code>_setSleepFn(fn)</code> replaces the internal sleep function so that retry tests do not incur real delays (used in <code>sync.test.ts</code> via <code>beforeEach</code>).</p>
+<h3>3.4b Sidebar Sync Indicator</h3>
+<p><strong>Location:</strong> <code>src/lib/components/ui/Sidebar.svelte</code></p>
+<p>A persistent status indicator is always visible in the sidebar footer, showing the current sync state without requiring the user to expand the SyncPanel. It subscribes to <code>$syncStatus</code> via three <code>$derived.by()</code> values:</p>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Condition</th>
+<th>Icon</th>
+<th>Colour</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>syncing</code></td>
+<td><code>$syncStatus.syncing === true</code></td>
+<td>Animated two-arc spinner SVG</td>
+<td>Blue (<code>#3b82f6</code>)</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td><code>$syncStatus.error !== null</code></td>
+<td>Triangle warning SVG</td>
+<td>Amber (<code>#fbbf24</code>)</td>
+</tr>
+<tr>
+<td><code>ok</code></td>
+<td><code>$syncStatus.lastSynced !== null</code></td>
+<td>Filled circle SVG</td>
+<td>Green (<code>#10b981</code>)</td>
+</tr>
+<tr>
+<td><code>muted</code></td>
+<td>All others (setting up)</td>
+<td>Filled circle SVG</td>
+<td><code>--color-muted</code></td>
+</tr>
+</tbody></table>
+<p>The element carries <code>aria-live=&quot;polite&quot;</code> and a dynamic <code>aria-label</code> (e.g. <code>&quot;Synced just now&quot;</code>, <code>&quot;Sync error: ...&quot;</code>) for screen readers.</p>
+<p>When <code>syncing === true</code> and <code>error !== null</code> simultaneously (i.e. auto-retry is in progress after a previous failure), <code>SyncPanel.svelte</code> shows <code>&quot;Retrying…&quot;</code> in blue instead of the normal amber <code>&quot;⚠ Sync error — retry&quot;</code> link.</p>
+<h3>3.5 DeviceLabels Integration</h3>
+<p><strong>Location:</strong> <code>src/lib/stores/deviceLabels.ts</code></p>
+<p>Three additions support sync:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>getAllLabels()</code></td>
+<td>Returns a snapshot <code>Record&lt;string, string&gt;</code> of all stored labels</td>
+</tr>
+<tr>
+<td><code>replaceAllLabels(map)</code></td>
+<td>Overwrites localStorage with the provided map and notifies the store</td>
+</tr>
+<tr>
+<td><code>setOnLabelChange(fn | null)</code></td>
+<td>Registers a callback invoked after every <code>setDeviceLabel</code> / <code>removeDeviceLabel</code>. Pass <code>null</code> to deregister.</td>
+</tr>
+</tbody></table>
+<p>Only one change callback can be registered at a time. <code>initSync</code> registers its push callback after the initial push/pull, so subsequent label changes auto-push. The cleanup function returned by <code>initSync</code> calls <code>setOnLabelChange(null)</code> to deregister on teardown.</p>
+<h3>3.6 Toast Notification Store</h3>
+<p><strong>Location:</strong> <code>src/lib/stores/toast.ts</code><br><strong>Component:</strong> <code>src/lib/components/ui/ToastContainer.svelte</code></p>
+<p>A lightweight, reusable toast system for surfacing transient non-blocking messages to the user. The store is framework-agnostic — any module can call <code>addToast</code> without importing Svelte components.</p>
+<h4>API</h4>
+<table>
+<thead>
+<tr>
+<th>Export</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>toasts</code></td>
+<td><code>Readable&lt;Toast[]&gt;</code></td>
+<td>Reactive list of active toasts. Read-only — prevents external mutation.</td>
+</tr>
+<tr>
+<td><code>addToast</code></td>
+<td><code>(message: string, level?: ToastLevel, duration?: number) =&gt; void</code></td>
+<td>Adds a toast. Default level: <code>&#39;warning&#39;</code>. Default duration: <code>5000</code> ms.</td>
+</tr>
+<tr>
+<td><code>removeToast</code></td>
+<td><code>(id: number) =&gt; void</code></td>
+<td>Removes a toast immediately and clears its auto-dismiss timer.</td>
+</tr>
+</tbody></table>
+<h4>Types</h4>
+<pre><code class="language-ts">type ToastLevel = &#39;info&#39; | &#39;warning&#39; | &#39;error&#39;;
+
+interface Toast {
+  id: number;
+  message: string;
+  level: ToastLevel;
+}
+</code></pre>
+<h4>Behaviour</h4>
+<ul>
+<li>Each toast is assigned a unique auto-incrementing <code>id</code>.</li>
+<li><code>addToast</code> schedules a <code>setTimeout</code> to call <code>removeToast(id)</code> after <code>duration</code> ms. The timer handle is stored in a <code>Map&lt;id, timer&gt;</code> and cleared by <code>removeToast</code> to prevent orphaned timers when a toast is dismissed early.</li>
+<li><code>removeToast</code> with an unknown <code>id</code> is a safe no-op.</li>
+</ul>
+<h4>ToastContainer component</h4>
+<p><code>ToastContainer.svelte</code> subscribes to <code>$toasts</code> and renders the most recent <code>MAX_VISIBLE</code> (3) toasts as a fixed-position stack (bottom-right on desktop; full-width above the bottom nav bar on phone). It is mounted <strong>once</strong> in <code>+layout.svelte</code> so toasts are visible on every page.</p>
+<p>Each toast has a level-appropriate left-border accent and dismiss button (<code>×</code>). Colours use hardcoded semantic values (amber/blue/red) against <code>--color-card</code> / <code>--color-text</code> backgrounds, ensuring correct appearance in both light and dark themes.</p>
+<h4>Current callers</h4>
+<table>
+<thead>
+<tr>
+<th>Caller</th>
+<th>Level</th>
+<th>Message</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>deviceLabels.ts</code> — <code>saveLabels</code> catch</td>
+<td><code>warning</code></td>
+<td><code>&#39;Device label could not be saved — storage full&#39;</code> (QuotaExceededError) or <code>&#39;Device label could not be saved&#39;</code> (other errors)</td>
+</tr>
+<tr>
+<td><code>DropZone.svelte</code> — parse error catch (single-file and multi-file)</td>
+<td><code>error</code></td>
+<td><code>&#39;&lt;filename&gt;: &lt;parser error message&gt;&#39;</code> — fires alongside the existing inline error text so the error persists after navigation</td>
+</tr>
+<tr>
+<td><code>parser.ts</code> — <code>normalise()</code> negative elapsed</td>
+<td><code>warning</code></td>
+<td><code>&#39;&quot;&lt;filename&gt;&quot;: N record(s) with negative elapsed time were removed.&#39;</code></td>
+</tr>
+<tr>
+<td><code>parser.ts</code> — <code>normalise()</code> out-of-order records</td>
+<td><code>warning</code></td>
+<td><code>&#39;&quot;&lt;filename&gt;&quot;: records were out of order and have been sorted automatically.&#39;</code></td>
+</tr>
+</tbody></table>
+<h3>3.7 API Routes</h3>
+<p>See the full API reference in <a href="api-reference.md"><code>docs/api-reference.md</code></a>.</p>
+<p><strong><code>GET /api/labels/[uuid]</code></strong> — returns <code>{ labels }</code> or 404.</p>
+<p><strong><code>PUT /api/labels/[uuid]</code></strong> — expects <code>{ labels: Record&lt;string,string&gt;, shortCode: string }</code>. Writes both <code>labels:{uuid}</code> and <code>code:{shortCode}</code> to Redis with a 90-day TTL.</p>
+<p><strong><code>GET /api/labels/resolve/[code]</code></strong> — resolves short code to UUID. Rate-limited at 10 req/min/IP via Redis <code>INCR</code>/<code>EXPIRE</code> pipeline (globally enforced across all Vercel instances). Responds 429 with <code>Retry-After</code> header on limit exceeded; fails open if Redis is unavailable.</p>
+<p>All routes validate inputs against <code>UUID_REGEX</code> / <code>SHORT_CODE_REGEX</code> from <code>src/lib/validation.ts</code> and return structured JSON errors on 400/404/429/500.</p>
+<h3>3.8 SyncPanel Component</h3>
+<p><strong>Location:</strong> <code>src/lib/components/ui/SyncPanel.svelte</code></p>
+<p>A collapsible panel rendered in the Sidebar footer. It is always mounted (not conditionally rendered) so the sync toggle row is always visible.</p>
+<p>Key internal state:</p>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Type</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>isOpen</code></td>
+<td><code>boolean</code></td>
+<td>Controls panel expansion</td>
+</tr>
+<tr>
+<td><code>codeInput</code></td>
+<td><code>string</code></td>
+<td>Bound to the short-code text input</td>
+</tr>
+<tr>
+<td><code>codeError</code> / <code>codeSuccess</code></td>
+<td><code>string|null</code> / <code>boolean</code></td>
+<td>Inline validation feedback</td>
+</tr>
+<tr>
+<td><code>isResolving</code></td>
+<td><code>boolean</code></td>
+<td>Disables input during async resolve</td>
+</tr>
+<tr>
+<td><code>copied</code></td>
+<td><code>boolean</code></td>
+<td>Briefly true after clipboard write, drives button label</td>
+</tr>
+</tbody></table>
+<p>Derived values:</p>
+<ul>
+<li><code>syncUrl</code> — <code>${origin}?sync=${uuid}</code>, used for both QR generation and copy-link.</li>
+<li><code>qrSvg</code> — generated client-side via <a href="https://github.com/unjs/uqr"><code>uqr</code></a> (<code>renderSVG(syncUrl)</code>). No server round-trip.</li>
+</ul>
+<p>The component validates code input against <code>SHORT_CODE_REGEX</code> before hitting the API, providing immediate feedback on format errors.</p>
+<h3>3.9 Layout Wiring</h3>
+<p><strong><code>src/routes/+layout.svelte</code></strong></p>
+<p>Three sync-related wiring points:</p>
+<ol>
+<li><code>onMount</code> calls <code>initSync()</code> — idempotent; safe if called more than once (e.g. during HMR). Stores the returned cleanup function in <code>cleanupSync</code>.</li>
+<li><code>onDestroy</code> calls <code>cleanupSync?.()</code> — deregisters the label-change hook and resets the initialised flag, enabling a clean reinit if the layout remounts (HMR).</li>
+<li>URL parameter handling: if the page loads with <code>?sync={uuid}</code>, <code>adoptSyncIdentity(uuid)</code> is called and the param is stripped from the URL using <code>history.replaceState</code> to avoid sharing it inadvertently via browser history.</li>
+</ol>
+<h3>3.10 Validation</h3>
+<p><strong><code>src/lib/validation.ts</code></strong></p>
+<p>Shared between API routes (server) and <code>SyncPanel</code> (client) to avoid duplication:</p>
+<pre><code class="language-ts">UUID_REGEX      = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+SHORT_CODE_REGEX = /^[A-Z0-9]{3}-[A-Z0-9]{5}$/i
+</code></pre>
+<h3>3.11 Environment Variables</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>UPSTASH_REDIS_REST_URL</code></td>
+<td>Yes</td>
+<td>REST endpoint for your Upstash Redis database</td>
+</tr>
+<tr>
+<td><code>UPSTASH_REDIS_REST_TOKEN</code></td>
+<td>Yes</td>
+<td>Read-write token for the database</td>
+</tr>
+</tbody></table>
+<p>These are read via <code>$env/dynamic/private</code> (SvelteKit server-only) in <code>src/lib/server/redis.ts</code>. They must be set in:</p>
+<ul>
+<li><strong>Local development:</strong> <code>.env.local</code> (git-ignored, never committed)</li>
+<li><strong>Vercel:</strong> Project Settings → Environment Variables</li>
+</ul>
+<p>The Redis singleton (<code>getRedis()</code>) throws an explicit error if credentials are absent, which the API routes catch and surface as HTTP 500. This prevents silent failures.</p>
+<h3>3.12 Local Development Setup</h3>
+<ol>
+<li>Create an <a href="https://upstash.com">Upstash</a> account and create a Redis database (free tier is sufficient).</li>
+<li>Copy the REST URL and token from the Upstash console.</li>
+<li>Create <code>.env.local</code> in the project root:</li>
+</ol>
+<pre><code class="language-env">UPSTASH_REDIS_REST_URL=https://your-db.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-token-here
+</code></pre>
+<ol start="4">
+<li>Run <code>npm run dev</code> — sync features are fully functional locally.</li>
+</ol>
+<blockquote>
+<p><strong>Tip:</strong> If you do not configure Redis, the app still works — sync API calls will return 500 and <code>syncStatus.error</code> will be set, but all FIT file analysis features continue to function normally.</p>
+</blockquote>
+<hr>
+<h2>3a. Map Tab — Metric Strip Chart</h2>
+<p>PR #82 added a co-visible metric strip chart to the Map tab on both <code>/compare</code> and <code>/event</code> pages. When the user selects a metric in the <strong>Colour by</strong> picker, a chart for that channel slides in below the map with full bidirectional hover sync.</p>
+<h3>Component hierarchy</h3>
+<pre><code>compare/+page.svelte (or event/+page.svelte)
+  └── .map-panel  (flex column)
+        ├── .map-wrap  (flex: 7)
+        │     └── &lt;ActivityMap
+        │           onMetricChannelChange={ch =&gt; mapMetricChannel = ch}
+        │           hoveredDistance={stripHoveredDistance}
+        │         /&gt;
+        └── .strip-wrap  (flex: 3, shown only when mapMetricChannel !== null)
+              └── &lt;CollapsiblePanel&gt;  (collapses on tablet/phone)
+                    └── &lt;StripChart
+                          channel={mapMetricChannel}
+                          seriesInputs={stripSeriesInputs}
+                          lapMarkers={...}
+                          onHoverDistance={handleStripHoverDistance}
+                          externalHoverDistance={mapStripHoveredDistance}
+                        /&gt;
+</code></pre>
+<h3>Hover sync</h3>
+<p>The strip chart uses a <strong>second, independent hover loop</strong> (<code>stripHoveredDistance</code> / <code>mapStripHoveredDistance</code>), completely separate from the existing Charts-tab ↔ Map loop (<code>chartHoveredDistance</code> / <code>mapHoveredDistance</code>). This separation is intentional:</p>
+<ul>
+<li>The existing loop is <strong>gated on <code>$xAxisMode === &#39;distance&#39;</code></strong> — it only fires when the Charts tab is in distance mode.</li>
+<li>The strip loop is <strong>never gated</strong> — the strip chart always operates in distance mode (<code>forceDistanceAxis={true}</code>), so the sync is always valid regardless of the global x-axis setting.</li>
+</ul>
+<h3>Key design points</h3>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Approach</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Strip always uses distance axis</td>
+<td><code>forceDistanceAxis={true}</code> prop on <code>TimeSeriesChart</code> inside <code>StripChart</code></td>
+</tr>
+<tr>
+<td>Isolated zoom/pan</td>
+<td><code>groupId=&quot;map-strip&quot;</code> — separate ECharts connect group from <code>&quot;compare-charts&quot;</code> / <code>&quot;event-charts&quot;</code></td>
+</tr>
+<tr>
+<td>Gradient mode</td>
+<td><code>shouldShowGradient()</code> utility in <code>StripChart.utils.ts</code>; single-file only (multi-file stays as lines)</td>
+</tr>
+<tr>
+<td>Shared layout CSS</td>
+<td><code>.map-wrap--has-strip</code> and <code>.strip-wrap</code> styles extracted to <code>src/routes/map-panel.css</code> and imported in both pages</td>
+</tr>
+<tr>
+<td>Magic-string safety</td>
+<td>Gradient sentinel value is <code>GRADIENT_COLOUR_TOKEN = &#39;__gradient__&#39;</code> (exported constant, not inline string)</td>
+</tr>
+</tbody></table>
+<h3><code>ActivityMap</code> — <code>onMetricChannelChange</code> callback</h3>
+<p><code>ActivityMap.svelte</code> accepts an optional <code>onMetricChannelChange?: (channel: ChannelKey | null) =&gt; void</code> prop. It fires via a <code>$effect</code> whenever the internal <code>metricChannel</code> state changes (on picker selection and on file change/reset). Existing callers that do not pass this prop are unaffected.</p>
+<hr>
+<h2>3b. Data Export</h2>
+<p>PR #83 added Excel workbook and per-chart PNG downloads. PR #111 added CSV export and extracted shared column utilities into <code>columns.ts</code>.</p>
+<h3>Module layout</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>src/lib/export/columns.ts</code></td>
+<td>Shared column utilities used by both CSV and Excel builders: <code>CHANNEL_KEYS</code>, <code>presentChannels()</code>, <code>buildHeaderLabel()</code>, <code>formatCellValue()</code>, <code>escapeCsvField()</code>; <code>ExportFormat</code> type (<code>&#39;csv&#39; | &#39;xlsx&#39;</code>)</td>
+</tr>
+<tr>
+<td><code>src/lib/export/csv.ts</code></td>
+<td><code>buildCsv(activities)</code> — builds an RFC 4180 CSV string in memory</td>
+</tr>
+<tr>
+<td><code>src/lib/export/excel.ts</code></td>
+<td><code>buildWorkbook(activities)</code> — builds a SheetJS workbook in memory and returns it as an <code>ArrayBuffer</code></td>
+</tr>
+<tr>
+<td><code>src/lib/export/exportActivities.ts</code></td>
+<td><code>exportActivities(activities, format)</code> — async entry point: lazy-imports <code>csv.ts</code> or <code>excel.ts</code> based on <code>format</code> (defaults to <code>&#39;csv&#39;</code>), then calls <code>triggerDownload</code></td>
+</tr>
+<tr>
+<td><code>src/lib/export/download.ts</code></td>
+<td><code>triggerDownload(data, filename, mime)</code>, <code>downloadPng(dataUrl, filename)</code>, <code>localDateString()</code></td>
+</tr>
+</tbody></table>
+<p>Both <code>csv.ts</code> and <code>excel.ts</code> are lazy-imported in <code>exportActivities.ts</code> so that SheetJS and the CSV builder are only bundled into dynamically loaded chunks, keeping the main bundle lighter.</p>
+<h3>Shared column utilities (<code>columns.ts</code>)</h3>
+<p><code>columns.ts</code> is the single source of truth for which channels appear in exports and how values are formatted. Both <code>csv.ts</code> and <code>excel.ts</code> import from it to prevent drift as new channels are added.</p>
+<ul>
+<li><strong><code>CHANNEL_KEYS</code></strong> — ordered list of all exportable <code>ChannelKey</code> values</li>
+<li><strong><code>presentChannels(records)</code></strong> — filters <code>CHANNEL_KEYS</code> to those with at least one non-null value across the provided records</li>
+<li><strong><code>buildHeaderLabel(key)</code></strong> — returns the human-readable column header (e.g. <code>&quot;Heart Rate (bpm)&quot;</code>)</li>
+<li><strong><code>formatCellValue(key, value)</code></strong> — formats a raw value for output: pace → <code>&quot;M:SS&quot;</code> string; timestamps → <code>Date</code>; others → number or <code>null</code></li>
+<li><strong><code>escapeCsvField(value)</code></strong> — wraps a string in double-quotes and doubles any internal quotes per RFC 4180; returns the original string if no quoting is needed</li>
+</ul>
+<h3>CSV structure (<code>csv.ts</code>)</h3>
+<p><code>buildCsv(activities)</code> produces an RFC 4180 string:</p>
+<ul>
+<li><strong>Single activity</strong> — header row + one row per <code>ActivityRecord</code>; no <code>activity</code> column</li>
+<li><strong>Multiple activities</strong> — header row + all records from all activities in order; <code>activity</code> column (source filename) prepended as column 1</li>
+<li>Channels with all-null values across all records are omitted</li>
+<li>Pace formatted as <code>&quot;M:SS&quot;</code>; timestamps as ISO 8601 strings</li>
+<li>Lines separated by CRLF; file ends with a trailing CRLF</li>
+</ul>
+<h3>Excel workbook structure (<code>excel.ts</code>)</h3>
+<p><code>buildWorkbook</code> produces:</p>
+<ol>
+<li><strong>Summary sheet</strong> — one row per activity with filename, sport, start time (Excel datetime), distance (km), and elapsed time (H:MM:SS or M:SS).</li>
+<li><strong>Per-activity sheets</strong> — one row per <code>ActivityRecord</code>. Sheet names are taken from <code>activity.filename</code>, truncated to 31 characters (Excel limit), and de-duplicated with <code> (N)</code> suffixes if needed.</li>
+</ol>
+<p>Column selection is dynamic: <code>presentChannels()</code> from <code>columns.ts</code> filters to channels with at least one non-null value in the activity.</p>
+<p>Pace is formatted as an <code>&quot;M:SS&quot;</code> string by <code>formatCellValue()</code> rather than stored as a decimal, since Excel has no built-in pace format and decimal values are not human-readable.</p>
+<p>Timestamps use JavaScript <code>Date</code> objects with <code>cellDates: true</code> in the SheetJS write options, with <code>yyyy-mm-dd hh:mm:ss</code> cell format applied to datetime columns.</p>
+<h3>PNG download</h3>
+<p>Each chart component calls <code>chart.getDataURL({ type: &#39;png&#39;, pixelRatio: 2, backgroundColor: bgColour })</code> on its ECharts instance, then passes the resulting base64 data URL to <code>downloadPng()</code>. <code>downloadPng</code> decodes the base64 string to a <code>Uint8Array</code>, wraps it in a <code>Blob</code>, and calls <code>triggerDownload</code> to initiate the browser download.</p>
+<p>The background colour is read from the CSS custom property <code>--color-bg-primary</code> at download time so that the PNG matches the user&#39;s current theme.</p>
+<h3><code>localDateString()</code></h3>
+<p><code>new Date().toISOString()</code> returns UTC, which rolls over to the next day before midnight for users in UTC− timezones. <code>localDateString()</code> uses <code>toLocaleDateString(&#39;en-CA&#39;)</code> instead, which produces an ISO-format (<code>YYYY-MM-DD</code>) date in the user&#39;s local timezone.</p>
+<hr>
+<h2>3c. Chart Stats Row</h2>
+<p>PR #85 added a compact stats row below each <code>TimeSeriesChart</code> showing minimum, average, and maximum for every active series (added in PR #86). Stats update reactively when devices are toggled, and recalculate when the user zooms into a region.</p>
+<p><strong>Pace inversion (PR #88):</strong> Because pace is an inverted metric (lower min/km = faster), <code>computeSeriesStats()</code> swaps the min/max values for the <code>pace</code> channel so that <code>SeriesStats.max</code> holds the fastest (numerically smallest) pace and <code>SeriesStats.min</code> holds the slowest. The template renders pace as <code>max / avg / min</code> so numbers still read ascending left-to-right, consistent with the pace chart&#39;s inverted y-axis.</p>
+<h3>Module layout</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>src/lib/components/charts/TimeSeriesChart.utils.ts</code></td>
+<td><code>computeSeriesStats()</code>, <code>formatStatValue()</code>, <code>SeriesStats</code> interface</td>
+</tr>
+<tr>
+<td><code>src/lib/components/charts/TimeSeriesChart.svelte</code></td>
+<td><code>zoomRange</code> state, <code>seriesStats</code> derived value, <code>.chart-stats</code> HTML/CSS</td>
+</tr>
+</tbody></table>
+<h3>Key functions</h3>
+<p><strong><code>formatStatValue(value, channel)</code></strong> — formats a raw number for display. Pace channels use <code>paceFormat()</code> (M:SS — re-exported from <code>$lib/utils/formatting</code> as the shared <code>formatPace</code>); integer channels (heartRate, power, cadence) round to zero decimal places; float channels (speed, temperature) show one decimal.</p>
+<p><strong><code>computeSeriesStats(data, channel, label, colour, xRange?)</code></strong> — slices <code>data</code> to the optional <code>xRange</code> window, passes y-values to <code>summarise()</code>, and returns a <code>SeriesStats</code> object (or <code>null</code> if no data). The <code>xRange</code> is provided by the zoom handler.</p>
+<p><strong><code>SeriesStats</code> interface:</strong></p>
+<pre><code class="language-ts">interface SeriesStats {
+  label:   string;
+  colour:  string;
+  min:     string;   // formatted for display (pace: slowest; others: numeric minimum)
+  avg:     string;   // formatted for display
+  max:     string;   // formatted for display (pace: fastest; others: numeric maximum)
+  minRaw:  number;
+  avgRaw:  number;
+  maxRaw:  number;
+  count:   number;
+  xMin:    number;
+  xMax:    number;
+  unit:    string;
+}
+</code></pre>
+<h3>Zoom integration</h3>
+<p><code>TimeSeriesChart.svelte</code> listens to ECharts&#39; <code>dataZoom</code> event. When a zoom is active, the x-axis extent is read from ECharts&#39; internal model via <code>chart.getModel().getComponent(&#39;xAxis&#39;, 0)</code> and stored in <code>zoomRange</code>. The <code>seriesStats</code> derived value re-runs whenever <code>zoomRange</code> changes, slicing each series&#39; data to the visible window.</p>
+<p><code>zoomRange</code> is reset to <code>undefined</code> on every chart rebuild (new data, smoothing change, axis mode change), so stats always reflect the full dataset after a rebuild.</p>
+<h3>Data source vs Summary tab</h3>
+<p>The stats row and the Summary tab use the same <code>summarise()</code> function but different data sources:</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Data source</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Stats row</td>
+<td><code>buildData()</code></td>
+<td>Smoothed; distance-axis interpolated when in distance mode</td>
+</tr>
+<tr>
+<td>Summary tab</td>
+<td><code>extractChannel(activity.records, ch)</code></td>
+<td>Raw unsmoothed records</td>
+</tr>
+</tbody></table>
+<p>When smoothing is 1 s and the axis is time, the two surfaces agree closely. In distance mode or with smoothing &gt; 1 s, values may differ. Both surfaces carry a <code>title</code> tooltip explaining the difference.</p>
+<hr>
+<h2>3d. Activity Alignment — GPS Anchor and Indoor Detection</h2>
+<p>PR #91 replaced raw start-time-difference alignment with GPS-anchor-based alignment. PR #92 extended this to handle indoor activities (TrainerRoad, Zwift, treadmill) where GPS is absent or synthetic.</p>
+<h3>Indoor activity detection</h3>
+<p><code>classifyIndoor(subSport, records)</code> in <code>src/lib/fit/parser.ts</code> determines <code>activity.isIndoor</code> at parse time using two signals:</p>
+<ol>
+<li><p><strong><code>sub_sport</code> field</strong> (primary) — if the FIT session contains a recognised indoor sub_sport value, the activity is classified as indoor regardless of GPS presence. The full set is:</p>
+<pre><code class="language-ts">const INDOOR_SUB_SPORTS = new Set([
+  &#39;indoor_cycling&#39;, &#39;virtual_activity&#39;, &#39;spin&#39;, &#39;stationary_bike&#39;,
+  &#39;treadmill&#39;, &#39;indoor_rowing&#39;, &#39;indoor_running&#39;, &#39;indoor_walking&#39;,
+  &#39;virtual_ride&#39;, &#39;virtual_run&#39;,
+]);
+</code></pre>
+<blockquote>
+<p><strong>Key insight:</strong> Both Zwift (<code>virtual_activity</code>) and TrainerRoad (<code>indoor_cycling</code>) embed fake GPS coordinates in every record (Zwift uses virtual-world positions; TrainerRoad uses a Central Park, NYC placeholder). GPS presence cannot be used as the indoor detector — <code>sub_sport</code> is authoritative.</p>
+</blockquote>
+</li>
+<li><p><strong>GPS-absence fallback</strong> — only fires when <code>sub_sport</code> is entirely absent (<code>undefined</code>) and all records lack a GPS position. Covers older devices that do not write <code>sub_sport</code>.</p>
+</li>
+</ol>
+<p><code>activity.subSport</code> stores the raw sub_sport string from the FIT session (or <code>undefined</code>). <code>activity.isIndoor: boolean</code> is always populated.</p>
+<h3>Anchor hierarchy</h3>
+<p><code>findAnchor(activity)</code> in <code>src/lib/align/anchor.ts</code> branches on <code>activity.isIndoor</code>:</p>
+<p><strong>Outdoor path</strong> (unchanged from #91):</p>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Source</th>
+<th><code>AnchorSource</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>FIT timer-start event (within 30 s)</td>
+<td><code>&#39;timer&#39;</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>First GPS record with speed &gt; 0</td>
+<td><code>&#39;gpsMovement&#39;</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>First GPS record (stationary)</td>
+<td><code>&#39;gpsFix&#39;</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>File start</td>
+<td><code>&#39;fileStart&#39;</code></td>
+</tr>
+</tbody></table>
+<p><strong>Indoor path</strong> (added in #92 — GPS signals are skipped entirely):</p>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Source</th>
+<th><code>AnchorSource</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>FIT timer-start event (within 30 s)</td>
+<td><code>&#39;timer&#39;</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>First <code>workout_step</code> timestamp (within 30 s)</td>
+<td><code>&#39;workoutStep&#39;</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>First record with speed/power/cadence &gt; 0</td>
+<td><code>&#39;indoorMovement&#39;</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>File start</td>
+<td><code>&#39;fileStart&#39;</code></td>
+</tr>
+</tbody></table>
+<p>The result is an <code>AlignmentAnchor</code> stored on <code>Activity</code> at parse time:</p>
+<pre><code class="language-ts">type AnchorSource = &#39;timer&#39; | &#39;gpsMovement&#39; | &#39;gpsFix&#39; | &#39;fileStart&#39;
+                  | &#39;workoutStep&#39; | &#39;indoorMovement&#39;;
+
+interface AlignmentAnchor {
+  recordIndex:    number;
+  distanceMetres: number;
+  elapsedSeconds: number;
+  timestamp:      Date;
+  source:         AnchorSource;
+}
+</code></pre>
+<p><code>activity.anchor</code> is computed once in <code>parser.ts → normalise()</code> and available to all downstream code. The new <code>Activity</code> fields supporting indoor alignment are:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>subSport</code></td>
+<td><code>string | undefined</code></td>
+<td>Raw FIT <code>sub_sport</code> value</td>
+</tr>
+<tr>
+<td><code>isIndoor</code></td>
+<td><code>boolean</code></td>
+<td>Computed by <code>classifyIndoor()</code> at parse time</td>
+</tr>
+<tr>
+<td><code>firstIndoorMovementIndex</code></td>
+<td><code>number | null</code></td>
+<td>First record with speed/power/cadence &gt; 0</td>
+</tr>
+<tr>
+<td><code>firstWorkoutStepTime</code></td>
+<td><code>Date | null</code></td>
+<td>Timestamp of first <code>workout_step</code> FIT message</td>
+</tr>
+</tbody></table>
+<h3>Time-axis alignment</h3>
+<p><code>computeAnchoredOffsets(activities)</code> in <code>src/lib/align/timestamp.ts</code> aligns files relative to the first loaded file&#39;s anchor timestamp rather than raw <code>startTime</code> values.</p>
+<p>The <code>TimeOffsetControl</code> component shows a colour-coded anchor badge per file. Labels and tooltips are defined in <code>TimeOffsetControl.utils.ts</code> as <code>ANCHOR_LABELS</code> and <code>ANCHOR_TITLES</code> (both typed as <code>Record&lt;AnchorSource, string&gt;</code> for compile-time completeness):</p>
+<table>
+<thead>
+<tr>
+<th>Badge</th>
+<th>Colour</th>
+<th>Anchor source</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Timer</td>
+<td>Blue</td>
+<td><code>&#39;timer&#39;</code></td>
+</tr>
+<tr>
+<td>GPS move</td>
+<td>Blue</td>
+<td><code>&#39;gpsMovement&#39;</code></td>
+</tr>
+<tr>
+<td>GPS fix</td>
+<td>Amber</td>
+<td><code>&#39;gpsFix&#39;</code></td>
+</tr>
+<tr>
+<td>File start</td>
+<td>Grey</td>
+<td><code>&#39;fileStart&#39;</code></td>
+</tr>
+<tr>
+<td>Workout</td>
+<td>Green</td>
+<td><code>&#39;workoutStep&#39;</code></td>
+</tr>
+<tr>
+<td>Indoor</td>
+<td>Green</td>
+<td><code>&#39;indoorMovement&#39;</code></td>
+</tr>
+</tbody></table>
+<h3>Distance-axis re-zeroing</h3>
+<p><code>interpolateToDistanceAxis(records, axis, distanceOffset)</code> shifts the distance axis so that <code>distanceOffset</code> maps to 0 km. <code>activity.anchor.distanceMetres</code> is passed as <code>distanceOffset</code> in both Compare and Event pages.</p>
+<h3>Indoor/mixed session warnings — <code>createIndoorWarnings()</code></h3>
+<p><code>src/lib/utils/indoorWarnings.svelte.ts</code> exports a Svelte 5 runes composable that encapsulates the shared indoor warning state used by both Compare and Event pages:</p>
+<pre><code class="language-ts">const indoor = createIndoorWarnings(() =&gt; $activities);
+// indoor.hasMixedIndoorOutdoor — any indoor + any outdoor file loaded (requires ≥2 files)
+// indoor.allIndoor             — all loaded files are indoor (single file or more)
+// indoor.mixedWarningDismissed — dismissal state for amber banner
+// indoor.indoorInfoDismissed   — dismissal state for blue banner
+</code></pre>
+<p>The composable owns the dismissal reset <code>$effect</code> (fires on every <code>$activities</code> change). Each page adds two separate <code>$effect</code> blocks for axis auto-switching:</p>
+<ul>
+<li><strong>Mixed session:</strong> <code>if (hasMixedIndoorOutdoor &amp;&amp; $xAxisMode === &#39;distance&#39;) xAxisMode.set(&#39;time&#39;)</code> — locks to Time because mixed distance axes are incompatible.</li>
+<li><strong>All-indoor session:</strong> <code>if (allIndoor &amp;&amp; untrack(() =&gt; $xAxisMode) === &#39;distance&#39;) xAxisMode.set(&#39;time&#39;)</code> — defaults to Time on file load but uses <code>untrack()</code> so the user can manually switch back to Distance. <code>untrack()</code> prevents <code>$xAxisMode</code> from becoming a reactive dependency, limiting the effect to firing only when the file set changes.</li>
+</ul>
+<p>CSS for the banners is in <code>src/routes/indoor-warning.css</code> (shared by both pages).</p>
+<h3>Proximity warning</h3>
+<p><code>anchorsAreDistant(activities)</code> returns <code>true</code> when any two GPS-anchored activities have anchor positions more than <code>GPS_PROXIMITY_THRESHOLD_M</code> (50 m) apart. Both pages show a dismissible amber banner. Indoor activities whose anchors have no GPS position are excluded from the comparison, so a pure-TR file (no GPS) paired with a Zwift file never triggers a false proximity warning.</p>
+<h2>3e. Data Anomaly Detection</h2>
+<p>PR #147 added a data quality layer that detects sensor anomalies at parse time and surfaces them in the UI.</p>
+<h3>Detection engine — <code>src/lib/analytics/anomalies.ts</code></h3>
+<p><code>detectAnomalies(records, options?)</code> is called once in <code>normalise()</code> and returns a sorted <code>Anomaly[]</code> stored on <code>Activity.anomalies</code>. Detection is O(n) per channel.</p>
+<p><strong>Types and strategies:</strong></p>
+<pre><code class="language-ts">type AnomalyType       = &#39;spike&#39; | &#39;dropout&#39; | &#39;gps-drift&#39;;
+type DetectionStrategy = &#39;threshold-relative&#39; | &#39;statistical&#39;;
+
+interface Anomaly {
+  channel:           ChannelKey;
+  recordIndex:       number;
+  type:              AnomalyType;
+  value:             number;          // raw sensor value at that record
+  detectionStrategy: DetectionStrategy;
+}
+</code></pre>
+<p><strong>Spike detection</strong> — channels: <code>heartRate</code>, <code>power</code>, <code>cadence</code></p>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Threshold</th>
+<th>Strategy</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>HR + <code>options.athleteProfile.maxHR</code> set</td>
+<td><code>maxHR + 10 bpm</code></td>
+<td><code>threshold-relative</code></td>
+</tr>
+<tr>
+<td>Power + <code>options.powerSource === &#39;stryd&#39;</code> + <code>cp</code> set</td>
+<td><code>cp × 1.5</code></td>
+<td><code>threshold-relative</code></td>
+</tr>
+<tr>
+<td>Fallback (no profile)</td>
+<td><code>mean + 4σ</code></td>
+<td><code>statistical</code></td>
+</tr>
+</tbody></table>
+<p>A run above threshold must last ≤ 3 s to be flagged as a spike (longer sustained high values are real effort, not glitches).</p>
+<p><strong>Dropout detection</strong> — channels: <code>heartRate</code>, <code>power</code>, <code>cadence</code></p>
+<p>A channel value of <code>0</code> or <code>null</code> for more than 10 consecutive seconds mid-activity (excluding the first/last 30 s warmup/cooldown) is flagged as <code>type: &#39;dropout&#39;</code>, <code>detectionStrategy: &#39;threshold-relative&#39;</code>.</p>
+<p><strong>GPS drift detection</strong> — channel: <code>position</code></p>
+<p>Consecutive GPS positions are compared using the Haversine formula. If the implied speed between two points exceeds 3× the recorded device speed, the record is flagged as <code>type: &#39;gps-drift&#39;</code>, <code>detectionStrategy: &#39;threshold-relative&#39;</code>. GPS drift anomalies use the <code>&#39;position&#39;</code> ChannelKey — a GPS-only channel with no numeric chart series. They surface only through the DeviceToggleBar GPS section and as red circle markers on the map.</p>
+<p><strong>Options pattern</strong> — <code>AnomalyDetectionOptions</code>:</p>
+<pre><code class="language-ts">interface AnomalyDetectionOptions {
+  powerSource?:   &#39;stryd&#39; | &#39;native&#39;;
+  athleteProfile?: { cp?: number; ftp?: number; maxHR?: number; };
+}
+</code></pre>
+<p>Currently <code>detectAnomalies(records)</code> is called without options from <code>parser.ts</code> (statistical fallback for all channels). When issue #112 (athlete profile) and #117 (power source) ship, only the call site changes — the detection logic itself is unchanged.</p>
+<h3>Event grouping — <code>groupAnomalyEvents()</code></h3>
+<p><code>detectAnomalies</code> returns one <code>Anomaly</code> per record. A 40-second dropout produces 40 entries. <code>groupAnomalyEvents(anomalies)</code> collapses contiguous runs of the same channel + type (consecutive <code>recordIndex</code> values differing by ≤ 1) into a single entry (the first record of each run). This converts per-record counts to per-event counts for badge display.</p>
+<pre><code class="language-ts">// 40 dropout records → 1 dropout event
+groupAnomalyEvents(activity.anomalies.filter(a =&gt; a.channel === &#39;heartRate&#39;))
+// → [Anomaly { recordIndex: startOfDropout, type: &#39;dropout&#39;, ... }]
+</code></pre>
+<p>Both Compare and Event pages call <code>groupAnomalyEvents()</code> before passing anomalies to <code>TimeSeriesChart</code> (one <code>markPoint</code> per event, not per record).</p>
+<h3>UI surfaces</h3>
+<p><strong>DeviceToggleBar badges</strong> (<code>src/lib/components/ui/DeviceToggleBar.svelte</code>)</p>
+<p><code>buildAnomalyCounts(activities)</code> in <code>DeviceToggleBar.utils.ts</code> aggregates event-level counts across all activities and returns a <code>Map&lt;ChannelKey, AnomalyCount&gt;</code>. The badge <code>⚠ N</code> is rendered next to each channel label that has anomalies. Tooltip breaks down counts (e.g. <code>&quot;2 spikes, 1 dropout&quot;</code>). A standalone <strong>GPS</strong> section appears at the bottom when <code>anomalyCounts.get(&#39;position&#39;)</code> is non-zero — GPS drift anomalies are surfaced here rather than in any numeric channel group.</p>
+<p><strong>ChannelToggleBar badges</strong> (<code>src/lib/components/ui/ChannelToggleBar.svelte</code>)</p>
+<p>The Event page passes <code>anomalyCounts</code> to <code>ChannelToggleBar</code>. Each channel pill shows an inline <code>⚠N</code> badge when that channel has anomaly events. No GPS section (Event page has no ActivityMap drift markers).</p>
+<p><strong>TimeSeriesChart markPoints</strong> (<code>src/lib/components/charts/TimeSeriesChart.svelte</code>)</p>
+<p><code>TimeSeriesChart</code> accepts <code>anomalies?: Anomaly[]</code> (pre-filtered to the chart&#39;s channel and pre-grouped via <code>groupAnomalyEvents</code>). A red diamond <code>markPoint</code> is rendered at each anomaly&#39;s x-axis position on the <strong>first visible series</strong>. Positions use <code>anomalyXValue()</code> from <code>TimeSeriesChart.utils.ts</code> — which returns <code>elapsedSeconds</code> in time mode and kilometres in distance mode. Clicking a markPoint zooms the chart to ±15 s (time mode) or ±50 m (distance mode) around the anomaly.</p>
+<p><strong>ActivityMap drift circles</strong> (<code>src/lib/components/map/ActivityMap.svelte</code>)</p>
+<p><code>ActivityMap</code> reads <code>activity.anomalies</code> directly (no separate prop). GPS-drift anomalies are filtered by <code>a.type === &#39;gps-drift&#39;</code>, and each anomaly&#39;s corresponding <code>ActivityRecord.position</code> is rendered as a red <code>L.circleMarker</code> (radius 5, <code>#ef4444</code>). Non-GPS anomalies are ignored on the map.</p>
+<h3><code>position</code> ChannelKey</h3>
+<p><code>&#39;position&#39;</code> was added to the <code>ChannelKey</code> union to give GPS drift anomalies a first-class channel assignment. It does NOT appear in <code>ALL_RECORD_CHANNELS</code> (the ordered list used by <code>channelsPresentInRecords</code>), so it is never returned by <code>deriveAvailableChannels()</code> and never rendered as a chart series. Its sole purpose is to carry GPS drift anomaly data through <code>buildAnomalyCounts</code> to the DeviceToggleBar GPS section.</p>
+<hr>
+<hr>
+<h2>4. Responsive Layout</h2>
+<p>The app is fully responsive across three viewport tiers. Breakpoints are defined in two places that must stay in sync:</p>
+<ul>
+<li><strong>CSS:</strong> <code>--bp-phone: 480px</code> and <code>--bp-tablet: 768px</code> in <code>src/routes/layout.css</code></li>
+<li><strong>JS:</strong> <code>PHONE_MAX = 480</code> and <code>TABLET_MAX = 768</code> in <code>src/lib/stores/viewport.ts</code></li>
+</ul>
+<p>The <code>viewport</code> readable store emits <code>&#39;phone&#39; | &#39;tablet&#39; | &#39;desktop&#39;</code> via <code>window.matchMedia</code> listeners. It is SSR-safe (defaults to <code>&#39;desktop&#39;</code>).</p>
+<p>Key responsive components:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Behaviour change at ≤768px</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Sidebar.svelte</code></td>
+<td>Switches to <code>position: fixed</code> slide-out drawer</td>
+</tr>
+<tr>
+<td><code>+layout.svelte</code></td>
+<td>Renders hamburger button (fixed, top-left, 44×44px) and backdrop</td>
+</tr>
+<tr>
+<td><code>CollapsiblePanel.svelte</code></td>
+<td>Wraps toolbar controls; <code>display: contents</code> on desktop, collapsible on mobile</td>
+</tr>
+<tr>
+<td><code>+layout.svelte</code> (phone only)</td>
+<td>Renders bottom navigation bar at ≤480px</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>5. FIT Parsing</h2>
+<p>FIT files are parsed by <code>fit-file-parser</code> running in a <strong>Web Worker</strong> to avoid blocking the UI thread. The worker is created in <code>src/lib/fit/parser.ts</code>.</p>
+<p>Key parsing details:</p>
+<ul>
+<li><code>STRING_DEVICE_TYPE</code> mapping converts <code>fit-file-parser</code>&#39;s snake_case string outputs (e.g. <code>&#39;heart_rate&#39;</code>) back to numeric ANT+ constants.</li>
+<li>Device deduplication: duplicate <code>device_index</code> entries are discarded (only first occurrence retained).</li>
+<li>Two-pass channel allocation: external sensors (known ANT+ types) claim channels first; the watch claims remaining channels; any still-unclaimed channels are merged into the first device as a safety net.</li>
+<li>Enhanced fields: <code>enhanced_speed</code> and <code>enhanced_altitude</code> are preferred over <code>speed</code> and <code>altitude</code>.</li>
+<li>Stryd developer fields: <code>Power</code> (capital P), <code>stance_time</code>, <code>step_length</code> are mapped to standard channel keys.</li>
+</ul>
+<p><strong>Sport-specific post-processing</strong> is applied after record normalisation:</p>
+<table>
+<thead>
+<tr>
+<th>Sport</th>
+<th>Function</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>running</code></td>
+<td><code>applyRunningCadenceDoubling(records)</code></td>
+<td>FIT cadence is single-leg (one foot per minute). Doubles to get conventional spm (steps per minute).</td>
+</tr>
+<tr>
+<td><code>cycling</code></td>
+<td><code>removeCyclingPace(records)</code></td>
+<td>Pace (min/km) is not a meaningful cycling metric. Clears all <code>pace</code> values so the channel is excluded from device streams and charts entirely.</td>
+</tr>
+</tbody></table>
+<p>Both functions are exported from <code>parser.ts</code> for unit testing.</p>
+<p><strong>Record validation</strong> is applied in <code>normalise()</code> after record normalisation and before sport-specific post-processing (PR #142):</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Behaviour</th>
+<th>Toast / log</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>filterNegativeElapsed(records)</code></td>
+<td>Returns a new array with all records where <code>elapsedSeconds &lt; 0</code> removed. Broken device clocks can emit these.</td>
+<td><code>console.warn</code> + <code>&#39;warning&#39;</code> toast if any are removed.</td>
+</tr>
+<tr>
+<td><code>ensureSortedByElapsed(records)</code></td>
+<td>Sorts <code>records</code> in-place by <code>elapsedSeconds</code> if out of order; returns <code>true</code> when sorting was required.</td>
+<td>Caller (<code>normalise()</code>) emits <code>console.warn</code> + <code>&#39;warning&#39;</code> toast on <code>true</code>.</td>
+</tr>
+</tbody></table>
+<p>Both functions are exported from <code>parser.ts</code> for unit testing. Well-formed files pass through both with no output.</p>
+<p><strong>Lap building</strong> is handled by <code>buildLaps(fitLaps, records)</code>, which is also exported for direct unit testing. It derives <code>startDistance</code> and <code>endDistance</code> from the running cursor position in the records array rather than from the FIT lap&#39;s <code>start_distance</code> field. This makes it resilient to Garmin devices that write <code>start_distance = 0</code> for every lap (per-lap relative) rather than cumulative from the session start. Laps with <code>total_distance = 0</code> are returned as zero-length entries (<code>startIndex === endIndex</code>, <code>startDistance === endDistance</code>) without advancing the cursor.</p>
+<p>The cursor advancement uses <code>records[cursor].distance &lt;= targetDist + DISTANCE_EPSILON_M</code> (where <code>DISTANCE_EPSILON_M = 0.5</code>) to absorb GPS floating-point drift at lap boundaries. The constant is exported for use in tests and any future callers that need the same tolerance.</p>
+<p><strong>Anomaly detection</strong> is called at the end of <code>normalise()</code> after sport-specific post-processing and before <code>buildLaps()</code>. See <a href="#3e-data-anomaly-detection">section 3e</a> for details.</p>
+<p><strong>Available channel pre-computation</strong> — <code>channelsPresentInRecords(records)</code> scans each <code>ActivityRecord</code> once across all 14 channel keys and returns a <code>Set&lt;ChannelKey&gt;</code> of those with at least one non-null value. It is called once inside <code>normalise()</code> and the result is stored on <code>Activity</code> as <code>availableChannels: Set&lt;ChannelKey&gt;</code> (PR #108).</p>
+<p><code>deriveAvailableChannels(activities)</code> in <code>src/lib/utils/channels.ts</code> unions those pre-computed sets rather than re-scanning records on every render call. It returns the channel list in the canonical ordering defined by <code>ALL_RECORD_CHANNELS</code> (exported from <code>parser.ts</code>), which also replaces the formerly duplicated <code>ALL_CHANNELS</code> constant that used to live only in <code>channels.ts</code>.</p>
+<hr>
+<h2>6. Testing</h2>
+<p>Unit tests use <strong>Vitest</strong>. Test files live alongside the modules they test (e.g. <code>TimeSeriesChart.test.ts</code> next to <code>TimeSeriesChart.svelte</code>).</p>
+<pre><code class="language-bash">npm test           # run all tests
+npm run test:watch # watch mode
+</code></pre>
+<h3>Test environments</h3>
+<p>Most tests run in the default <strong><code>node</code></strong> environment (pure utility functions with no DOM). Component tests that mount Svelte components require a DOM and use <strong><code>jsdom</code></strong>.</p>
+<p>To mark a test file as a component test, add this directive as the <strong>first line</strong> of the file:</p>
+<pre><code class="language-typescript">// @vitest-environment jsdom
+</code></pre>
+<p><strong>Why the <code>browser</code> resolve condition is needed for component tests:</strong></p>
+<p>Svelte 5 exports both a browser build (<code>index.js</code>) and a server build (<code>index-server.js</code>). In <code>node</code> environment, Vite resolves to the server build, which throws <code>&quot;mount(...) is not available on the server&quot;</code>. The <code>vite.config.ts</code> sets <code>resolve.conditions: [&#39;browser&#39;]</code> <strong>only when <code>mode === &#39;test&#39;</code></strong> so that jsdom component tests use the browser build. The production build is unaffected (Vite&#39;s built-in defaults include <code>browser</code> for client bundles).</p>
+<pre><code class="language-typescript">// vite.config.ts — mode-conditional resolve
+export default defineConfig(({ mode }) =&gt; ({
+  plugins: [tailwindcss(), sveltekit(), visualizer({ filename: &#39;stats.html&#39;, open: false, gzipSize: true })],
+  build: { chunkSizeWarningLimit: 1200 }, // ECharts async chunk is ~1.1 MB — suppress expected warning
+  ...(mode === &#39;test&#39; ? { resolve: { conditions: [&#39;browser&#39;] } } : {}),
+  // ...
+}));
+</code></pre>
+<p><strong>Mocking Leaflet in component tests:</strong></p>
+<p><code>ActivityMap.svelte</code> dynamically imports Leaflet in <code>onMount</code>. In jsdom, Leaflet&#39;s browser DOM APIs are unavailable. Mock Leaflet at the module level:</p>
+<pre><code class="language-typescript">vi.mock(&#39;leaflet&#39;, () =&gt; { /* minimal stubs for map, tileLayer, control, etc. */ });
+vi.mock(&#39;leaflet/dist/leaflet.css&#39;, () =&gt; ({}));
+</code></pre>
+<p>Also stub <code>ResizeObserver</code> (not implemented in jsdom):</p>
+<pre><code class="language-typescript">vi.stubGlobal(&#39;ResizeObserver&#39;, class { observe = vi.fn(); disconnect = vi.fn(); });
+</code></pre>
+<p>There are no integration or end-to-end tests at present. The API routes for sync are exercised manually — see section 3.11 for local setup.</p>
+<h3>Shared test helper — <code>makeBaseActivity</code></h3>
+<p><code>src/lib/test-utils.ts</code> exports <code>makeBaseActivity(overrides?)</code>, a single factory for building <code>Activity</code> fixture objects in tests (PR #108):</p>
+<pre><code class="language-typescript">import { makeBaseActivity } from &#39;$lib/test-utils&#39;;
+
+const activity = makeBaseActivity({ id: &#39;run-1&#39;, records: [/* ... */] });
+</code></pre>
+<p>The factory fills every required <code>Activity</code> field with safe defaults and computes <code>availableChannels</code> automatically via <code>channelsPresentInRecords(records)</code>. It also sets <code>anomalies: []</code> as the default empty anomaly list, matching <code>normalise()</code>&#39;s initial state before <code>detectAnomalies()</code> is called. Pass <code>overrides.availableChannels</code> to supply a manual set when the test is specifically about channel visibility rather than parser behaviour.</p>
+<p>All test files should import this helper rather than duplicating the full <code>Activity</code> literal — it prevents future interface changes from requiring edits across every test file.</p>
+
+</body>
+</html>
