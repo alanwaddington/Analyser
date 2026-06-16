@@ -16,6 +16,10 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 3.3 [Summary Tab](#33-summary-tab)
    - 3.4 [Mean/Max Tab](#34-meanmax-tab)
    - 3.5 [Map Tab](#35-map-tab)
+8. [Athlete Profile](#8-athlete-profile)
+   - 8.1 [Opening the Profile Panel](#81-opening-the-profile-panel)
+   - 8.2 [Profile Fields](#82-profile-fields)
+   - 8.3 [How the Profile Is Used](#83-how-the-profile-is-used)
 4. [Device Comparison — Multiple Files](#4-device-comparison--multiple-files)
    - 4.1 [Loading Multiple Files](#41-loading-multiple-files)
    - 4.2 [Different-Session Files](#42-different-session-files)
@@ -31,7 +35,11 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 7.2 [Linking a Second Device](#72-linking-a-second-device)
    - 7.3 [Sync Status and Errors](#73-sync-status-and-errors)
    - 7.4 [Resetting Your Sync Identity](#74-resetting-your-sync-identity)
-8. [Reference](#8-reference)
+   - 7.1 [How Sync Works](#71-how-sync-works)
+   - 7.2 [Linking a Second Device](#72-linking-a-second-device)
+   - 7.3 [Sync Status and Errors](#73-sync-status-and-errors)
+   - 7.4 [Resetting Your Sync Identity](#74-resetting-your-sync-identity)
+9. [Reference](#9-reference)
 
 ---
 
@@ -74,6 +82,10 @@ On a **phone** (narrow screen), a **bottom navigation bar** appears at the foot 
 ### Toolbar Controls
 
 On tablet and phone, the toolbar controls (Device Toggle Bar, Channel Toggle Bar, Fine-tune timing) are hidden behind a collapsible panel. Tap the **Devices & Options** (or **Channels & Options**) button to expand or collapse the controls. On desktop the controls are always visible.
+
+### Athlete Profile
+
+The **⚖ Profile** toggle is in the bottom of the sidebar (or navigation drawer). Click it to expand a panel where you enter your training thresholds (weight, FTP, Critical Power, maximum heart rates, LTHR). These values are saved in your browser and used to add zone context to charts and summary tables. See [section 8](#8-athlete-profile) for details.
 
 ### Theme
 
@@ -173,6 +185,15 @@ When Analyser detects sensor anomalies in the active channel, red **◆ diamond 
 
 > GPS drift anomalies (where the GPS signal jumped to an implausible position) are shown on the **Map tab** as red circles, not on time-series charts.
 
+**Zone shading:**
+
+When you have configured an [Athlete Profile](#8-athlete-profile), the Charts tab adds subtle background shading to relevant channels:
+
+- **Heart Rate** — five colour bands (Z1–Z5) are drawn based on your sport-specific maximum heart rate (or LTHR when maxHR is absent). The bands update automatically if you change the profile.
+- **Power (running)** — five CP zone bands are drawn when you have set a Critical Power value and the activity is a running file with Stryd power data.
+
+Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.
+
 **Smoothing:**
 
 A smoothing control lets you apply a rolling average to reduce sensor noise. Increase the window (in seconds) to smooth out spikes; set it to 1 s for raw data. Smoothing applies to all channels simultaneously.
@@ -194,6 +215,17 @@ For each channel, the table shows:
 | **Max** | Peak value recorded |
 | **Total** | Cumulative value (distance, calories) — shown where applicable |
 
+**Athlete Profile context columns** — when you have configured an [Athlete Profile](#8-athlete-profile), additional columns appear alongside the average:
+
+| Column | When shown | Meaning |
+|--------|-----------|---------|
+| **% FTP** | Cycling power + FTP set | Average power as a percentage of your FTP |
+| **% CP** | Running power + CP set | Average power as a percentage of your Critical Power |
+| **w/kg** | Any power + weight set | Average power divided by body weight |
+| **Zone** | Heart Rate + maxHR or LTHR set | HR zone (Z1–Z5) of the average HR using the sport-appropriate threshold |
+
+These columns are absent when the relevant profile fields are not set, so the table stays clean for users who have not configured a profile.
+
 Toggling devices in the Device Toggle Bar updates the Summary table immediately.
 
 ---
@@ -209,6 +241,13 @@ This is the standard "Critical Power curve" or "Power Duration curve" used in cy
 - The Y axis is the best average power achieved for the duration on the X axis.
 - A high, flat curve indicates sustained high output; a steep drop-off indicates strength over short durations but limited endurance.
 - When multiple files are loaded, each file produces its own curve — load two sessions to compare fitness progress.
+
+**Athlete Profile overlays** — when you have configured an [Athlete Profile](#8-athlete-profile), the Mean/Max chart gains two optional overlays:
+
+- **FTP / CP reference line** — a dashed horizontal line at your FTP (cycling) or Critical Power (running) lets you see exactly where on the curve your threshold sits. It is labelled "FTP" for cycling and "Critical Power" for running.
+- **w/kg secondary axis** — when body weight is set, a second Y axis on the right shows watts per kilogram, making it easy to compare across different body weights or reference published w/kg benchmarks.
+
+Both overlays are absent when the relevant profile fields are not configured.
 
 ---
 
@@ -507,7 +546,46 @@ A new UUID is generated and your current labels are pushed under the new identit
 
 ---
 
-## 8. Reference
+## 8. Athlete Profile
+
+The Athlete Profile stores your personal training thresholds locally in your browser. Once set, the thresholds are used to add zone context to charts and the summary table — no account required and no data is sent to any server.
+
+### 8.1 Opening the Profile Panel
+
+Click the **⚖ Profile** toggle in the sidebar footer (or navigation drawer on tablet/phone). The panel expands to reveal six numeric input fields. Click the toggle again to collapse it.
+
+Your settings are saved automatically when you leave each field (press **Enter** or click away). Leaving a field blank removes that threshold — the corresponding overlays disappear immediately.
+
+> **Tip:** Validation warnings appear in amber below any field with an implausible value (e.g. FTP above 600 W, weight below 30 kg). These are non-blocking — the value is still saved. Correct the figure if it was a typo.
+
+### 8.2 Profile Fields
+
+| Field | Unit | Used for |
+|-------|------|---------|
+| **Weight** | kg | w/kg column in Summary tab; w/kg secondary axis on Mean/Max chart |
+| **FTP** (Functional Threshold Power) | W | % FTP column in Summary tab; FTP reference line on Mean/Max chart (cycling) |
+| **Max HR — Cycling** | bpm | HR zone badge in Summary tab; zone shading on HR chart (cycling activities) |
+| **CP** (Critical Power) | W | % CP column in Summary tab; Critical Power reference line on Mean/Max chart (running) |
+| **Max HR — Running** | bpm | HR zone badge in Summary tab; zone shading on HR chart (running activities) |
+| **LTHR** (Lactate Threshold HR) | bpm | Fallback HR zone source when maxHR is not set; uses a standard 92% maxHR estimate |
+
+**Sport routing:** For the HR zone badge and chart shading, Analyser uses your cycling maxHR for cycling activities and your running maxHR for running activities. If the primary maxHR for a sport is absent, it falls back to the other sport's maxHR, then to LTHR. This means a single maxHR entry provides zone context for both cycling and running if you have not configured them separately.
+
+### 8.3 How the Profile Is Used
+
+| Where | What changes |
+|-------|-------------|
+| **Charts tab — Heart Rate chart** | Z1–Z5 background shading bands based on sport-appropriate maxHR (or LTHR estimate) |
+| **Charts tab — Power chart (running)** | Z1–Z5 CP zone shading bands (Stryd power only) |
+| **Summary tab — Power rows** | % FTP (cycling) or % CP (running) column; w/kg column |
+| **Summary tab — Heart Rate row** | Zone badge (Z1–Z5) |
+| **Mean/Max tab** | FTP or Critical Power dashed reference line; w/kg secondary Y axis |
+
+All overlays and columns are silently absent when the relevant profile field is not configured. Loading a file with no matching power or HR data is unaffected.
+
+---
+
+## 9. Reference
 
 ### Sync — Quick Reference
 

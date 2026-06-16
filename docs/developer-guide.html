@@ -136,7 +136,8 @@
 3b. <a href="#3b-data-export">Data Export</a>
 3c. <a href="#3c-chart-stats-row">Chart Stats Row</a>
 3d. <a href="#3d-activity-alignment--gps-anchor-and-indoor-detection">Activity Alignment — GPS Anchor</a>
-3e. <a href="#3e-data-anomaly-detection">Data Anomaly Detection</a></li>
+3e. <a href="#3e-data-anomaly-detection">Data Anomaly Detection</a>
+3f. <a href="#3f-athlete-profile">Athlete Profile</a></li>
 </ul>
 </li>
 <li><a href="#4-responsive-layout">Responsive Layout</a></li>
@@ -161,8 +162,11 @@ npm test           # vitest unit tests
 │   ├── align/        # Activity alignment (timestamp sync, distance interpolation)
 │   │                 # - distance.ts: interpolateToDistanceAxis, distanceStep(totalDistanceMetres)
 │   │                 #   distanceStep: ≤50 km → 10 m step; &gt;50 km → 20 m step (halves point count)
-│   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection
+│   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection, zone utilities
 │   │                 # - anomalies.ts: detectAnomalies(), groupAnomalyEvents(), groupAnomaliesByChannel()
+│   │                 # - zones.ts: hrZone, hrZoneFromMaxHR, hrZoneFromLTHR, lthrToEstimatedMaxHR,
+│   │                 #   cpZone, ftpPct, cpPct, wPerKg, hrZoneBoundaries, cpZoneBoundaries
+│   │                 #   All pure functions — no side effects. Re-exported from analytics/index.ts.
 │   │                 # - stats.ts: mean(), stdDev() — population statistics ignoring null/NaN
 │   │                 # - downsample.ts: downsampleGps(points, maxPoints, epsilon) — GPS polyline
 │   │                 #   simplification; GPS_MAX_POINTS=500 hard cap; iterative RDP (explicit stack,
@@ -198,6 +202,11 @@ npm test           # vitest unit tests
 │   ├── server/
 │   │   └── redis.ts  # Upstash Redis singleton (server-only)
 │   ├── stores/
+│   │   ├── athleteProfile.ts # Athlete profile store + localStorage persistence (see §3f)
+│   │   │                     # - athleteProfile: writable&lt;AthleteProfile&gt;({})
+│   │   │                     # - setProfileField(key, value): updates store + persists; removes key if undefined/NaN
+│   │   │                     # - initAthleteProfile(): loads from localStorage; SSR-safe (typeof localStorage guard)
+│   │   │                     # - Storage key: &#39;analyser-athlete-profile&#39;; quota errors surface as toast warnings
 │   │   ├── deviceLabels.ts  # Device label persistence (localStorage)
 │   │   ├── sync.ts          # Cross-device sync logic
 │   │   ├── session.ts       # Activity session state; activityColourMap assigns stable colours by activity.id
@@ -586,6 +595,11 @@ interface Toast {
 </tr>
 </thead>
 <tbody><tr>
+<td><code>athleteProfile.ts</code> — <code>_persist</code> catch</td>
+<td><code>warning</code></td>
+<td><code>&#39;Athlete profile could not be saved — storage full&#39;</code> (QuotaExceededError) or <code>&#39;Athlete profile could not be saved&#39;</code> (other errors)</td>
+</tr>
+<tr>
 <td><code>deviceLabels.ts</code> — <code>saveLabels</code> catch</td>
 <td><code>warning</code></td>
 <td><code>&#39;Device label could not be saved — storage full&#39;</code> (QuotaExceededError) or <code>&#39;Device label could not be saved&#39;</code> (other errors)</td>
@@ -658,12 +672,14 @@ interface Toast {
 <p>The component validates code input against <code>SHORT_CODE_REGEX</code> before hitting the API, providing immediate feedback on format errors.</p>
 <h3 id="39-layout-wiring">3.9 Layout Wiring</h3>
 <p><strong><code>src/routes/+layout.svelte</code></strong></p>
-<p>Three sync-related wiring points:</p>
+<p>Four wiring points in <code>onMount</code>:</p>
 <ol>
-<li><code>onMount</code> calls <code>initSync()</code> — idempotent; safe if called more than once (e.g. during HMR). Stores the returned cleanup function in <code>cleanupSync</code>.</li>
-<li><code>onDestroy</code> calls <code>cleanupSync?.()</code> — deregisters the label-change hook and resets the initialised flag, enabling a clean reinit if the layout remounts (HMR).</li>
+<li><code>initTheme()</code> — applies the persisted theme preference.</li>
+<li><code>initAthleteProfile()</code> — loads athlete profile from localStorage into the <code>athleteProfile</code> store. SSR-safe; a no-op when <code>typeof localStorage === &#39;undefined&#39;</code>.</li>
+<li><code>initSync()</code> — idempotent; safe if called more than once (e.g. during HMR). Stores the returned cleanup function in <code>cleanupSync</code>.</li>
 <li>URL parameter handling: if the page loads with <code>?sync={uuid}</code>, <code>adoptSyncIdentity(uuid)</code> is called and the param is stripped from the URL using <code>history.replaceState</code> to avoid sharing it inadvertently via browser history.</li>
 </ol>
+<p><code>onDestroy</code> calls <code>cleanupSync?.()</code> — deregisters the label-change hook and resets the initialised flag, enabling a clean reinit if the layout remounts (HMR).</p>
 <h3 id="310-validation">3.10 Validation</h3>
 <p><strong><code>src/lib/validation.ts</code></strong></p>
 <p>Shared between API routes (server) and <code>SyncPanel</code> (client) to avoid duplication:</p>
@@ -1132,11 +1148,11 @@ interface Anomaly {
 <p>Consecutive GPS positions are compared using the Haversine formula. If the implied speed between two points exceeds 3× the recorded device speed, the record is flagged as <code>type: &#39;gps-drift&#39;</code>, <code>detectionStrategy: &#39;threshold-relative&#39;</code>. GPS drift anomalies use the <code>&#39;position&#39;</code> ChannelKey — a GPS-only channel with no numeric chart series. They surface only through the DeviceToggleBar GPS section and as red circle markers on the map.</p>
 <p><strong>Options pattern</strong> — <code>AnomalyDetectionOptions</code>:</p>
 <pre><code class="language-ts">interface AnomalyDetectionOptions {
-  powerSource?:   &#39;stryd&#39; | &#39;native&#39;;
-  athleteProfile?: { cp?: number; ftp?: number; maxHR?: number; };
+  powerSource?:    &#39;stryd&#39; | &#39;native&#39;;
+  athleteProfile?: AthleteProfile;   // from $lib/types — weight, ftp, cp, maxHrCycling, maxHrRunning, lthr
 }
 </code></pre>
-<p>Currently <code>detectAnomalies(records)</code> is called without options from <code>parser.ts</code> (statistical fallback for all channels). When issue #112 (athlete profile) and #117 (power source) ship, only the call site changes — the detection logic itself is unchanged.</p>
+<p>Currently <code>detectAnomalies(records)</code> is called without options from <code>parser.ts</code> (statistical fallback for all channels). When issue #117 (power source detection) ships, only the call site changes — the detection logic itself is unchanged. The <code>athleteProfile</code> option is wired and ready; <code>maxHrCycling</code> and <code>maxHrRunning</code> are used for sport-aware spike thresholds when provided.</p>
 <h3 id="event-grouping--groupanomalyevents">Event grouping — `groupAnomalyEvents()`</h3>
 <p><code>detectAnomalies</code> returns one <code>Anomaly</code> per record. A 40-second dropout produces 40 entries. <code>groupAnomalyEvents(anomalies)</code> collapses contiguous runs of the same channel + type (consecutive <code>recordIndex</code> values differing by ≤ 1) into a single entry (the first record of each run). This converts per-record counts to per-event counts for badge display.</p>
 <pre><code class="language-ts">// 40 dropout records → 1 dropout event
@@ -1156,6 +1172,130 @@ groupAnomalyEvents(activity.anomalies.filter(a =&gt; a.channel === &#39;heartRat
 <h3 id="position-channelkey">`position` ChannelKey</h3>
 <p><code>&#39;position&#39;</code> was added to the <code>ChannelKey</code> union to give GPS drift anomalies a first-class channel assignment. It does NOT appear in <code>ALL_RECORD_CHANNELS</code> (the ordered list used by <code>channelsPresentInRecords</code>), so it is never returned by <code>deriveAvailableChannels()</code> and never rendered as a chart series. Its sole purpose is to carry GPS drift anomaly data through <code>buildAnomalyCounts</code> to the DeviceToggleBar GPS section.</p>
 <hr>
+<h2 id="3f-athlete-profile">3f. Athlete Profile</h2>
+<p>PR #150 added a local athlete profile system: users enter their training thresholds once and the app uses them to annotate charts and summary tables with zone context.</p>
+<h3 id="type--athleteprofile">Type — `AthleteProfile`</h3>
+<p><strong>Location:</strong> <code>src/lib/types.ts</code></p>
+<pre><code class="language-ts">interface AthleteProfile {
+  weight?:        number;  // kg
+  ftp?:           number;  // W — cycling Functional Threshold Power
+  maxHrCycling?:  number;  // bpm — cycling max heart rate
+  cp?:            number;  // W — running Critical Power (Stryd model)
+  maxHrRunning?:  number;  // bpm — running max heart rate
+  lthr?:          number;  // bpm — Lactate Threshold Heart Rate (fallback)
+}
+</code></pre>
+<p>All fields are optional. The store starts as <code>{}</code> and any field can be removed by setting it to <code>undefined</code>.</p>
+<h3 id="store--athleteprofilets">Store — `athleteProfile.ts`</h3>
+<p><strong>Location:</strong> <code>src/lib/stores/athleteProfile.ts</code></p>
+<table>
+<thead>
+<tr>
+<th>Export</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>athleteProfile</code></td>
+<td><code>Writable&lt;AthleteProfile&gt;</code> — reactive store</td>
+</tr>
+<tr>
+<td><code>setProfileField(key, value)</code></td>
+<td>Updates one field in the store and persists to localStorage. Deletes the key when <code>value</code> is <code>undefined</code> or <code>NaN</code>. Emits a <code>&#39;warning&#39;</code> toast on <code>QuotaExceededError</code>.</td>
+</tr>
+<tr>
+<td><code>initAthleteProfile()</code></td>
+<td>Loads persisted profile from localStorage. SSR-safe (<code>typeof localStorage === &#39;undefined&#39;</code> guard). Called once in <code>+layout.svelte</code> <code>onMount</code>.</td>
+</tr>
+</tbody></table>
+<p>Storage key: <code>&#39;analyser-athlete-profile&#39;</code>. Stored as a JSON object (only set keys are present — unset fields are omitted).</p>
+<h3 id="zone-utility-module--zonests">Zone utility module — `zones.ts`</h3>
+<p><strong>Location:</strong> <code>src/lib/analytics/zones.ts</code> (re-exported via <code>src/lib/analytics/index.ts</code>)</p>
+<p>All functions are pure with no side effects. Every denominator function returns <code>0</code> for zero or negative input to prevent <code>Infinity</code> results.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>hrZone</code></td>
+<td><code>(bpm, profile, sport) → HrZone | null</code></td>
+<td>Sport-aware HR zone. Uses <code>maxHrCycling</code> for <code>&#39;cycling&#39;</code>, <code>maxHrRunning</code> otherwise. Falls back to the other sport&#39;s maxHR, then to LTHR. Returns <code>null</code> when no threshold is set.</td>
+</tr>
+<tr>
+<td><code>hrZoneFromMaxHR</code></td>
+<td><code>(bpm, maxHR) → HrZone</code></td>
+<td>5-zone % of maxHR model (Z1 &lt; 60%, …, Z5 ≥ 90%)</td>
+</tr>
+<tr>
+<td><code>hrZoneFromLTHR</code></td>
+<td><code>(bpm, lthr) → HrZone</code></td>
+<td>5-zone % of LTHR model (Z1 &lt; 81%, …, Z5 ≥ 100%)</td>
+</tr>
+<tr>
+<td><code>lthrToEstimatedMaxHR</code></td>
+<td><code>(lthr) → number</code></td>
+<td><code>lthr / 0.92</code> — Friel/Coggan approximation. Use when maxHR is unavailable.</td>
+</tr>
+<tr>
+<td><code>cpZone</code></td>
+<td><code>(watts, cp) → CpZone</code></td>
+<td>Stryd 5-zone CP model (Z1 &lt; 75%, …, Z5 ≥ 120%)</td>
+</tr>
+<tr>
+<td><code>ftpPct</code></td>
+<td><code>(watts, ftp) → number</code></td>
+<td><code>round((watts / ftp) * 100)</code>. Returns <code>0</code> when <code>ftp ≤ 0</code>.</td>
+</tr>
+<tr>
+<td><code>cpPct</code></td>
+<td><code>(watts, cp) → number</code></td>
+<td><code>round((watts / cp) * 100)</code>. Returns <code>0</code> when <code>cp ≤ 0</code>.</td>
+</tr>
+<tr>
+<td><code>wPerKg</code></td>
+<td><code>(watts, weightKg) → number</code></td>
+<td><code>round((watts / weightKg) * 10) / 10</code>. Returns <code>0</code> when <code>weightKg ≤ 0</code>.</td>
+</tr>
+<tr>
+<td><code>hrZoneBoundaries</code></td>
+<td><code>(maxHR) → ZoneBand[]</code></td>
+<td>5 contiguous <code>{ min, max, zone }</code> bands for ECharts <code>markArea</code> construction</td>
+</tr>
+<tr>
+<td><code>cpZoneBoundaries</code></td>
+<td><code>(cp) → ZoneBand[]</code></td>
+<td>5 contiguous <code>{ min, max, zone }</code> bands for ECharts <code>markArea</code> construction</td>
+</tr>
+</tbody></table>
+<h3 id="how-the-profile-flows-into-the-ui">How the profile flows into the UI</h3>
+<p>All three consumers receive <code>athleteProfile</code> and <code>sport</code> as props from their respective page components:</p>
+<pre><code class="language-svelte">&lt;!-- compare/+page.svelte --&gt;
+&lt;TimeSeriesChart athleteProfile={$athleteProfile} sport={$activities[0]?.sport ?? &#39;&#39;} ... /&gt;
+&lt;MeanMaxChart    athleteProfile={$athleteProfile} sport={$activities[0]?.sport ?? &#39;&#39;} ... /&gt;
+</code></pre>
+<p><strong><code>TimeSeriesChart.svelte</code></strong> — adds HR zone <code>markArea</code> bands for the <code>heartRate</code> channel and CP zone bands for <code>power</code> when <code>sport === &#39;running&#39;</code>. Uses the cross-sport maxHR fallback inline (same logic as <code>hrZone()</code>), then calls <code>lthrToEstimatedMaxHR()</code> for the LTHR path.</p>
+<p><strong><code>MeanMaxChart.svelte</code></strong> — adds an FTP (cycling) or Critical Power (running) dashed <code>markLine</code>. Adds a second w/kg Y-axis when <code>weight</code> is set and <code>weight &gt; 0</code>.</p>
+<p><strong><code>compare/+page.svelte</code></strong> — <code>buildCellContext(ch, avg, sport, profile)</code> derives the Summary tab context object:</p>
+<pre><code class="language-ts">// For power channels:
+{ pctLabel: &#39;92% FTP&#39; | &#39;88% CP&#39;, wkg: &#39;3.6&#39; }
+
+// For heartRate:
+{ zone: 2 }
+
+// Returns null when no relevant profile field is set
+</code></pre>
+<h3 id="sidebar-ssr-workaround">Sidebar SSR workaround</h3>
+<p><code>AthleteProfilePanel</code> is wrapped in <code>{#if mounted}</code> in <code>Sidebar.svelte</code>:</p>
+<pre><code class="language-svelte">let mounted = $state(false);
+onMount(() =&gt; { mounted = true; });
+
+{#if mounted}&lt;AthleteProfilePanel /&gt;{/if}
+</code></pre>
+<p>This prevents an SSR hydration crash where the panel&#39;s <code>&lt;button&gt;</code> element was absent from server-rendered HTML, causing Svelte 5&#39;s <code>sibling()</code> to consume the wrong DOM node. The workaround causes the Profile toggle button to appear only after client hydration (brief FOUC on first load). Tracked in issue #151.</p>
 <hr>
 <h2 id="4-responsive-layout">4. Responsive Layout</h2>
 <p>The app is fully responsive across three viewport tiers. Breakpoints are defined in two places that must stay in sync:</p>

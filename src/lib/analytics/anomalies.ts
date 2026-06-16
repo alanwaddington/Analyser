@@ -35,8 +35,9 @@ function detectSpikes(
 	let threshold: number;
 	let strategy: Anomaly['detectionStrategy'] = 'statistical';
 
-	if (channel === 'heartRate' && options?.athleteProfile?.maxHR != null) {
-		threshold = options.athleteProfile.maxHR + 10;
+	const effectiveMaxHR = options?.athleteProfile?.maxHrCycling ?? options?.athleteProfile?.maxHrRunning;
+	if (channel === 'heartRate' && effectiveMaxHR != null) {
+		threshold = effectiveMaxHR + 10;
 		strategy = 'threshold-relative';
 	} else if (
 		channel === 'power' &&

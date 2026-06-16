@@ -3,6 +3,7 @@
 	import type { ECharts, EChartsOption } from 'echarts';
 	import { loadECharts, type EChartsModule } from './echarts-loader';
 	import { FILE_COLOURS } from '$lib/types';
+	import type { AthleteProfile } from '$lib/types';
 	import { buildMeanMaxData, formatDuration } from './MeanMaxChart.utils.ts';
 	import { isDark } from '$lib/stores/theme';
 	import type { MeanMaxSeriesInput } from './MeanMaxChart.utils.ts';
@@ -12,8 +13,12 @@
 
 	let {
 		seriesInputs,
+		athleteProfile = {},
+		sport = '',
 	}: {
 		seriesInputs: MeanMaxSeriesInput[];
+		athleteProfile?: AthleteProfile;
+		sport?: string;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -34,9 +39,49 @@
 	function buildOption(): EChartsOption {
 		const tc = textColour();
 		const gc = gridColour();
+		const refColour = $isDark ? '#64748b' : '#94a3b8';
+
+		const showWkg = athleteProfile.weight != null && athleteProfile.weight > 0;
+		const weight = athleteProfile.weight ?? 1;
+
+		// Reference line: FTP for cycling, CP for running
+		const isCycling = sport !== 'running';
+		const refValue = isCycling ? athleteProfile.ftp : athleteProfile.cp;
+		const refLabel = isCycling ? 'FTP' : 'Critical Power';
+
+		// Find first visible series index for markLine attachment
+		const firstVisible = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
+
+		const yAxes: EChartsOption['yAxis'] = [
+			{
+				type: 'value',
+				name: 'W',
+				nameTextStyle: { color: tc },
+				axisLabel: { color: tc, fontSize: 11 },
+				splitLine: { lineStyle: { color: gc } },
+			},
+		];
+
+		if (showWkg) {
+			(yAxes as object[]).push({
+				type: 'value',
+				position: 'right',
+				name: 'w/kg',
+				nameTextStyle: { fontSize: 9, color: refColour },
+				nameLocation: 'end',
+				axisLabel: {
+					color: refColour,
+					fontSize: 10,
+					formatter: (v: number) => (v / weight).toFixed(1),
+				},
+				axisLine: { show: false },
+				splitLine: { show: false },
+				axisTick: { show: false },
+			});
+		}
 
 		return {
-			grid: { top: 20, right: 16, bottom: 30, left: 55 },
+			grid: { top: 20, right: showWkg ? 52 : 16, bottom: 30, left: 55 },
 			xAxis: {
 				type: 'log',
 				name: 's',
@@ -49,13 +94,7 @@
 				axisLine: { lineStyle: { color: gc } },
 				splitLine: { lineStyle: { color: gc } },
 			},
-			yAxis: {
-				type: 'value',
-				name: 'W',
-				nameTextStyle: { color: tc },
-				axisLabel: { color: tc, fontSize: 11 },
-				splitLine: { lineStyle: { color: gc } },
-			},
+			yAxis: yAxes,
 			tooltip: {
 				trigger: 'axis',
 				axisPointer: { type: 'cross', lineStyle: { color: '#64748b' } },
@@ -77,6 +116,23 @@
 			series: seriesInputs.map((s, i) => {
 				const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
 				const name = s.label ?? s.activity.filename;
+
+				const markLine = (i === firstVisible && refValue != null)
+					? {
+						silent: true,
+						symbol: ['none', 'none'],
+						lineStyle: { type: 'dashed' as const, color: refColour, width: 1, opacity: 0.7 },
+						label: {
+							position: 'insideEndTop' as const,
+							formatter: refLabel,
+							fontSize: 10,
+							color: refColour,
+							distance: 4,
+						},
+						data: [{ yAxis: refValue }],
+					}
+					: undefined;
+
 				return {
 					type: 'line' as const,
 					name,
@@ -85,6 +141,7 @@
 					itemStyle: { color: colour },
 					symbol: 'none',
 					showSymbol: false,
+					...(markLine ? { markLine } : {}),
 				};
 			}),
 		};
@@ -134,6 +191,8 @@
 	$effect(() => {
 		void $isDark;
 		void seriesInputs;
+		void athleteProfile;
+		void sport;
 		chart?.setOption(buildOption(), { notMerge: true });
 	});
 </script>

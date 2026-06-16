@@ -183,13 +183,18 @@ export interface Anomaly {
 	detectionStrategy: DetectionStrategy;
 }
 
+export interface AthleteProfile {
+	weight?: number;        // kg — used for w/kg across all sports
+	ftp?: number;           // watts — cycling Functional Threshold Power
+	maxHrCycling?: number;  // bpm — max HR for cycling activities
+	cp?: number;            // watts — running Critical Power (Stryd; also usable with native watch)
+	maxHrRunning?: number;  // bpm — max HR for running activities
+	lthr?: number;          // bpm — Lactate Threshold Heart Rate (HR zone fallback)
+}
+
 export interface AnomalyDetectionOptions {
 	powerSource?: 'stryd' | 'native';
-	athleteProfile?: {
-		cp?: number;
-		ftp?: number;
-		maxHR?: number;
-	};
+	athleteProfile?: AthleteProfile;
 }
 
 export interface GpsPointWithDistance {

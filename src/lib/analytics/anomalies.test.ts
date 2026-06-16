@@ -80,19 +80,37 @@ describe('detectAnomalies — HR spike (statistical)', () => {
 // --------------------------------------------------------------------------
 
 describe('detectAnomalies — HR spike (threshold-relative)', () => {
-	it('detectAnomalies_hrWithMaxHR_usesThresholdRelative', () => {
+	it('detectAnomalies_hrWithMaxHrCycling_usesThresholdRelative', () => {
 		const records = hrRecordsWithSpike(150, 200, 30);
-		// maxHR = 185; 200 > 185 + 10 = 195 → spike
-		const anomalies = detectAnomalies(records, { athleteProfile: { maxHR: 185 } });
+		// maxHrCycling = 185; 200 > 185 + 10 = 195 → spike
+		const anomalies = detectAnomalies(records, { athleteProfile: { maxHrCycling: 185 } });
 		const hrAnomalies = anomalies.filter(a => a.channel === 'heartRate' && a.type === 'spike');
 		expect(hrAnomalies.length).toBeGreaterThan(0);
 		expect(hrAnomalies[0].detectionStrategy).toBe('threshold-relative');
 	});
 
-	it('detectAnomalies_hrBelowMaxHRThreshold_notFlagged', () => {
+	it('detectAnomalies_hrWithMaxHrRunning_usesThresholdRelative', () => {
+		const records = hrRecordsWithSpike(150, 200, 30);
+		// maxHrRunning = 185; 200 > 185 + 10 = 195 → spike
+		const anomalies = detectAnomalies(records, { athleteProfile: { maxHrRunning: 185 } });
+		const hrAnomalies = anomalies.filter(a => a.channel === 'heartRate' && a.type === 'spike');
+		expect(hrAnomalies.length).toBeGreaterThan(0);
+		expect(hrAnomalies[0].detectionStrategy).toBe('threshold-relative');
+	});
+
+	it('detectAnomalies_hrCyclingTakesPrecedenceOverRunning_usesCorrectThreshold', () => {
+		const records = hrRecordsWithSpike(150, 200, 30);
+		// maxHrCycling = 185 takes precedence; 200 > 195 → spike
+		// maxHrRunning = 200 would set threshold at 210; 200 < 210 → no spike
+		const anomalies = detectAnomalies(records, { athleteProfile: { maxHrCycling: 185, maxHrRunning: 200 } });
+		const hrAnomalies = anomalies.filter(a => a.channel === 'heartRate' && a.type === 'spike');
+		expect(hrAnomalies.length).toBeGreaterThan(0);
+	});
+
+	it('detectAnomalies_hrBelowMaxHrCyclingThreshold_notFlagged', () => {
 		const records = hrRecordsWithSpike(150, 192, 30);
-		// maxHR = 185; 192 < 185 + 10 = 195 → not a spike
-		const anomalies = detectAnomalies(records, { athleteProfile: { maxHR: 185 } });
+		// maxHrCycling = 185; 192 < 185 + 10 = 195 → not a spike
+		const anomalies = detectAnomalies(records, { athleteProfile: { maxHrCycling: 185 } });
 		const hrAnomalies = anomalies.filter(a => a.channel === 'heartRate' && a.type === 'spike');
 		expect(hrAnomalies.length).toBe(0);
 	});

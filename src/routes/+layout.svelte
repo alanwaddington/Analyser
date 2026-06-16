@@ -10,6 +10,7 @@
 	import { isDark, initTheme } from '$lib/stores/theme';
 	import { viewport } from '$lib/stores/viewport';
 	import { initSync, adoptSyncIdentity } from '$lib/stores/sync';
+	import { initAthleteProfile } from '$lib/stores/athleteProfile';
 	import Sidebar from '$lib/components/ui/Sidebar.svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 
@@ -75,6 +76,7 @@
 
 	onMount(async () => {
 		initTheme();
+		initAthleteProfile(); // same lazy-load-from-localStorage pattern as initSync / initTheme
 
 		// Handle ?sync={uuid} linking URL (from QR scan, pasted link, or typed code).
 		// adoptSyncIdentity stores the UUID and pulls labels from the remote store.
