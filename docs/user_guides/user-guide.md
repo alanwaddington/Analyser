@@ -23,8 +23,9 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 4.4 [Fine-Tuning Timing](#44-fine-tuning-timing)
 5. [Event Comparison](#5-event-comparison)
 6. [Exporting Data](#6-exporting-data)
-   - 6.1 [Excel Export](#61-excel-export)
-   - 6.2 [PNG Chart Export](#62-png-chart-export)
+   - 6.1 [CSV Export](#61-csv-export)
+   - 6.2 [Excel Export](#62-excel-export)
+   - 6.3 [PNG Chart Export](#63-png-chart-export)
 7. [Syncing Device Labels Across Devices](#7-syncing-device-labels-across-devices)
    - 7.1 [How Sync Works](#71-how-sync-works)
    - 7.2 [Linking a Second Device](#72-linking-a-second-device)
@@ -378,13 +379,42 @@ Load two or more `.fit` files, then switch to the Event Comparison tab. The view
 
 ## 6. Exporting Data
 
-Analyser can export your loaded activity data in two formats: an Excel workbook containing all numeric records, and PNG screenshots of individual charts.
+Analyser can export your loaded activity data in three formats: a CSV file, an Excel workbook, and PNG screenshots of individual charts.
 
 ---
 
-### 6.1 Excel Export
+### 6.1 CSV Export
 
-The **Export Data** button appears in the tab bar on both the Device Comparison and Event Comparison pages. Clicking it builds an `.xlsx` workbook and downloads it immediately — no server involved.
+The tab bar on both the Device Comparison and Event Comparison pages contains a **CSV / Excel** format toggle and an **Export Data** button. CSV is selected by default.
+
+Clicking **Export Data** with CSV selected downloads a plain-text `.csv` file immediately — no server involved.
+
+**File structure:**
+
+- **Single file loaded** — one header row followed by one row per recorded data point. No activity column.
+- **Multiple files loaded** — one header row followed by all records from all files in load order. An `activity` column (the source filename) is prepended as the first column so rows can be filtered by file in any spreadsheet tool.
+
+**Columns:**
+
+| Column | Description |
+|--------|-------------|
+| `activity` | Source filename — only present when multiple files are loaded |
+| `Timestamp` | ISO 8601 date-time of the sample (e.g. `2026-01-15T09:00:00.000Z`) |
+| `Elapsed (s)` | Seconds since activity start |
+| `Distance (m)` | Cumulative distance in metres |
+| *(channel columns)* | One column per channel with at least one non-null value across all loaded files |
+
+The same channel columns as Excel apply: Heart Rate (bpm), Power (W), Cadence (rpm), Speed (km/h), Pace (min/km), Altitude (m), Temperature (°C), and others where available. Channels with no data in any loaded file are omitted. Pace values are formatted as **M:SS strings** (e.g. `5:15`).
+
+The file uses **RFC 4180 formatting**: CRLF line endings, quoted fields where values contain commas or quotes.
+
+**Downloaded filename:** `analyser-export-YYYY-MM-DD.csv` using your local date.
+
+---
+
+### 6.2 Excel Export
+
+Select **Excel** in the format toggle, then click **Export Data** to download an `.xlsx` workbook — no server involved.
 
 **Workbook structure:**
 
@@ -408,7 +438,7 @@ Channels with no data at all in a given file are omitted from that file's sheet.
 
 ---
 
-### 6.2 PNG Chart Export
+### 6.3 PNG Chart Export
 
 Every chart card has a **⬇ PNG** download button in its header row. Clicking it downloads a PNG screenshot of that chart at **2× pixel density** for sharp rendering on high-DPI displays.
 
