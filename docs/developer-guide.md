@@ -69,8 +69,13 @@ src/
 │   │                 #   no recursion limit) with uniform-decimate fallback if RDP still exceeds cap
 │   ├── compare/      # Delta computation, segment analysis
 │   ├── export/       # Client-side data export
+│   │   ├── columns.ts         # Shared column utilities: CHANNEL_KEYS, presentChannels(), buildHeaderLabel(),
+│   │   │                      #   formatCellValue(), escapeCsvField(); ExportFormat type ('csv' | 'xlsx')
+│   │   ├── csv.ts             # buildCsv(activities) → RFC 4180 string; single-file omits activity column,
+│   │   │                      #   multi-file prepends it; CRLF line endings; channels with all-null omitted
 │   │   ├── excel.ts           # buildWorkbook(activities) → ArrayBuffer (.xlsx via SheetJS)
-│   │   ├── exportActivities.ts # exportActivities(activities): lazy-loads excel.ts, triggers download
+│   │   ├── exportActivities.ts # exportActivities(activities, format): lazy-loads csv.ts or excel.ts,
+│   │   │                      #   triggers download; format defaults to 'csv'
 │   │   └── download.ts        # triggerDownload(), downloadPng(), localDateString()
 │   ├── components/
 │   │   ├── charts/   # ECharts wrappers (ECharts is lazy-loaded — see §2.1)
@@ -538,28 +543,50 @@ The strip chart uses a **second, independent hover loop** (`stripHoveredDistance
 
 ## 3b. Data Export
 
-PR #83 added two export paths to the app: an Excel workbook download and per-chart PNG downloads.
+PR #83 added Excel workbook and per-chart PNG downloads. PR #111 added CSV export and extracted shared column utilities into `columns.ts`.
 
 ### Module layout
 
 | File | Responsibility |
 |------|---------------|
+| `src/lib/export/columns.ts` | Shared column utilities used by both CSV and Excel builders: `CHANNEL_KEYS`, `presentChannels()`, `buildHeaderLabel()`, `formatCellValue()`, `escapeCsvField()`; `ExportFormat` type (`'csv' \| 'xlsx'`) |
+| `src/lib/export/csv.ts` | `buildCsv(activities)` — builds an RFC 4180 CSV string in memory |
 | `src/lib/export/excel.ts` | `buildWorkbook(activities)` — builds a SheetJS workbook in memory and returns it as an `ArrayBuffer` |
-| `src/lib/export/exportActivities.ts` | `exportActivities(activities)` — async entry point: lazy-imports `excel.ts`, calls `buildWorkbook`, then calls `triggerDownload` |
+| `src/lib/export/exportActivities.ts` | `exportActivities(activities, format)` — async entry point: lazy-imports `csv.ts` or `excel.ts` based on `format` (defaults to `'csv'`), then calls `triggerDownload` |
 | `src/lib/export/download.ts` | `triggerDownload(data, filename, mime)`, `downloadPng(dataUrl, filename)`, `localDateString()` |
 
-`excel.ts` is lazy-imported in `exportActivities.ts` so that SheetJS (the `xlsx` package) is only bundled into a dynamically loaded chunk, keeping the main bundle lighter.
+Both `csv.ts` and `excel.ts` are lazy-imported in `exportActivities.ts` so that SheetJS and the CSV builder are only bundled into dynamically loaded chunks, keeping the main bundle lighter.
 
-### Excel workbook structure
+### Shared column utilities (`columns.ts`)
+
+`columns.ts` is the single source of truth for which channels appear in exports and how values are formatted. Both `csv.ts` and `excel.ts` import from it to prevent drift as new channels are added.
+
+- **`CHANNEL_KEYS`** — ordered list of all exportable `ChannelKey` values
+- **`presentChannels(records)`** — filters `CHANNEL_KEYS` to those with at least one non-null value across the provided records
+- **`buildHeaderLabel(key)`** — returns the human-readable column header (e.g. `"Heart Rate (bpm)"`)
+- **`formatCellValue(key, value)`** — formats a raw value for output: pace → `"M:SS"` string; timestamps → `Date`; others → number or `null`
+- **`escapeCsvField(value)`** — wraps a string in double-quotes and doubles any internal quotes per RFC 4180; returns the original string if no quoting is needed
+
+### CSV structure (`csv.ts`)
+
+`buildCsv(activities)` produces an RFC 4180 string:
+
+- **Single activity** — header row + one row per `ActivityRecord`; no `activity` column
+- **Multiple activities** — header row + all records from all activities in order; `activity` column (source filename) prepended as column 1
+- Channels with all-null values across all records are omitted
+- Pace formatted as `"M:SS"`; timestamps as ISO 8601 strings
+- Lines separated by CRLF; file ends with a trailing CRLF
+
+### Excel workbook structure (`excel.ts`)
 
 `buildWorkbook` produces:
 
 1. **Summary sheet** — one row per activity with filename, sport, start time (Excel datetime), distance (km), and elapsed time (H:MM:SS or M:SS).
 2. **Per-activity sheets** — one row per `ActivityRecord`. Sheet names are taken from `activity.filename`, truncated to 31 characters (Excel limit), and de-duplicated with ` (N)` suffixes if needed.
 
-Column selection is dynamic: `presentChannels()` filters `CHANNEL_KEYS` to only those with at least one non-null value in the activity, keeping sheets clean for activities that lack certain sensors.
+Column selection is dynamic: `presentChannels()` from `columns.ts` filters to channels with at least one non-null value in the activity.
 
-Pace is formatted as an `"M:SS"` string by `formatPace()` rather than stored as a decimal, since Excel has no built-in pace format and decimal values are not human-readable.
+Pace is formatted as an `"M:SS"` string by `formatCellValue()` rather than stored as a decimal, since Excel has no built-in pace format and decimal values are not human-readable.
 
 Timestamps use JavaScript `Date` objects with `cellDates: true` in the SheetJS write options, with `yyyy-mm-dd hh:mm:ss` cell format applied to datetime columns.
 
