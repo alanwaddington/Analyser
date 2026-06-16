@@ -11,7 +11,7 @@
  */
 
 import { chromium } from '@playwright/test';
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -47,6 +47,41 @@ const DOCS = [
 		screenshotsDir: null,
 	},
 ];
+
+// ---------------------------------------------------------------------------
+// Heading ID generation
+// ---------------------------------------------------------------------------
+
+// Mirrors GitHub's slug algorithm: lowercase, strip non-word/space/hyphen,
+// replace each space with a hyphen (not collapsing — double spaces → "-- ").
+function slugify(text: string): string {
+	return text
+		.toLowerCase()
+		.replace(/[^\w\s-]/g, '')
+		.replace(/\s/g, '-');
+}
+
+// Returns a fresh marked renderer that adds id attributes to every heading.
+// A new renderer is created per document so duplicate-ID tracking resets.
+function buildRenderer(): object {
+	const seen = new Map<string, number>();
+	return {
+		heading(token: { text: string; depth: number }): string {
+			// token.text is already rendered HTML (inline code, links, etc.).
+			// Strip tags and decode common entities to get plain text for the ID.
+			const plain = token.text
+				.replace(/<[^>]+>/g, '')
+				.replace(/&amp;/g, '&')
+				.replace(/&lt;/g, '<')
+				.replace(/&gt;/g, '>');
+			const base = slugify(plain);
+			const count = seen.get(base) ?? 0;
+			seen.set(base, count + 1);
+			const id = count === 0 ? base : `${base}-${count}`;
+			return `<h${token.depth} id="${id}">${token.text}</h${token.depth}>\n`;
+		},
+	};
+}
 
 // ---------------------------------------------------------------------------
 // Shared CSS (works for both screen and print)
@@ -237,10 +272,13 @@ for (const doc of DOCS) {
 
 	const markdown = fs.readFileSync(doc.md, 'utf-8');
 
+	// Fresh Marked instance per document so the heading-ID seen-set resets.
+	const md = new Marked({ gfm: true, renderer: buildRenderer() });
+
 	// ── HTML output ────────────────────────────────────────────────────────
 	// Relative image paths (e.g. screenshots/foo.png) work fine from disk
 	// since the HTML file lives in the same directory as the screenshots folder.
-	const htmlBody = await marked(markdown, { gfm: true });
+	const htmlBody = await md.parse(markdown);
 	const htmlPage = buildPage(doc.title, htmlBody);
 	fs.writeFileSync(doc.html, htmlPage, 'utf-8');
 	console.log(`  ✓ HTML → ${path.relative(ROOT, doc.html)}`);
@@ -249,7 +287,8 @@ for (const doc of DOCS) {
 	// Images must be base64-embedded because page.setContent() has no file://
 	// origin context for relative paths.
 	const mdForPdf = doc.screenshotsDir ? embedImages(markdown, doc.screenshotsDir) : markdown;
-	const pdfBody  = await marked(mdForPdf, { gfm: true });
+	const pdfMd    = new Marked({ gfm: true, renderer: buildRenderer() });
+	const pdfBody  = await pdfMd.parse(mdForPdf);
 	const pdfPage  = buildPage(doc.title, pdfBody);
 
 	const tmpPdf = `/tmp/${path.basename(doc.pdf)}`;

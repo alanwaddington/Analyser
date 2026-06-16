@@ -104,13 +104,13 @@
 </style>
 </head>
 <body>
-<h1>Analyser — API Reference</h1>
+<h1 id="analyser--api-reference">Analyser — API Reference</h1>
 <blockquote>
 <p><strong>Version:</strong> 1.0 · <strong>Last updated:</strong> May 2026</p>
 </blockquote>
 <p>The Analyser API provides server-side endpoints for the cross-device label sync feature (PR #80). All routes are SvelteKit server endpoints located under <code>src/routes/api/</code>.</p>
 <hr>
-<h2>Table of Contents</h2>
+<h2 id="table-of-contents">Table of Contents</h2>
 <ol>
 <li><a href="#1-authentication">Authentication</a></li>
 <li><a href="#2-endpoints">Endpoints</a><ul>
@@ -124,12 +124,12 @@
 <li><a href="#5-data-expiry">Data Expiry</a></li>
 </ol>
 <hr>
-<h2>1. Authentication</h2>
+<h2 id="1-authentication">1. Authentication</h2>
 <p>These endpoints use no authentication tokens or API keys. Access control is by obscurity of the UUID — only a client that knows the UUID can read or write its labels.</p>
 <p>UUIDs are randomly generated (<code>crypto.randomUUID()</code>) in the browser and stored in <code>localStorage</code>. They are never transmitted except in the URL path of these API calls and in the <code>?sync=</code> query parameter used for device-linking.</p>
 <hr>
-<h2>2. Endpoints</h2>
-<h3>GET /api/labels/[uuid]</h3>
+<h2 id="2-endpoints">2. Endpoints</h2>
+<h3 id="get-apilabelsuuid">GET /api/labels/[uuid]</h3>
 <p>Returns the stored label map for a sync identity.</p>
 <p><strong>Path parameter</strong></p>
 <table>
@@ -166,7 +166,7 @@
 <pre><code class="language-json">{ &quot;error&quot;: &quot;Internal server error&quot; }
 </code></pre>
 <hr>
-<h3>PUT /api/labels/[uuid]</h3>
+<h3 id="put-apilabelsuuid">PUT /api/labels/[uuid]</h3>
 <p>Stores or overwrites the label map for a sync identity. Also refreshes the short-code reverse-lookup index.</p>
 <p>This endpoint is called by <code>pushLabels()</code> in <code>src/lib/stores/sync.ts</code> — once on first visit to seed the remote, then automatically after every device label change.</p>
 <p><strong>Path parameter</strong></p>
@@ -226,7 +226,7 @@
 <li><code>code:{shortCode}</code> — the UUID string, with a rolling 90-day TTL</li>
 </ul>
 <hr>
-<h3>GET /api/labels/resolve/[code]</h3>
+<h3 id="get-apilabelsresolvecode">GET /api/labels/resolve/[code]</h3>
 <p>Resolves a short sync code to its full UUID. Used when a user types a short code in the Sync panel&#39;s &quot;Link another device&quot; input.</p>
 <p><strong>Path parameter</strong></p>
 <table>
@@ -259,7 +259,7 @@
 <p>Response includes <code>Retry-After: 60</code> header.</p>
 <p><code>500 Internal Server Error</code></p>
 <hr>
-<h2>3. Error Responses</h2>
+<h2 id="3-error-responses">3. Error Responses</h2>
 <p>All error responses follow the same shape:</p>
 <pre><code class="language-json">{ &quot;error&quot;: &quot;Human-readable description&quot; }
 </code></pre>
@@ -289,13 +289,13 @@
 </tr>
 </tbody></table>
 <hr>
-<h2>4. Rate Limiting</h2>
+<h2 id="4-rate-limiting">4. Rate Limiting</h2>
 <p>The resolve endpoint (<code>GET /api/labels/resolve/[code]</code>) is rate-limited to <strong>10 requests per minute per IP address</strong> to deter brute-force code enumeration.</p>
 <p>The rate limiter is <strong>Redis-backed</strong> (Upstash) and enforced globally across all Vercel serverless instances. It uses an atomic <code>INCR</code> + <code>EXPIRE</code> pipeline per IP key (<code>ratelimit:resolve:{ip}</code>), so the limit cannot be bypassed by routing requests to different function instances. If Redis is unavailable, the limiter <strong>fails open</strong> — requests are allowed through rather than blocked, preserving availability.</p>
 <p>The <code>Retry-After</code> header value is derived from the Redis key&#39;s remaining TTL at the time of the 429 response.</p>
 <p>The <code>GET /api/labels/[uuid]</code> and <code>PUT /api/labels/[uuid]</code> endpoints are not rate-limited. The UUID namespace (36^8 × 36^8 entries) makes enumeration infeasible.</p>
 <hr>
-<h2>5. Data Expiry</h2>
+<h2 id="5-data-expiry">5. Data Expiry</h2>
 <p>All Redis entries use a <strong>90-day rolling TTL</strong>. The TTL is refreshed on every successful PUT, so active users never lose their labels. Inactive identities expire automatically with no explicit cleanup required.</p>
 <p>After expiry:</p>
 <ul>

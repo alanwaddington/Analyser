@@ -104,13 +104,13 @@
 </style>
 </head>
 <body>
-<h1>Analyser — User Guide</h1>
+<h1 id="analyser--user-guide">Analyser — User Guide</h1>
 <blockquote>
 <p><strong>Version:</strong> 2.0 · <strong>Last updated:</strong> June 2026</p>
 </blockquote>
 <p>Analyser is a browser-based tool for inspecting and comparing <code>.fit</code> activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.</p>
 <hr>
-<h2>Table of Contents</h2>
+<h2 id="table-of-contents">Table of Contents</h2>
 <ol>
 <li><a href="#1-getting-started">Getting Started</a></li>
 <li><a href="#2-the-interface">The Interface</a></li>
@@ -146,7 +146,7 @@
 <li><a href="#8-reference">Reference</a></li>
 </ol>
 <hr>
-<h2>1. Getting Started</h2>
+<h2 id="1-getting-started">1. Getting Started</h2>
 <p>Open Analyser in your browser. You are greeted with the landing page, which contains a drop zone and a file picker.</p>
 <p><img src="screenshots/01-landing-page.png" alt="Landing page showing the drop zone"></p>
 <p><strong>To load a file:</strong></p>
@@ -159,7 +159,7 @@
 <p><strong>Supported format:</strong> <code>.fit</code> (Flexible and Interoperable Data Transfer — the standard format exported by Garmin watches, Wahoo computers, and most ANT+ devices). Files from <code>.tcx</code> and <code>.gpx</code> sources are not currently supported.</p>
 </blockquote>
 <hr>
-<h2>2. The Interface</h2>
+<h2 id="2-the-interface">2. The Interface</h2>
 <p>After loading a file, the application has two main views:</p>
 <table>
 <thead>
@@ -178,13 +178,13 @@
 </tr>
 </tbody></table>
 <p>The <strong>Device Comparison</strong> view (described in sections 3–4) is the primary view and opens automatically when you load a file.</p>
-<h3>Navigation</h3>
+<h3 id="navigation">Navigation</h3>
 <p>On a <strong>desktop</strong> browser, the two views are accessible from the left sidebar. Click <strong>⚡ Device Comparison</strong> or <strong>🏃 Event Comparison</strong> to switch modes.</p>
 <p>On a <strong>tablet or phone</strong>, the sidebar is hidden by default. Tap the <strong>☰ menu button</strong> in the top-left corner to slide out the navigation drawer. Tap any item or tap outside the drawer to close it. You can also swipe left across the drawer to close it.</p>
 <p>On a <strong>phone</strong> (narrow screen), a <strong>bottom navigation bar</strong> appears at the foot of the screen with the same ⚡ Device and 🏃 Event buttons for quick switching without opening the drawer.</p>
-<h3>Toolbar Controls</h3>
+<h3 id="toolbar-controls">Toolbar Controls</h3>
 <p>On tablet and phone, the toolbar controls (Device Toggle Bar, Channel Toggle Bar, Fine-tune timing) are hidden behind a collapsible panel. Tap the <strong>Devices &amp; Options</strong> (or <strong>Channels &amp; Options</strong>) button to expand or collapse the controls. On desktop the controls are always visible.</p>
-<h3>Theme</h3>
+<h3 id="theme">Theme</h3>
 <p>The <strong>Theme</strong> control is in the bottom of the sidebar (or navigation drawer), between the X-axis toggle and the Smoothing slider.</p>
 <table>
 <thead>
@@ -208,7 +208,7 @@
 </tbody></table>
 <p>Your choice is saved in your browser and restored the next time you open Analyser.</p>
 <hr>
-<h2>3. Device Comparison — Single File</h2>
+<h2 id="3-device-comparison--single-file">3. Device Comparison — Single File</h2>
 <p>Loading a single file opens the Device Comparison view with all detected sensor streams active.</p>
 <p><img src="screenshots/02-compare-overview.png" alt="Device Comparison overview with a single Ayr Parkrun FIT file loaded"></p>
 <p>The view is divided into:</p>
@@ -218,7 +218,7 @@
 <li><strong>Tab panel</strong> — Charts, Summary, Mean/Max, and Map tabs</li>
 </ul>
 <hr>
-<h3>3.1 Device Toggle Bar</h3>
+<h3 id="31-device-toggle-bar">3.1 Device Toggle Bar</h3>
 <p>The Device Toggle Bar sits at the top of the content area and lists every sensor stream detected in the loaded file.</p>
 <p><img src="screenshots/03-device-toggle-bar.png" alt="Device Toggle Bar showing sensors grouped by channel"></p>
 <p><strong>Key concepts:</strong></p>
@@ -234,7 +234,7 @@
 <p><strong>Renaming a device:</strong></p>
 <p>Double-click any device pill to rename it. Type the new label and press <strong>Enter</strong> to confirm, or <strong>Escape</strong> to cancel. Labels are saved locally in your browser and are restored automatically the next time you load a file from the same device — this works for all device types, including Garmin watches, Stryd pods, ANT+ sensors, and BLE devices.</p>
 <hr>
-<h3>3.2 Charts Tab</h3>
+<h3 id="32-charts-tab">3.2 Charts Tab</h3>
 <p>The Charts tab displays time-series data for every active channel.</p>
 <p><img src="screenshots/04-charts-tab.png" alt="Charts tab showing heart rate, power, and cadence over time"></p>
 <p><strong>Reading the charts:</strong></p>
@@ -294,7 +294,7 @@
 <p><strong>Smoothing:</strong></p>
 <p>A smoothing control lets you apply a rolling average to reduce sensor noise. Increase the window (in seconds) to smooth out spikes; set it to 1 s for raw data. Smoothing applies to all channels simultaneously.</p>
 <hr>
-<h3>3.3 Summary Tab</h3>
+<h3 id="33-summary-tab">3.3 Summary Tab</h3>
 <p>The Summary tab shows aggregate statistics for every active device and channel.</p>
 <p><img src="screenshots/05-summary-tab.png" alt="Summary tab showing per-device statistics"></p>
 <p>For each channel, the table shows:</p>
@@ -324,7 +324,7 @@
 </tbody></table>
 <p>Toggling devices in the Device Toggle Bar updates the Summary table immediately.</p>
 <hr>
-<h3>3.4 Mean/Max Tab</h3>
+<h3 id="34-meanmax-tab">3.4 Mean/Max Tab</h3>
 <p>The Mean/Max tab plots the <strong>best average power</strong> (or other metric) over every possible duration, from one second up to the full activity length.</p>
 <p><img src="screenshots/06-meanmax-tab.png" alt="Mean/Max tab showing power curve"></p>
 <p>This is the standard &quot;Critical Power curve&quot; or &quot;Power Duration curve&quot; used in cycling and running:</p>
@@ -334,7 +334,7 @@
 <li>When multiple files are loaded, each file produces its own curve — load two sessions to compare fitness progress.</li>
 </ul>
 <hr>
-<h3>3.5 Map Tab</h3>
+<h3 id="35-map-tab">3.5 Map Tab</h3>
 <p>The Map tab renders the GPS route recorded in the activity.</p>
 <p><img src="screenshots/07-map-basic.png" alt="Map tab showing GPS route from the Ayr Parkrun"></p>
 <p><strong>Tile layers:</strong></p>
@@ -389,16 +389,16 @@
 <p><strong>Hover interaction (Charts tab):</strong></p>
 <p>Hovering over the map route also shows a crosshair on all open Charts-tab charts, letting you pinpoint exactly what your metrics were at a specific GPS location.</p>
 <hr>
-<h2>4. Device Comparison — Multiple Files</h2>
+<h2 id="4-device-comparison--multiple-files">4. Device Comparison — Multiple Files</h2>
 <p>Analyser supports loading up to <strong>6 files simultaneously</strong>, enabling you to compare sensor data across different activities or devices.</p>
-<h3>4.1 Loading Multiple Files</h3>
+<h3 id="41-loading-multiple-files">4.1 Loading Multiple Files</h3>
 <p>Select multiple <code>.fit</code> files in the file picker (hold Shift or Cmd/Ctrl to select more than one), or drag and drop multiple files onto the drop zone at once.</p>
 <p><img src="screenshots/09-multifile-overview.png" alt="Multi-file compare overview with two Zwift TrainerRoad sessions loaded"></p>
 <blockquote>
 <p><strong>Note:</strong> If the loaded files are from different sessions (start times more than 1 hour apart), Device Comparison will be unavailable — see <a href="#42-different-session-files">section 4.2</a>.</p>
 </blockquote>
 <hr>
-<h3>4.2 Different-Session Files</h3>
+<h3 id="42-different-session-files">4.2 Different-Session Files</h3>
 <p>Device Comparison is designed for files recorded <strong>during the same session</strong> — for example, two devices worn simultaneously on the same run. Comparing files from completely different activities (different days, different events) produces charts with no meaningful relationship between the data streams.</p>
 <p>If you load two or more files whose start times are more than 1 hour apart, Analyser detects this and shows an explanation panel instead of charts:</p>
 <p><img src="screenshots/15-different-sessions-gate.png" alt="Gate panel shown when files are from different sessions"></p>
@@ -410,7 +410,7 @@
 </ul>
 <p>Once the remaining files overlap in time (within 1 hour), Device Comparison becomes available again automatically.</p>
 <hr>
-<h3>4.3 Multi-File Device Bar</h3>
+<h3 id="43-multi-file-device-bar">4.3 Multi-File Device Bar</h3>
 <p>In multi-file mode the Device Toggle Bar groups sensors by their source file, with a coloured left-border header for each file.</p>
 <p><img src="screenshots/10-multifile-device-bar.png" alt="Multi-file device bar grouped by file with colour-coded headers"></p>
 <ul>
@@ -419,7 +419,7 @@
 <li>Use the <strong>Select all / Deselect all</strong> button to quickly show or hide everything.</li>
 </ul>
 <hr>
-<h3>4.4 Fine-Tuning Timing</h3>
+<h3 id="44-fine-tuning-timing">4.4 Fine-Tuning Timing</h3>
 <p>Even when files are from the same session, GPS clocks sometimes drift by a few seconds. The <strong>Fine-tune timing</strong> control lets you shift any file forwards or backwards in time to align the traces precisely.</p>
 <p><img src="screenshots/12-time-offset-control.png" alt="Fine-tune timing panel with per-file offset controls"></p>
 <p>Click the <strong>⏱ Fine-tune timing</strong> button (below the Device Toggle Bar, visible in multi-file + time-axis mode) to expand the panel. This control is only relevant when files are from the <strong>same session</strong> — if they are from different sessions, the gate panel is shown instead (see <a href="#42-different-session-files">section 4.2</a>).</p>
@@ -519,7 +519,7 @@
 </tbody></table>
 <p>Both banners are dismissible and reset automatically when you change the loaded files.</p>
 <hr>
-<h2>5. Event Comparison</h2>
+<h2 id="5-event-comparison">5. Event Comparison</h2>
 <p>The <strong>Event Comparison</strong> view (🏃) is designed for comparing multiple runs of the same course — for example, several parkruns on the same route — aligned by <strong>distance</strong> to show exactly where time was gained or lost.</p>
 <p><img src="screenshots/14-event-comparison.png" alt="Event Comparison view"></p>
 <p>Load two or more <code>.fit</code> files, then switch to the Event Comparison tab. The view provides:</p>
@@ -532,10 +532,10 @@
 <p><strong>Tip:</strong> Select a reference run using the controls in the sidebar. The time delta is calculated relative to the reference. Try different reference runs to understand where you consistently gain or lose time.</p>
 </blockquote>
 <hr>
-<h2>6. Exporting Data</h2>
+<h2 id="6-exporting-data">6. Exporting Data</h2>
 <p>Analyser can export your loaded activity data in three formats: a CSV file, an Excel workbook, and PNG screenshots of individual charts.</p>
 <hr>
-<h3>6.1 CSV Export</h3>
+<h3 id="61-csv-export">6.1 CSV Export</h3>
 <p>The tab bar on both the Device Comparison and Event Comparison pages contains a <strong>CSV / Excel</strong> format toggle and an <strong>Export Data</strong> button. CSV is selected by default.</p>
 <p>Clicking <strong>Export Data</strong> with CSV selected downloads a plain-text <code>.csv</code> file immediately — no server involved.</p>
 <p><strong>File structure:</strong></p>
@@ -576,7 +576,7 @@
 <p>The file uses <strong>RFC 4180 formatting</strong>: CRLF line endings, quoted fields where values contain commas or quotes.</p>
 <p><strong>Downloaded filename:</strong> <code>analyser-export-YYYY-MM-DD.csv</code> using your local date.</p>
 <hr>
-<h3>6.2 Excel Export</h3>
+<h3 id="62-excel-export">6.2 Excel Export</h3>
 <p>Select <strong>Excel</strong> in the format toggle, then click <strong>Export Data</strong> to download an <code>.xlsx</code> workbook — no server involved.</p>
 <p><strong>Workbook structure:</strong></p>
 <table>
@@ -606,16 +606,16 @@
 <p>Channels with no data at all in a given file are omitted from that file&#39;s sheet. Pace values are formatted as <strong>M:SS strings</strong> (e.g. <code>5:15</code>) rather than decimal numbers.</p>
 <p><strong>Downloaded filename:</strong> <code>analyser-export-YYYY-MM-DD.xlsx</code> using your local date.</p>
 <hr>
-<h3>6.3 PNG Chart Export</h3>
+<h3 id="63-png-chart-export">6.3 PNG Chart Export</h3>
 <p>Every chart card has a <strong>⬇ PNG</strong> download button in its header row. Clicking it downloads a PNG screenshot of that chart at <strong>2× pixel density</strong> for sharp rendering on high-DPI displays.</p>
 <p>The PNG uses the chart&#39;s current theme (light or dark) as the background, so what you see is what you get.</p>
 <p><strong>Downloaded filenames</strong> follow the pattern <code>channel-name-YYYY-MM-DD.png</code> (e.g. <code>heart-rate-2026-05-26.png</code>).</p>
 <p>PNG export is available for all four chart types: Time Series, Mean/Max, Time Delta, and Segment Bar.</p>
 <hr>
-<h2>7. Syncing Device Labels Across Devices</h2>
+<h2 id="7-syncing-device-labels-across-devices">7. Syncing Device Labels Across Devices</h2>
 <p>Device labels you create (by double-clicking a sensor pill) are saved in your browser&#39;s local storage. The <strong>Sync</strong> feature lets you share those labels across multiple browsers or devices — for example, so your phone and laptop both show &quot;Polar H10&quot; instead of &quot;Device 1&quot;.</p>
 <p>Sync is <strong>automatic and account-free</strong>. No sign-in is required. Each browser is assigned a private sync identity (a UUID stored in local storage) the first time it loads Analyser.</p>
-<h3>7.1 How Sync Works</h3>
+<h3 id="71-how-sync-works">7.1 How Sync Works</h3>
 <ol>
 <li>On first load, Analyser generates a unique sync identity (UUID) for your browser and pushes your current labels to a cloud key-value store under that identity.</li>
 <li>On every subsequent load, Analyser pulls the latest labels from the cloud and applies them locally — the cloud is the source of truth.</li>
@@ -625,7 +625,7 @@
 <blockquote>
 <p><strong>Privacy note:</strong> Labels are stored in Upstash Redis and expire automatically after <strong>90 days</strong> of inactivity. No personal information is stored — only the device labels you assign (e.g. &quot;Polar H10&quot;, &quot;Assioma Duo&quot;) keyed by a randomly generated UUID.</p>
 </blockquote>
-<h3>7.2 Linking a Second Device</h3>
+<h3 id="72-linking-a-second-device">7.2 Linking a Second Device</h3>
 <p>To share your labels with a second browser or device:</p>
 <ol>
 <li>Open the <strong>Sync</strong> panel in the sidebar footer (click the ☁ Sync toggle).</li>
@@ -645,7 +645,7 @@
 <blockquote>
 <p><strong>Tip:</strong> The QR code and copy-link methods are the most convenient. Use the short code when typing a URL isn&#39;t practical.</p>
 </blockquote>
-<h3>7.3 Sync Status and Errors</h3>
+<h3 id="73-sync-status-and-errors">7.3 Sync Status and Errors</h3>
 <p>The Sync panel shows a status line:</p>
 <table>
 <thead>
@@ -668,7 +668,7 @@
 </tr>
 </tbody></table>
 <p>Network errors are non-fatal — if a push fails, your local labels are unchanged and the error is shown in the panel. Analyser will retry automatically on the next label change.</p>
-<h3>7.4 Resetting Your Sync Identity</h3>
+<h3 id="74-resetting-your-sync-identity">7.4 Resetting Your Sync Identity</h3>
 <p>If you want to <strong>break the link</strong> between devices (e.g. after lending your laptop to someone):</p>
 <ol>
 <li>Open the Sync panel and click <strong>Reset sync identity</strong> at the bottom.</li>
@@ -679,8 +679,8 @@
 <p><strong>Note:</strong> Resetting does not delete the old identity from the cloud — it simply stops being used. The old data will expire after 90 days of inactivity.</p>
 </blockquote>
 <hr>
-<h2>8. Reference</h2>
-<h3>Sync — Quick Reference</h3>
+<h2 id="8-reference">8. Reference</h2>
+<h3 id="sync--quick-reference">Sync — Quick Reference</h3>
 <table>
 <thead>
 <tr>
@@ -709,7 +709,7 @@
 <td>Status line in the Sync panel</td>
 </tr>
 </tbody></table>
-<h3>Keyboard Shortcuts</h3>
+<h3 id="keyboard-shortcuts">Keyboard Shortcuts</h3>
 <table>
 <thead>
 <tr>
@@ -734,7 +734,7 @@
 <td>Confirm time offset</td>
 </tr>
 </tbody></table>
-<h3>Supported Sensor Types</h3>
+<h3 id="supported-sensor-types">Supported Sensor Types</h3>
 <table>
 <thead>
 <tr>
@@ -771,13 +771,13 @@
 <td>All remaining channels: GPS, Altitude, Speed, Pace, Temperature</td>
 </tr>
 </tbody></table>
-<h3>File Limits</h3>
+<h3 id="file-limits">File Limits</h3>
 <ul>
 <li><strong>Maximum files per session:</strong> 6</li>
 <li><strong>Supported format:</strong> <code>.fit</code> (ANT/Garmin FIT protocol)</li>
 <li>All parsing happens <strong>locally in your browser</strong> — no data is uploaded to any server.</li>
 </ul>
-<h3>Troubleshooting</h3>
+<h3 id="troubleshooting">Troubleshooting</h3>
 <table>
 <thead>
 <tr>
