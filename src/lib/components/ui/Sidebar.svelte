@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { activities, lastMode } from '$lib/stores/session';
@@ -11,6 +12,9 @@
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 	import SyncPanel from '$lib/components/ui/SyncPanel.svelte';
 	import AthleteProfilePanel from '$lib/components/ui/AthleteProfilePanel.svelte';
+
+	let mounted = $state(false);
+	onMount(() => { mounted = true; });
 
 	const indicatorState = $derived.by((): 'syncing' | 'error' | 'ok' | 'muted' => {
 		if ($syncStatus.syncing)    return 'syncing';
@@ -127,7 +131,7 @@
 			</span>
 			<span class="sync-indicator__text">{statusText}</span>
 		</div>
-		<AthleteProfilePanel />
+		{#if mounted}<AthleteProfilePanel />{/if}
 		<SyncPanel />
 	</div>
 </nav>

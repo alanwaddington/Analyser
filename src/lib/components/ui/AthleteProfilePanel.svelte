@@ -50,12 +50,13 @@
 		return w;
 	});
 
-	function commit(key: keyof AthleteProfile, raw: string): void {
-		const val = raw.trim() === '' ? undefined : parseFloat(raw);
+	function commit(key: keyof AthleteProfile, raw: string | number | undefined): void {
+		const str = raw == null ? '' : String(raw);
+		const val = str.trim() === '' ? undefined : parseFloat(str);
 		setProfileField(key, (val != null && isNaN(val)) ? undefined : val);
 	}
 
-	function onKeydown(e: KeyboardEvent, key: keyof AthleteProfile, raw: string): void {
+	function onKeydown(e: KeyboardEvent, key: keyof AthleteProfile, raw: string | number | undefined): void {
 		if (e.key === 'Enter') {
 			commit(key, raw);
 			(e.currentTarget as HTMLInputElement).blur();
