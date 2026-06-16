@@ -23,6 +23,7 @@
 	import { buildAnomalyCounts } from '$lib/components/ui/DeviceToggleBar.utils';
 	import { groupAnomalyEvents } from '$lib/analytics/anomalies';
 	import { exportActivities } from '$lib/export/exportActivities';
+	import type { ExportFormat } from '$lib/export/columns';
 	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
 	import '../map-panel.css';
@@ -250,16 +251,17 @@
 	/** Distance in metres from map hover → drives strip chart crosshair */
 	let mapStripHoveredDistance = $state<number | null>(null);
 
-	/** True while the Excel workbook is being generated/downloaded */
+	/** True while the export file is being generated/downloaded */
 	let exporting = $state(false);
+	let exportFormat = $state<ExportFormat>('csv');
 
 	async function handleExport() {
 		if ($activities.length === 0 || exporting) return;
 		exporting = true;
 		try {
-			await exportActivities($activities);
+			await exportActivities($activities, exportFormat);
 		} catch (err) {
-			console.error('[Export] Failed to generate workbook:', err);
+			console.error('[Export] Failed to generate file:', err);
 			alert('Export failed. Please try again.');
 		} finally {
 			exporting = false;
@@ -319,32 +321,56 @@
 				onkeydown={(e) => handleTabKey(e, tab.id)}
 			>{tab.label}</button>
 		{/each}
-		<button
-			class="export-btn"
-			onclick={handleExport}
-			disabled={$activities.length === 0 || exporting}
-			aria-label={exporting ? 'Exporting data, please wait' : 'Export activity data as Excel'}
-			aria-busy={exporting}
-			type="button"
-		>
-			{#if exporting}
-				<svg class="export-spinner" width="11" height="11" viewBox="0 0 11 11"
-					aria-hidden="true" focusable="false">
-					<circle cx="5.5" cy="5.5" r="4" fill="none"
-						stroke="currentColor" stroke-width="1.4"
-						stroke-dasharray="16 8" stroke-linecap="round"/>
-				</svg>
-				<span>Exporting…</span>
-			{:else}
-				<svg width="11" height="11" viewBox="0 0 11 11" fill="none"
-					aria-hidden="true" focusable="false">
-					<path d="M5.5 1v6M2.5 4.5l3 3 3-3M1 9.5h9"
-						stroke="currentColor" stroke-width="1.4"
-						stroke-linecap="round" stroke-linejoin="round"/>
-				</svg>
-				<span>Export Data</span>
-			{/if}
-		</button>
+		<div class="export-group">
+			<div class="export-format-toggle" role="radiogroup" aria-label="Export format">
+				<button
+					class="format-btn"
+					class:format-active={exportFormat === 'csv'}
+					onclick={() => exportFormat = 'csv'}
+					role="radio"
+					aria-checked={exportFormat === 'csv'}
+					type="button"
+				>CSV</button>
+				<button
+					class="format-btn"
+					class:format-active={exportFormat === 'xlsx'}
+					onclick={() => exportFormat = 'xlsx'}
+					role="radio"
+					aria-checked={exportFormat === 'xlsx'}
+					type="button"
+				>Excel</button>
+			</div>
+			<button
+				class="export-btn"
+				onclick={handleExport}
+				disabled={$activities.length === 0 || exporting}
+				aria-label={exporting
+					? 'Exporting data, please wait'
+					: exportFormat === 'csv'
+						? 'Export activity data as CSV'
+						: 'Export activity data as Excel'}
+				aria-busy={exporting}
+				type="button"
+			>
+				{#if exporting}
+					<svg class="export-spinner" width="11" height="11" viewBox="0 0 11 11"
+						aria-hidden="true" focusable="false">
+						<circle cx="5.5" cy="5.5" r="4" fill="none"
+							stroke="currentColor" stroke-width="1.4"
+							stroke-dasharray="16 8" stroke-linecap="round"/>
+					</svg>
+					<span>Exporting…</span>
+				{:else}
+					<svg width="11" height="11" viewBox="0 0 11 11" fill="none"
+						aria-hidden="true" focusable="false">
+						<path d="M5.5 1v6M2.5 4.5l3 3 3-3M1 9.5h9"
+							stroke="currentColor" stroke-width="1.4"
+							stroke-linecap="round" stroke-linejoin="round"/>
+					</svg>
+					<span>Export Data</span>
+				{/if}
+			</button>
+		</div>
 	</div>
 
 	<div
