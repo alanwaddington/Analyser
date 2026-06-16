@@ -122,6 +122,12 @@
 <li>3.5 <a href="#35-map-tab">Map Tab</a></li>
 </ul>
 </li>
+<li><a href="#8-athlete-profile">Athlete Profile</a><ul>
+<li>8.1 <a href="#81-opening-the-profile-panel">Opening the Profile Panel</a></li>
+<li>8.2 <a href="#82-profile-fields">Profile Fields</a></li>
+<li>8.3 <a href="#83-how-the-profile-is-used">How the Profile Is Used</a></li>
+</ul>
+</li>
 <li><a href="#4-device-comparison--multiple-files">Device Comparison — Multiple Files</a><ul>
 <li>4.1 <a href="#41-loading-multiple-files">Loading Multiple Files</a></li>
 <li>4.2 <a href="#42-different-session-files">Different-Session Files</a></li>
@@ -141,9 +147,13 @@
 <li>7.2 <a href="#72-linking-a-second-device">Linking a Second Device</a></li>
 <li>7.3 <a href="#73-sync-status-and-errors">Sync Status and Errors</a></li>
 <li>7.4 <a href="#74-resetting-your-sync-identity">Resetting Your Sync Identity</a></li>
+<li>7.1 <a href="#71-how-sync-works">How Sync Works</a></li>
+<li>7.2 <a href="#72-linking-a-second-device">Linking a Second Device</a></li>
+<li>7.3 <a href="#73-sync-status-and-errors">Sync Status and Errors</a></li>
+<li>7.4 <a href="#74-resetting-your-sync-identity">Resetting Your Sync Identity</a></li>
 </ul>
 </li>
-<li><a href="#8-reference">Reference</a></li>
+<li><a href="#9-reference">Reference</a></li>
 </ol>
 <hr>
 <h2 id="1-getting-started">1. Getting Started</h2>
@@ -184,6 +194,8 @@
 <p>On a <strong>phone</strong> (narrow screen), a <strong>bottom navigation bar</strong> appears at the foot of the screen with the same ⚡ Device and 🏃 Event buttons for quick switching without opening the drawer.</p>
 <h3 id="toolbar-controls">Toolbar Controls</h3>
 <p>On tablet and phone, the toolbar controls (Device Toggle Bar, Channel Toggle Bar, Fine-tune timing) are hidden behind a collapsible panel. Tap the <strong>Devices &amp; Options</strong> (or <strong>Channels &amp; Options</strong>) button to expand or collapse the controls. On desktop the controls are always visible.</p>
+<h3 id="athlete-profile">Athlete Profile</h3>
+<p>The <strong>⚖ Profile</strong> toggle is in the bottom of the sidebar (or navigation drawer). Click it to expand a panel where you enter your training thresholds (weight, FTP, Critical Power, maximum heart rates, LTHR). These values are saved in your browser and used to add zone context to charts and summary tables. See <a href="#8-athlete-profile">section 8</a> for details.</p>
 <h3 id="theme">Theme</h3>
 <p>The <strong>Theme</strong> control is in the bottom of the sidebar (or navigation drawer), between the X-axis toggle and the Smoothing slider.</p>
 <table>
@@ -291,6 +303,13 @@
 <blockquote>
 <p>GPS drift anomalies (where the GPS signal jumped to an implausible position) are shown on the <strong>Map tab</strong> as red circles, not on time-series charts.</p>
 </blockquote>
+<p><strong>Zone shading:</strong></p>
+<p>When you have configured an <a href="#8-athlete-profile">Athlete Profile</a>, the Charts tab adds subtle background shading to relevant channels:</p>
+<ul>
+<li><strong>Heart Rate</strong> — five colour bands (Z1–Z5) are drawn based on your sport-specific maximum heart rate (or LTHR when maxHR is absent). The bands update automatically if you change the profile.</li>
+<li><strong>Power (running)</strong> — five CP zone bands are drawn when you have set a Critical Power value and the activity is a running file with Stryd power data.</li>
+</ul>
+<p>Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.</p>
 <p><strong>Smoothing:</strong></p>
 <p>A smoothing control lets you apply a rolling average to reduce sensor noise. Increase the window (in seconds) to smooth out spikes; set it to 1 s for raw data. Smoothing applies to all channels simultaneously.</p>
 <hr>
@@ -322,6 +341,37 @@
 <td>Cumulative value (distance, calories) — shown where applicable</td>
 </tr>
 </tbody></table>
+<p><strong>Athlete Profile context columns</strong> — when you have configured an <a href="#8-athlete-profile">Athlete Profile</a>, additional columns appear alongside the average:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>When shown</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>% FTP</strong></td>
+<td>Cycling power + FTP set</td>
+<td>Average power as a percentage of your FTP</td>
+</tr>
+<tr>
+<td><strong>% CP</strong></td>
+<td>Running power + CP set</td>
+<td>Average power as a percentage of your Critical Power</td>
+</tr>
+<tr>
+<td><strong>w/kg</strong></td>
+<td>Any power + weight set</td>
+<td>Average power divided by body weight</td>
+</tr>
+<tr>
+<td><strong>Zone</strong></td>
+<td>Heart Rate + maxHR or LTHR set</td>
+<td>HR zone (Z1–Z5) of the average HR using the sport-appropriate threshold</td>
+</tr>
+</tbody></table>
+<p>These columns are absent when the relevant profile fields are not set, so the table stays clean for users who have not configured a profile.</p>
 <p>Toggling devices in the Device Toggle Bar updates the Summary table immediately.</p>
 <hr>
 <h3 id="34-meanmax-tab">3.4 Mean/Max Tab</h3>
@@ -333,6 +383,12 @@
 <li>A high, flat curve indicates sustained high output; a steep drop-off indicates strength over short durations but limited endurance.</li>
 <li>When multiple files are loaded, each file produces its own curve — load two sessions to compare fitness progress.</li>
 </ul>
+<p><strong>Athlete Profile overlays</strong> — when you have configured an <a href="#8-athlete-profile">Athlete Profile</a>, the Mean/Max chart gains two optional overlays:</p>
+<ul>
+<li><strong>FTP / CP reference line</strong> — a dashed horizontal line at your FTP (cycling) or Critical Power (running) lets you see exactly where on the curve your threshold sits. It is labelled &quot;FTP&quot; for cycling and &quot;Critical Power&quot; for running.</li>
+<li><strong>w/kg secondary axis</strong> — when body weight is set, a second Y axis on the right shows watts per kilogram, making it easy to compare across different body weights or reference published w/kg benchmarks.</li>
+</ul>
+<p>Both overlays are absent when the relevant profile fields are not configured.</p>
 <hr>
 <h3 id="35-map-tab">3.5 Map Tab</h3>
 <p>The Map tab renders the GPS route recorded in the activity.</p>
@@ -679,7 +735,87 @@
 <p><strong>Note:</strong> Resetting does not delete the old identity from the cloud — it simply stops being used. The old data will expire after 90 days of inactivity.</p>
 </blockquote>
 <hr>
-<h2 id="8-reference">8. Reference</h2>
+<h2 id="8-athlete-profile">8. Athlete Profile</h2>
+<p>The Athlete Profile stores your personal training thresholds locally in your browser. Once set, the thresholds are used to add zone context to charts and the summary table — no account required and no data is sent to any server.</p>
+<h3 id="81-opening-the-profile-panel">8.1 Opening the Profile Panel</h3>
+<p>Click the <strong>⚖ Profile</strong> toggle in the sidebar footer (or navigation drawer on tablet/phone). The panel expands to reveal six numeric input fields. Click the toggle again to collapse it.</p>
+<p>Your settings are saved automatically when you leave each field (press <strong>Enter</strong> or click away). Leaving a field blank removes that threshold — the corresponding overlays disappear immediately.</p>
+<blockquote>
+<p><strong>Tip:</strong> Validation warnings appear in amber below any field with an implausible value (e.g. FTP above 600 W, weight below 30 kg). These are non-blocking — the value is still saved. Correct the figure if it was a typo.</p>
+</blockquote>
+<h3 id="82-profile-fields">8.2 Profile Fields</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Unit</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Weight</strong></td>
+<td>kg</td>
+<td>w/kg column in Summary tab; w/kg secondary axis on Mean/Max chart</td>
+</tr>
+<tr>
+<td><strong>FTP</strong> (Functional Threshold Power)</td>
+<td>W</td>
+<td>% FTP column in Summary tab; FTP reference line on Mean/Max chart (cycling)</td>
+</tr>
+<tr>
+<td><strong>Max HR — Cycling</strong></td>
+<td>bpm</td>
+<td>HR zone badge in Summary tab; zone shading on HR chart (cycling activities)</td>
+</tr>
+<tr>
+<td><strong>CP</strong> (Critical Power)</td>
+<td>W</td>
+<td>% CP column in Summary tab; Critical Power reference line on Mean/Max chart (running)</td>
+</tr>
+<tr>
+<td><strong>Max HR — Running</strong></td>
+<td>bpm</td>
+<td>HR zone badge in Summary tab; zone shading on HR chart (running activities)</td>
+</tr>
+<tr>
+<td><strong>LTHR</strong> (Lactate Threshold HR)</td>
+<td>bpm</td>
+<td>Fallback HR zone source when maxHR is not set; uses a standard 92% maxHR estimate</td>
+</tr>
+</tbody></table>
+<p><strong>Sport routing:</strong> For the HR zone badge and chart shading, Analyser uses your cycling maxHR for cycling activities and your running maxHR for running activities. If the primary maxHR for a sport is absent, it falls back to the other sport&#39;s maxHR, then to LTHR. This means a single maxHR entry provides zone context for both cycling and running if you have not configured them separately.</p>
+<h3 id="83-how-the-profile-is-used">8.3 How the Profile Is Used</h3>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>What changes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Charts tab — Heart Rate chart</strong></td>
+<td>Z1–Z5 background shading bands based on sport-appropriate maxHR (or LTHR estimate)</td>
+</tr>
+<tr>
+<td><strong>Charts tab — Power chart (running)</strong></td>
+<td>Z1–Z5 CP zone shading bands (Stryd power only)</td>
+</tr>
+<tr>
+<td><strong>Summary tab — Power rows</strong></td>
+<td>% FTP (cycling) or % CP (running) column; w/kg column</td>
+</tr>
+<tr>
+<td><strong>Summary tab — Heart Rate row</strong></td>
+<td>Zone badge (Z1–Z5)</td>
+</tr>
+<tr>
+<td><strong>Mean/Max tab</strong></td>
+<td>FTP or Critical Power dashed reference line; w/kg secondary Y axis</td>
+</tr>
+</tbody></table>
+<p>All overlays and columns are silently absent when the relevant profile field is not configured. Loading a file with no matching power or HR data is unaffected.</p>
+<hr>
+<h2 id="9-reference">9. Reference</h2>
 <h3 id="sync--quick-reference">Sync — Quick Reference</h3>
 <table>
 <thead>
