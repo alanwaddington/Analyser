@@ -13,37 +13,8 @@
  */
 
 import * as xlsx from 'xlsx';
-import type { Activity, ActivityRecord, ChannelKey } from '$lib/types';
-import { CHANNEL_META } from '$lib/types';
-import { formatPace } from '$lib/utils/formatting';
-
-// Ordered list of all channel keys; used to build consistent column ordering.
-const CHANNEL_KEYS: ChannelKey[] = [
-	'heartRate',
-	'power',
-	'powerLeft',
-	'powerRight',
-	'cadence',
-	'speed',
-	'pace',
-	'altitude',
-	'temperature',
-	'coreTemperature',
-	'skinTemperature',
-	'verticalOscillation',
-	'groundContactTime',
-	'strideLength',
-];
-
-/**
- * Determine which ChannelKeys have at least one non-null value across
- * all records of an activity.
- */
-function presentChannels(records: ActivityRecord[]): ChannelKey[] {
-	return CHANNEL_KEYS.filter(key =>
-		records.some(r => r[key] != null),
-	);
-}
+import type { Activity, ChannelKey } from '$lib/types';
+import { presentChannels, buildHeaderLabel, formatCellValue } from './columns';
 
 /** Truncate a string to maxLen chars. */
 function truncate(s: string, maxLen: number): string {
@@ -102,19 +73,12 @@ function buildActivitySheet(activity: Activity): xlsx.WorkSheet {
 	const channels = presentChannels(activity.records);
 
 	// Header row
-	const channelHeaders = channels.map(
-		key => `${CHANNEL_META[key].label} (${CHANNEL_META[key].unit})`,
-	);
+	const channelHeaders = channels.map(buildHeaderLabel);
 	const header = ['Timestamp', 'Elapsed (s)', 'Distance (m)', ...channelHeaders];
 
 	// Data rows
 	const rows = activity.records.map(rec => {
-		const channelValues = channels.map(key => {
-			const val = rec[key];
-			if (val == null) return null;
-			if (key === 'pace') return formatPace(val as number);
-			return val;
-		});
+		const channelValues = channels.map(key => formatCellValue(key, rec[key]));
 		return [rec.timestamp, rec.elapsedSeconds, rec.distance, ...channelValues];
 	});
 
