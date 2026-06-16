@@ -239,4 +239,10 @@ describe('buildCsv', () => {
 		const csv = buildCsv([act]);
 		expect(csv).toContain('\r\n');
 	});
+
+	it('buildCsv_endsWithCrlf', () => {
+		const act = makeActivity('a');
+		const csv = buildCsv([act]);
+		expect(csv.endsWith('\r\n')).toBe(true);
+	});
 });

@@ -45,5 +45,5 @@ export function buildCsv(activities: Activity[]): string {
 		}
 	}
 
-	return rows.join('\r\n');
+	return rows.join('\r\n') + '\r\n';
 }
