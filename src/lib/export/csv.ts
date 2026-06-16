@@ -11,6 +11,8 @@ import { presentChannels, buildHeaderLabel, formatCellValue, escapeCsvField } fr
  * - Lines separated by CRLF per RFC 4180
  */
 export function buildCsv(activities: Activity[]): string {
+	if (activities.length === 0) return '';
+
 	const multi = activities.length > 1;
 
 	// Determine present channels across ALL activities' records

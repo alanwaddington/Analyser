@@ -27,18 +27,43 @@ function makeActivity(id: string, overrides: Partial<Activity> = {}): Activity {
 	});
 }
 
-/** Parse the CSV string into rows of string arrays. */
-function parseCsv(csv: string): string[][] {
-	return csv.split('\r\n').filter(line => line.length > 0).map(line => line.split(','));
+/** Parse one RFC 4180 row into fields, handling quoted fields with embedded commas and quotes. */
+function parseCsvRow(row: string): string[] {
+	const fields: string[] = [];
+	let i = 0;
+	while (i < row.length) {
+		if (row[i] === '"') {
+			let field = '';
+			i++;
+			while (i < row.length) {
+				if (row[i] === '"' && row[i + 1] === '"') { field += '"'; i += 2; }
+				else if (row[i] === '"') { i++; break; }
+				else { field += row[i++]; }
+			}
+			fields.push(field);
+			if (row[i] === ',') i++;
+		} else {
+			const end = row.indexOf(',', i);
+			if (end === -1) { fields.push(row.slice(i)); break; }
+			fields.push(row.slice(i, end));
+			i = end + 1;
+		}
+	}
+	return fields;
 }
 
-/** Parse a CSV string into an array of objects keyed by header row. */
+/** Parse the CSV string into rows of field arrays (RFC 4180 compliant). */
+function parseCsv(csv: string): string[][] {
+	return csv.split('\r\n').filter(line => line.length > 0).map(parseCsvRow);
+}
+
+/** Parse a CSV string into an array of objects keyed by the header row (RFC 4180 compliant). */
 function parseCsvAsObjects(csv: string): Record<string, string>[] {
 	const rows = csv.split('\r\n').filter(l => l.length > 0);
 	if (rows.length === 0) return [];
-	const headers = rows[0].split(',');
+	const headers = parseCsvRow(rows[0]);
 	return rows.slice(1).map(row => {
-		const cells = row.split(',');
+		const cells = parseCsvRow(row);
 		const obj: Record<string, string> = {};
 		headers.forEach((h, i) => { obj[h] = cells[i] ?? ''; });
 		return obj;

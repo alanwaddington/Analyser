@@ -13,7 +13,7 @@
  */
 
 import * as xlsx from 'xlsx';
-import type { Activity, ChannelKey } from '$lib/types';
+import type { Activity } from '$lib/types';
 import { presentChannels, buildHeaderLabel, formatCellValue } from './columns';
 
 /** Truncate a string to maxLen chars. */
