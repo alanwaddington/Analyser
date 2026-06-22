@@ -31,3 +31,6 @@ stats.html
 # Claude Code — local settings and temporary agent worktrees
 .claude/settings.local.json
 .claude/worktrees/
+# Playwright test artefacts
+test-results/
+playwright-report/
