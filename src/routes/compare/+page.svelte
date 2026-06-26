@@ -567,8 +567,7 @@
 									{/each}
 								</tr>
 							{/each}
-							{@const showRSS = $athleteProfile.cp != null && activeCrossFileStreams.some(cfs => cfs.activity.sport === 'running')}
-							{#if showRSS}
+							{#if $athleteProfile.cp != null && activeCrossFileStreams.some(cfs => cfs.activity.sport === 'running')}
 								<tr class:row-alt={activeChannels.length % 2 === 1}>
 									<td class="cell-label" title="Running Stress Score — analogous to TSS for cycling">RSS</td>
 									{#each activeCrossFileStreams as cfs}
