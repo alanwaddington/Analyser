@@ -83,6 +83,7 @@ export interface Activity {
 	filename: string;
 	sport?: string;
 	subSport?: string;
+	powerSource?: 'stryd' | 'native' | 'cycling';
 	isIndoor: boolean;
 	startTime: Date;
 	totalDistance: number; // metres

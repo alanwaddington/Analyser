@@ -153,7 +153,7 @@
 				activity: cfs.activity,
 				colourIndex: colourIdx,
 				colour: FILE_COLOURS[colourIdx % FILE_COLOURS.length],
-				label: deriveDeviceLabel(cfs.stream.device),
+				label: deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity),
 				timeOffset: $timeOffsets.get(cfs.activity.id) ?? 0,
 				distanceOffset: distanceOffsets.get(cfs.activity.id) ?? 0,
 			};
@@ -539,7 +539,7 @@
 										<span class="device-header">
 											<span class="device-dot" style="background:{dotColour}"></span>
 											<span class="device-header-text">
-												<span class="device-name">{deriveDeviceLabel(cfs.stream.device)}</span>
+												<span class="device-name">{deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}</span>
 												{#if multiFile}
 													<span class="device-filename">{cfs.activity.filename}</span>
 												{/if}

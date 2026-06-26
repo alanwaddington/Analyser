@@ -165,7 +165,7 @@
 -->
 
 {#snippet multiMetricPill(cfs: CrossFileStream, renaming: string | null, renamed: Map<string, string>)}
-	{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device)}
+	{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}
 	{@const isActive = $activeDeviceIndices.has(cfs.key)}
 	{@const isExpanded = expandedDevices.has(cfs.key)}
 	<div class="multi-device">
@@ -227,7 +227,7 @@
 		</span>
 		<div class="group-pills">
 			{#each group.streams as cfs (cfs.key)}
-				{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device)}
+				{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}
 				{@const isActive = $activeDeviceIndices.has(cfs.key)}
 				{#if renaming === cfs.key && renamingCh === group.channelKey}
 					<input
@@ -266,7 +266,7 @@
 					<span
 						class="pill pill--no-data"
 						title="Connected but no data recorded"
-					>{deriveDeviceLabel(cfs.stream.device)}</span>
+					>{deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}</span>
 				{/each}
 			</div>
 		</div>

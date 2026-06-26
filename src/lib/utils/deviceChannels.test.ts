@@ -9,6 +9,13 @@ import {
 import type { Activity, CrossFileStream, Device, DeviceStream } from '$lib/types';
 import { makeBaseActivity } from '$lib/test-utils';
 
+function makeRunningActivity(powerSource: Activity['powerSource'] = 'native'): Activity {
+	return makeBaseActivity({ sport: 'running', powerSource });
+}
+function makeCyclingActivity(): Activity {
+	return makeBaseActivity({ sport: 'cycling', powerSource: 'cycling' });
+}
+
 function makeDevice(overrides: Partial<Device> = {}): Device {
 	return { deviceIndex: 0, ...overrides };
 }
@@ -62,6 +69,72 @@ describe('deriveDeviceLabel', () => {
 	it('deriveDeviceLabel_emptyStringsIgnored_returnsFallback', () => {
 		const device = makeDevice({ manufacturer: '', product: '', deviceIndex: 1 });
 		expect(deriveDeviceLabel(device)).toBe('Device 1');
+	});
+});
+
+describe('deriveDeviceLabel — power source-aware labels', () => {
+	it('deriveDeviceLabel_strydActivity_powerDevice_returnsStryd', () => {
+		const device = makeDevice({ deviceIndex: 1 });
+		const stream = makeStream(device, ['power']);
+		const activity = makeRunningActivity('stryd');
+		expect(deriveDeviceLabel(device, stream, activity)).toBe('Stryd');
+	});
+
+	it('deriveDeviceLabel_nativeGarminRunning_powerDevice_returnsGarminRunningPower', () => {
+		const device = makeDevice({ manufacturer: 'garmin', deviceIndex: 0 });
+		const stream = makeStream(device, ['power', 'heartRate', 'speed']);
+		const activity = makeRunningActivity('native');
+		expect(deriveDeviceLabel(device, stream, activity)).toBe('Garmin Running Power');
+	});
+
+	it('deriveDeviceLabel_nativeSuuntoRunning_powerDevice_returnsSuuntoRunningPower', () => {
+		const device = makeDevice({ manufacturer: 'suunto', deviceIndex: 0 });
+		const stream = makeStream(device, ['power']);
+		const activity = makeRunningActivity('native');
+		expect(deriveDeviceLabel(device, stream, activity)).toBe('Suunto Running Power');
+	});
+
+	it('deriveDeviceLabel_nativeCorosRunning_powerDevice_returnsCorosRunningPower', () => {
+		const device = makeDevice({ manufacturer: 'coros', deviceIndex: 0 });
+		const stream = makeStream(device, ['power']);
+		const activity = makeRunningActivity('native');
+		expect(deriveDeviceLabel(device, stream, activity)).toBe('COROS Running Power');
+	});
+
+	it('deriveDeviceLabel_unknownManufacturerNativeRunning_powerDevice_returnsWatchRunningPower', () => {
+		const device = makeDevice({ deviceIndex: 0 });
+		const stream = makeStream(device, ['power']);
+		const activity = makeRunningActivity('native');
+		expect(deriveDeviceLabel(device, stream, activity)).toBe('Watch Running Power');
+	});
+
+	it('deriveDeviceLabel_cyclingActivity_powerDevice_usesStandardLabel', () => {
+		// Cycling power keeps the standard manufacturer+product label
+		const device = makeDevice({ manufacturer: 'favero', product: 'Assioma DUO', deviceIndex: 1 });
+		const stream = makeStream(device, ['power']);
+		const activity = makeCyclingActivity();
+		expect(deriveDeviceLabel(device, stream, activity)).toBe('favero Assioma DUO');
+	});
+
+	it('deriveDeviceLabel_strydActivity_nonPowerDevice_usesStandardLabel', () => {
+		// HRM device in a Stryd activity is not affected by power source labelling
+		const device = makeDevice({ manufacturer: 'polar', product: 'H10', deviceIndex: 2 });
+		const stream = makeStream(device, ['heartRate']);
+		const activity = makeRunningActivity('stryd');
+		expect(deriveDeviceLabel(device, stream, activity)).toBe('polar H10');
+	});
+
+	it('deriveDeviceLabel_noActivity_fallsBackToStandardLabel', () => {
+		const device = makeDevice({ manufacturer: 'garmin', product: 'fenix7', deviceIndex: 0 });
+		const stream = makeStream(device, ['power']);
+		expect(deriveDeviceLabel(device, stream, undefined)).toBe('garmin fenix7');
+	});
+
+	it('deriveDeviceLabel_userLabel_alwaysTakesPriority', () => {
+		const device = makeDevice({ label: 'My Stryd', deviceIndex: 1 });
+		const stream = makeStream(device, ['power']);
+		const activity = makeRunningActivity('stryd');
+		expect(deriveDeviceLabel(device, stream, activity)).toBe('My Stryd');
 	});
 });
 
