@@ -185,13 +185,13 @@
 			series: (() => {
 				const firstVisibleIdx = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
 
-				// Zone band colours — low-opacity, readable on dark and light backgrounds
+				// Zone band colours — visible but unobtrusive on dark and light backgrounds
 				const ZONE_COLOURS: Record<number, string> = {
-					1: 'rgba(148,163,184,0.07)',
-					2: 'rgba(96,165,250,0.07)',
-					3: 'rgba(74,222,128,0.07)',
-					4: 'rgba(251,191,36,0.09)',
-					5: 'rgba(248,113,113,0.11)',
+					1: 'rgba(148,163,184,0.12)',
+					2: 'rgba(96,165,250,0.18)',
+					3: 'rgba(74,222,128,0.18)',
+					4: 'rgba(251,191,36,0.20)',
+					5: 'rgba(248,113,113,0.22)',
 				};
 
 				// Compute zone bands for a given series' sport — called per-series so
