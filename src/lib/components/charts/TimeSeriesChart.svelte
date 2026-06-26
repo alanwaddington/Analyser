@@ -144,7 +144,7 @@
 					inverse: channel === 'pace',
 					name: meta.unit,
 					nameTextStyle: { color: tc },
-					...(hasZoneBands ? { max: (v: { min: number; max: number }) => Math.ceil(v.max + (v.max - v.min) * 0.12) } : {}),
+					...(hasZoneBands ? { max: (v: { min: number; max: number }) => Math.ceil(v.max + (v.max - v.min) * 0.20) } : {}),
 					axisLabel: {
 						color: tc,
 						fontSize: 11,
