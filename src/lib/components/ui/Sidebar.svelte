@@ -89,50 +89,52 @@
 		>🏃 Event Comparison</button>
 	</div>
 
-	{#if $activities.length > 0}
-		<div class="file-section">
-			<FileList mode={isEvent ? 'event' : 'compare'} />
-			{#if isEvent}
-				<!-- Event mode: allow multiple files -->
-				<DropZone compact={true} />
-			{:else if isCompare}
-				<!-- Device comparison: multi-file — append additional files -->
-				<DropZone compact={true} />
-			{/if}
-		</div>
-	{/if}
-
-	<div class="footer">
-		<XAxisToggle eventMode={isEvent} />
-		<ThemeToggle />
-		<SmoothingSlider />
-		<div
-			class="sync-indicator sync-indicator--{indicatorState}"
-			aria-live="polite"
-			aria-label={ariaLabel}
-		>
-			<span class="sync-indicator__icon" class:sync-indicator__icon--spinning={$syncStatus.syncing} aria-hidden="true">
-				{#if $syncStatus.syncing}
-					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-						<path d="M8 2a6 6 0 0 1 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-						<path d="M14 8a6 6 0 0 1-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-					</svg>
-				{:else if $syncStatus.error}
-					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-						<path d="M8 2L14 13H2L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-						<line x1="8" y1="6" x2="8" y2="9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-						<circle cx="8" cy="11.5" r="0.75" fill="currentColor"/>
-					</svg>
-				{:else}
-					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-						<circle cx="8" cy="8" r="4" fill="currentColor"/>
-					</svg>
+	<div class="sidebar-scroll">
+		{#if $activities.length > 0}
+			<div class="file-section">
+				<FileList mode={isEvent ? 'event' : 'compare'} />
+				{#if isEvent}
+					<!-- Event mode: allow multiple files -->
+					<DropZone compact={true} />
+				{:else if isCompare}
+					<!-- Device comparison: multi-file — append additional files -->
+					<DropZone compact={true} />
 				{/if}
-			</span>
-			<span class="sync-indicator__text">{statusText}</span>
+			</div>
+		{/if}
+
+		<div class="footer">
+			<XAxisToggle eventMode={isEvent} />
+			<ThemeToggle />
+			<SmoothingSlider />
+			<div
+				class="sync-indicator sync-indicator--{indicatorState}"
+				aria-live="polite"
+				aria-label={ariaLabel}
+			>
+				<span class="sync-indicator__icon" class:sync-indicator__icon--spinning={$syncStatus.syncing} aria-hidden="true">
+					{#if $syncStatus.syncing}
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+							<path d="M8 2a6 6 0 0 1 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+							<path d="M14 8a6 6 0 0 1-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+						</svg>
+					{:else if $syncStatus.error}
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+							<path d="M8 2L14 13H2L8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+							<line x1="8" y1="6" x2="8" y2="9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+							<circle cx="8" cy="11.5" r="0.75" fill="currentColor"/>
+						</svg>
+					{:else}
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+							<circle cx="8" cy="8" r="4" fill="currentColor"/>
+						</svg>
+					{/if}
+				</span>
+				<span class="sync-indicator__text">{statusText}</span>
+			</div>
+			{#if mounted}<AthleteProfilePanel />{/if}
+			<SyncPanel />
 		</div>
-		{#if mounted}<AthleteProfilePanel />{/if}
-		<SyncPanel />
 	</div>
 </nav>
 
@@ -212,6 +214,29 @@
 	.nav-btn--disabled:hover {
 		background: transparent;
 		color: var(--color-muted);
+	}
+
+	.sidebar-scroll {
+		flex: 1;
+		overflow-y: auto;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		scrollbar-width: thin;
+		scrollbar-color: var(--color-border) transparent;
+	}
+
+	.sidebar-scroll::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.sidebar-scroll::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.sidebar-scroll::-webkit-scrollbar-thumb {
+		background: var(--color-border);
+		border-radius: 3px;
 	}
 
 	.file-section {
