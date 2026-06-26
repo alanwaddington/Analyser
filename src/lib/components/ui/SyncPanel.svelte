@@ -109,7 +109,21 @@
 </script>
 
 <!-- ─────────────────────────────────────────────────────────────────────────
-     Expanded panel content (rendered above the toggle row via DOM order)
+     Toggle row — always visible in the sidebar footer
+     ───────────────────────────────────────────────────────────────────────── -->
+<button class="toggle-row" onclick={toggle} aria-expanded={isOpen} aria-label="Toggle sync panel">
+	<span class="toggle-icon-wrap">
+		<span class="toggle-icon" aria-hidden="true">☁</span>
+		{#if showBadge}
+			<span class="badge" aria-hidden="true"></span>
+		{/if}
+	</span>
+	<span class="toggle-label">Sync</span>
+	<span class="toggle-chevron" class:open={isOpen} aria-hidden="true">▾</span>
+</button>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Expanded panel content
      ───────────────────────────────────────────────────────────────────────── -->
 {#if isOpen}
 	<div class="sync-panel">
@@ -178,20 +192,6 @@
 		<button class="reset-btn" onclick={handleReset}>Reset sync identity</button>
 	</div>
 {/if}
-
-<!-- ─────────────────────────────────────────────────────────────────────────
-     Toggle row — always visible in the sidebar footer
-     ───────────────────────────────────────────────────────────────────────── -->
-<button class="toggle-row" onclick={toggle} aria-expanded={isOpen} aria-label="Toggle sync panel">
-	<span class="toggle-icon-wrap">
-		<span class="toggle-icon" aria-hidden="true">☁</span>
-		{#if showBadge}
-			<span class="badge" aria-hidden="true"></span>
-		{/if}
-	</span>
-	<span class="toggle-label">Sync</span>
-	<span class="toggle-chevron" class:open={isOpen} aria-hidden="true">▾</span>
-</button>
 
 <style>
 	/* ── Toggle row ──────────────────────────────────────────────────────────── */
@@ -266,8 +266,8 @@
 		flex-direction: column;
 		gap: 8px;
 		padding: 10px 0 8px;
-		border-top: 1px solid var(--color-border);
-		margin-bottom: 4px;
+		border-bottom: 1px solid var(--color-border);
+		margin-top: 4px;
 	}
 
 	/* Status line */

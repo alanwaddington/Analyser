@@ -1349,6 +1349,7 @@ onMount(() =&gt; { mounted = true; });
 <td>Renders bottom navigation bar at ≤480px</td>
 </tr>
 </tbody></table>
+<p><strong>Sidebar scroll layout:</strong> Inside <code>.sidebar</code>, the logo and mode-nav buttons are pinned at the top (outside any scroll container). A <code>.sidebar-scroll</code> wrapper (<code>flex: 1; overflow-y: auto; min-height: 0</code>) wraps the file-section and footer, making the sidebar scrollable when expanded panels (Athlete Profile, Sync) push content below the viewport edge. The file-section retains its own independent <code>overflow-y: auto</code> for long file lists. A thin 6px scrollbar is applied via <code>scrollbar-width: thin</code> (Firefox) and <code>::-webkit-scrollbar</code> (Chrome/Safari/Edge) using <code>--color-border</code>.</p>
 <hr>
 <h2 id="5-fit-parsing">5. FIT Parsing</h2>
 <p>FIT files are parsed by <code>fit-file-parser</code> running in a <strong>Web Worker</strong> to avoid blocking the UI thread. The worker is created in <code>src/lib/fit/parser.ts</code>.</p>

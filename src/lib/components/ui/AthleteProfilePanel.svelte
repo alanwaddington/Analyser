@@ -64,7 +64,13 @@
 	}
 </script>
 
-<!-- Expanded panel — rendered above the toggle in DOM order (same as SyncPanel) -->
+<!-- Toggle row — always visible -->
+<button class="toggle-row" onclick={toggle} aria-expanded={isOpen} aria-label="Toggle profile settings">
+	<span class="toggle-icon-wrap" aria-hidden="true">⚖</span>
+	<span class="toggle-label">Profile</span>
+	<span class="toggle-chevron" class:open={isOpen} aria-hidden="true">▾</span>
+</button>
+
 {#if isOpen}
 	<div class="profile-panel">
 		<!-- General -->
@@ -192,12 +198,6 @@
 	</div>
 {/if}
 
-<!-- Toggle row — always visible, same pattern as SyncPanel -->
-<button class="toggle-row" onclick={toggle} aria-expanded={isOpen} aria-label="Toggle profile settings">
-	<span class="toggle-icon-wrap" aria-hidden="true">⚖</span>
-	<span class="toggle-label">Profile</span>
-	<span class="toggle-chevron" class:open={isOpen} aria-hidden="true">▾</span>
-</button>
 
 <style>
 	/* Toggle row — matches SyncPanel's .toggle-row exactly */
@@ -252,8 +252,8 @@
 		flex-direction: column;
 		gap: 5px;
 		padding: 8px 0;
-		border-top: 1px solid var(--color-border);
-		margin-bottom: 4px;
+		border-bottom: 1px solid var(--color-border);
+		margin-top: 4px;
 	}
 
 	.field-group-label {
