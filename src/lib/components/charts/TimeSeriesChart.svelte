@@ -17,6 +17,19 @@
 
 	const DOWNSAMPLE_THRESHOLD = 2000;
 
+	// ── Module-level primary-mouse-button state ────────────────────────────
+	// Shared across ALL TimeSeriesChart instances so every keyup handler sees
+	// the same drag state. Without this, the 7 charts that are NOT the drag
+	// target each see _mouseDragActive=false and dispatch takeGlobalCursor
+	// (which, via ec.connect, cancels the brush on ALL connected charts).
+	// Capture-phase listeners run before ECharts' own canvas handlers, so
+	// _modulePrimaryDown is set to false before brushEnd fires — the brushEnd
+	// handler can safely read it to decide whether to reset the cursor.
+	let _modulePrimaryDown = false;
+	let _moduleMouseRefCount = 0;
+	function _onGlobalMouseDown(e: MouseEvent) { if (e.button === 0) _modulePrimaryDown = true; }
+	function _onGlobalMouseUp(e: MouseEvent)   { if (e.button === 0) _modulePrimaryDown = false; }
+
 	let {
 		channel,
 		seriesInputs,
@@ -63,10 +76,6 @@
 	let zoomRange = $state<{ min: number; max: number } | undefined>(undefined);
 	let _keydownHandler: ((e: KeyboardEvent) => void) | undefined;
 	let _keyupHandler: ((e: KeyboardEvent) => void) | undefined;
-	let _onMouseDown: ((e: MouseEvent) => void) | undefined;
-	let _onMouseUp: ((e: MouseEvent) => void) | undefined;
-	let _mouseDragActive = false;    // true while the primary mouse button is held
-	let _deferCursorReset = false;   // set when Shift is released mid-drag; cleared on mouseup
 
 	// Brush state for drag-to-create-segment (Shift+drag)
 	let pendingSegment = $state<{ startKm: number; endKm: number } | null>(null);
@@ -446,8 +455,7 @@
 		// Guard with !e.repeat: key-hold fires keydown continuously; without this,
 		// dispatchAction is called dozens of times per second on all chart instances,
 		// which resets the active brush selection mid-drag and prevents brushEnd from
-		// capturing the range. shiftDown is still updated on repeats (no-op since it's
-		// already true), but the expensive dispatchAction fires only once per key press.
+		// capturing the range.
 		_keydownHandler = (e: KeyboardEvent) => {
 			if (e.key === 'Shift' && brushActive) {
 				shiftDown = true;
@@ -459,46 +467,41 @@
 		_keyupHandler = (e: KeyboardEvent) => {
 			if (e.key === 'Shift') {
 				shiftDown = false;
-				if (_mouseDragActive) {
-					// Mouse is still held — the user released Shift mid-drag.
-					// Cancelling the brush cursor now would discard the in-progress
-					// selection. Defer the reset until after brushEnd fires
-					// (window mouseup bubbles up after ECharts processes its canvas
-					// mouseup, so _onMouseUp always runs after brushEnd).
-					_deferCursorReset = true;
-				} else {
+				if (!_modulePrimaryDown) {
+					// Mouse is not held — safe to reset cursor immediately.
 					chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
 				}
+				// If mouse IS held: do NOT reset cursor. brushEnd will fire when
+				// the mouse is released, capture the range, and reset the cursor.
+				// (_modulePrimaryDown is module-level so all 8 chart instances agree —
+				// preventing the 7 idle charts from cancelling the active drag.)
 			}
 		};
 
-		// Track primary mouse button state so we know whether a brush drag is
-		// in progress when Shift is released.
-		_onMouseDown = (e: MouseEvent) => { if (e.button === 0) _mouseDragActive = true; };
-		_onMouseUp = (e: MouseEvent) => {
-			if (e.button !== 0) return;
-			_mouseDragActive = false;
-			if (_deferCursorReset) {
-				_deferCursorReset = false;
-				// brushEnd has already fired (ECharts' canvas handler runs before
-				// window bubble), so it's safe to reset cursor now.
-				chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
-			}
-		};
+		// Register module-level capture-phase mouse listeners (shared across instances).
+		// Capture phase fires BEFORE ECharts' canvas handlers, so _modulePrimaryDown
+		// is already false when brushEnd fires on mouseup.
+		if (_moduleMouseRefCount++ === 0) {
+			window.addEventListener('mousedown', _onGlobalMouseDown, true);
+			window.addEventListener('mouseup', _onGlobalMouseUp, true);
+		}
 
 		window.addEventListener('keydown', _keydownHandler);
 		window.addEventListener('keyup', _keyupHandler);
-		window.addEventListener('mousedown', _onMouseDown);
-		window.addEventListener('mouseup', _onMouseUp);
 
 		// Brush end → capture selected range and show name prompt
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		chart.on('brushEnd', (params: any) => {
-			// Don't check shiftDown here — the browser may deliver keyup before mouseup,
-			// so shiftDown can be false even when the drag was initiated with Shift held.
 			if (!brushActive) return;
 			const areas = params?.areas;
-			if (!areas || areas.length === 0) return;
+			if (!areas || areas.length === 0) {
+				// Empty brushEnd (cancelled or accidental click). If Shift is no longer
+				// held, reset cursor so we don't leave brush mode active.
+				if (!shiftDown) {
+					chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
+				}
+				return;
+			}
 			const area = areas[0];
 			const range = area.coordRange as [number, number] | undefined;
 			if (!range || Math.abs(range[1] - range[0]) < 0.001) return; // < 1m — ignore tiny selections
@@ -507,6 +510,10 @@
 			pendingName = 'Segment';
 			// Clear the brush selection visual
 			chart?.dispatchAction({ type: 'brush', areas: [] });
+			// Reset cursor if Shift was released before mouseup
+			if (!shiftDown) {
+				chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
+			}
 		});
 
 		// markPoint click → zoom to ±15s (time) or ±0.05km (distance) around the anomaly
@@ -533,8 +540,10 @@
 		chart?.dispose();
 		if (_keydownHandler) window.removeEventListener('keydown', _keydownHandler);
 		if (_keyupHandler) window.removeEventListener('keyup', _keyupHandler);
-		if (_onMouseDown) window.removeEventListener('mousedown', _onMouseDown);
-		if (_onMouseUp) window.removeEventListener('mouseup', _onMouseUp);
+		if (--_moduleMouseRefCount === 0) {
+			window.removeEventListener('mousedown', _onGlobalMouseDown, true);
+			window.removeEventListener('mouseup', _onGlobalMouseUp, true);
+		}
 	});
 
 	/** Exposed for parent access via bind:this; also used by the inline PNG button. */
