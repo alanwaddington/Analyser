@@ -118,15 +118,46 @@
 		const altFill = $isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.2)';
 		const altLine = $isDark ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.35)';
 
-		// Whether this channel has zone shading — used to add y-axis headroom so the
-		// top zone band is visible even when the data barely enters it.
-		const hasZoneBands =
+		// Compute fixed zone axis extents so ALL zones are visible regardless of the data range.
+		// yAxis.min = 0 (Z1 visible from the bottom).
+		// yAxis.max = Z5_start + Z4_width (Z5 partially visible at the top, clipped to one Z4-width).
+		// Derived from zone boundaries, not from the data, so zones appear even when data doesn't reach them.
+		let zoneAxisMax: number | undefined;
+		if (
 			(channel === 'heartRate' && (
 				athleteProfile?.maxHrRunning != null ||
 				athleteProfile?.maxHrCycling != null ||
 				athleteProfile?.lthr != null
 			)) ||
-			(channel === 'power' && (athleteProfile?.cp != null || athleteProfile?.ftp != null));
+			(channel === 'power' && (athleteProfile?.cp != null || athleteProfile?.ftp != null))
+		) {
+			let topZoneStart = 0;
+			let z4Width = 0;
+			for (const s of seriesInputs) {
+				const seriesSport = s.activity.sport ?? sport ?? 'cycling';
+				let bands: { min: number; max: number; zone: number }[] | null = null;
+				if (channel === 'heartRate') {
+					const maxHR = seriesSport === 'cycling'
+						? (athleteProfile?.maxHrCycling ?? athleteProfile?.maxHrRunning)
+						: (athleteProfile?.maxHrRunning ?? athleteProfile?.maxHrCycling);
+					if (maxHR != null) bands = hrZoneBoundaries(maxHR);
+					else if (athleteProfile?.lthr != null) bands = hrZoneBoundaries(lthrToEstimatedMaxHR(athleteProfile.lthr));
+				} else if (channel === 'power') {
+					if (seriesSport === 'running' && athleteProfile?.cp != null) bands = cpZoneBoundaries(athleteProfile.cp);
+					else if (seriesSport !== 'running' && athleteProfile?.ftp != null) bands = ftpZoneBoundaries(athleteProfile.ftp);
+				}
+				if (bands) {
+					const z5 = bands.find(b => b.zone === 5);
+					const z4 = bands.find(b => b.zone === 4);
+					if (z5 && z4) {
+						topZoneStart = Math.max(topZoneStart, z5.min);
+						z4Width = Math.max(z4Width, z4.max - z4.min);
+					}
+				}
+			}
+			if (topZoneStart > 0) zoneAxisMax = Math.ceil(topZoneStart + z4Width);
+		}
+		const hasZoneBands = zoneAxisMax !== undefined;
 
 		return {
 			grid: { top: 20, right: 16, bottom: 30, left: 55 },
@@ -144,7 +175,7 @@
 					inverse: channel === 'pace',
 					name: meta.unit,
 					nameTextStyle: { color: tc },
-					...(hasZoneBands ? { max: (v: { min: number; max: number }) => Math.ceil(v.max + (v.max - v.min) * 0.20) } : {}),
+					...(hasZoneBands ? { min: 0, max: zoneAxisMax } : {}),
 					axisLabel: {
 						color: tc,
 						fontSize: 11,
