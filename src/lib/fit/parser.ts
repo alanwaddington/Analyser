@@ -70,6 +70,7 @@ interface FitRecord {
 	heart_rate?: number;
 	power?: number;
 	'Power'?: number;          // Stryd developer field (running power)
+	'Form Power'?: number;     // Stryd developer field (form power — energy lost to form inefficiency)
 	left_right_balance?: number;
 	cadence?: number;
 	altitude?: number;
@@ -165,6 +166,7 @@ export function normaliseRecord(r: FitRecord): ActivityRecord {
 		// Stryd developer field ('Power', capital P) takes priority over native watch power.
 		// When both are present (e.g. Garmin + Stryd paired), Stryd is more accurate.
 		power: r['Power'] ?? r.power,
+		formPower: r['Form Power'],
 		cadence: r.cadence,
 		altitude: r.enhanced_altitude ?? r.altitude,
 		temperature: r.temperature,
@@ -193,7 +195,7 @@ const DEVICE_TYPE_CHANNELS: Record<number, ChannelKey[]> = {
 
 // All channels that can appear in records
 export const ALL_RECORD_CHANNELS: ChannelKey[] = [
-	'heartRate', 'power', 'powerLeft', 'powerRight', 'cadence',
+	'heartRate', 'power', 'formPower', 'powerLeft', 'powerRight', 'cadence',
 	'speed', 'pace', 'altitude', 'temperature',
 	'coreTemperature', 'skinTemperature',
 	'verticalOscillation', 'groundContactTime', 'strideLength',

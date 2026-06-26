@@ -67,6 +67,29 @@ describe('normaliseRecord — power field mapping', () => {
 	});
 });
 
+describe('normaliseRecord — Form Power field mapping', () => {
+	it('normaliseRecord_strydFormPower_mapsToFormPower', () => {
+		// Stryd developer field 'Form Power' (with space) maps to ActivityRecord.formPower
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, 'Form Power': 45 } as any);
+		expect(record.formPower).toBe(45);
+	});
+
+	it('normaliseRecord_noFormPower_formPowerIsUndefined', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10 } as any);
+		expect(record.formPower).toBeUndefined();
+	});
+
+	it('normaliseRecord_strydPowerAndFormPower_bothMapped', () => {
+		// When Stryd provides both total power and form power, both are extracted independently
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, 'Power': 280, 'Form Power': 52 } as any);
+		expect(record.power).toBe(280);
+		expect(record.formPower).toBe(52);
+	});
+});
+
 describe('detectPowerSource', () => {
 	it('detectPowerSource_strydDeveloperFieldPresent_returnsStryd', () => {
 		expect(detectPowerSource(true, true, 'running')).toBe('stryd');

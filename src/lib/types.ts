@@ -11,6 +11,7 @@ export interface ActivityRecord {
 	pace?: number;  // min/km
 	heartRate?: number; // bpm
 	power?: number; // watts
+	formPower?: number; // watts — Stryd Form Power (energy wasted to form, not propulsion)
 	powerLeft?: number;
 	powerRight?: number;
 	cadence?: number; // rpm (cycling) or spm (running, already doubled by parser)
@@ -118,6 +119,7 @@ export interface TimeDelta {
 export type ChannelKey =
 	| 'heartRate'
 	| 'power'
+	| 'formPower'
 	| 'powerLeft'
 	| 'powerRight'
 	| 'cadence'
@@ -135,6 +137,7 @@ export type ChannelKey =
 export const CHANNEL_META: Record<ChannelKey, { label: string; unit: string }> = {
 	heartRate:           { label: 'Heart Rate',        unit: 'bpm' },
 	power:               { label: 'Power',             unit: 'W'   },
+	formPower:           { label: 'Form Power',        unit: 'W'   },
 	powerLeft:           { label: 'Power Left',        unit: 'W'   },
 	powerRight:          { label: 'Power Right',       unit: 'W'   },
 	cadence:             { label: 'Cadence',           unit: 'rpm'     },
