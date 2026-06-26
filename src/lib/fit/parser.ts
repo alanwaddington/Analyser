@@ -70,6 +70,7 @@ interface FitRecord {
 	heart_rate?: number;
 	power?: number;
 	'Power'?: number;          // Stryd developer field (running power)
+	'Form Power'?: number;     // Stryd developer field (form power — energy lost to form inefficiency)
 	left_right_balance?: number;
 	cadence?: number;
 	altitude?: number;
@@ -136,6 +137,23 @@ export function normaliseDeviceInfo(d: FitDeviceInfo): Device {
 	};
 }
 
+/**
+ * Determine the authoritative power source for an activity.
+ * Stryd (developer field) takes priority over native watch power.
+ * Running native power is labelled 'native'; all other power (cycling, unknown sport) is 'cycling'.
+ * Returns undefined when no power data is present.
+ */
+export function detectPowerSource(
+	hasStrydPower: boolean,
+	hasPower: boolean,
+	sport: string | undefined
+): 'stryd' | 'native' | 'cycling' | undefined {
+	if (!hasPower && !hasStrydPower) return undefined;
+	if (hasStrydPower) return 'stryd';
+	if (sport === 'running') return 'native';
+	return 'cycling';
+}
+
 export function normaliseRecord(r: FitRecord): ActivityRecord {
 	const speed = r.enhanced_speed ?? r.speed;
 	return {
@@ -145,7 +163,10 @@ export function normaliseRecord(r: FitRecord): ActivityRecord {
 		speed,
 		pace: speed && speed > 0 ? 60 / speed : undefined,
 		heartRate: r.heart_rate,
-		power: r.power ?? r['Power'],
+		// Stryd developer field ('Power', capital P) takes priority over native watch power.
+		// When both are present (e.g. Garmin + Stryd paired), Stryd is more accurate.
+		power: r['Power'] ?? r.power,
+		formPower: r['Form Power'],
 		cadence: r.cadence,
 		altitude: r.enhanced_altitude ?? r.altitude,
 		temperature: r.temperature,
@@ -174,7 +195,7 @@ const DEVICE_TYPE_CHANNELS: Record<number, ChannelKey[]> = {
 
 // All channels that can appear in records
 export const ALL_RECORD_CHANNELS: ChannelKey[] = [
-	'heartRate', 'power', 'powerLeft', 'powerRight', 'cadence',
+	'heartRate', 'power', 'formPower', 'powerLeft', 'powerRight', 'cadence',
 	'speed', 'pace', 'altitude', 'temperature',
 	'coreTemperature', 'skinTemperature',
 	'verticalOscillation', 'groundContactTime', 'strideLength',
@@ -366,6 +387,10 @@ function normalise(data: FitData, filename: string): Activity {
 	const subSport = data.sports?.[0]?.sub_sport ?? session.sub_sport;
 	const rawRecords = data.records ?? [];
 
+	// Detect Stryd power before normalisation: any record with a capital-P 'Power'
+	// developer field indicates a Stryd footpod was present and contributing data.
+	const hasStrydPower = rawRecords.some(r => r['Power'] != null);
+
 	let records: ActivityRecord[] = rawRecords.map(normaliseRecord);
 	records = filterNegativeElapsed(records);
 	if (records.length < rawRecords.length) {
@@ -403,6 +428,8 @@ function normalise(data: FitData, filename: string): Activity {
 	const devices: Device[] = applyLabels(uniqueDeviceInfos.map(normaliseDeviceInfo));
 	const availableChannels = channelsPresentInRecords(records);
 	const deviceStreams = buildDeviceStreams(devices, records);
+	const hasPower = records.some(r => r.power != null);
+	const powerSource = detectPowerSource(hasStrydPower, hasPower, sport);
 
 	const startTime = session.start_time ?? records[0]?.timestamp ?? new Date(0);
 	const firstGpsFixIndex = findFirstGpsFixIndex(records);
@@ -423,6 +450,7 @@ function normalise(data: FitData, filename: string): Activity {
 		filename,
 		sport,
 		subSport,
+		powerSource,
 		isIndoor,
 		startTime,
 		totalDistance: session.total_distance ?? records.at(-1)?.distance ?? 0,

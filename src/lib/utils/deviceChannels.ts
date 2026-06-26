@@ -1,11 +1,37 @@
-import type { ChannelKey, CrossFileStream, Device } from '$lib/types';
+import type { Activity, ChannelKey, CrossFileStream, Device, DeviceStream } from '$lib/types';
+
+/** Map known manufacturer names (from fit-file-parser, which emits lowercase strings) to display names. */
+const MANUFACTURER_NAMES: Record<string, string> = {
+	garmin: 'Garmin',
+	suunto: 'Suunto',
+	coros: 'COROS',
+	polar: 'Polar',
+	wahoo: 'Wahoo',
+};
 
 /**
  * Derive a human-readable label for a device.
- * Priority: user-assigned label → manufacturer + product → "Device N"
+ *
+ * For power-contributing devices in running activities, the label reflects
+ * the power source: "Stryd", "[Manufacturer] Running Power", or "Watch Running Power".
+ *
+ * Priority: user-assigned label → power source label (when applicable) → manufacturer + product → "Device N"
  */
-export function deriveDeviceLabel(device: Device): string {
+export function deriveDeviceLabel(device: Device, stream?: Pick<DeviceStream, 'channels'>, activity?: Activity): string {
 	if (device.label?.trim()) return device.label;
+
+	// Source-aware power labelling: only applies when the stream contributes 'power'
+	// and the activity has a known powerSource.
+	if (stream?.channels.includes('power') && activity?.powerSource) {
+		if (activity.powerSource === 'stryd') return 'Stryd';
+		if (activity.powerSource === 'native') {
+			const mfr = typeof device.manufacturer === 'string'
+				? MANUFACTURER_NAMES[device.manufacturer.toLowerCase()]
+				: undefined;
+			return `${mfr ?? 'Watch'} Running Power`;
+		}
+		// 'cycling' — fall through to standard label (e.g. "favero Assioma DUO")
+	}
 
 	const parts = [device.manufacturer?.trim(), device.product?.trim()].filter(Boolean);
 	if (parts.length > 0) return parts.join(' ');

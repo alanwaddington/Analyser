@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, channelsPresentInRecords, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps, filterNegativeElapsed, ensureSortedByElapsed, DISTANCE_EPSILON_M } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, channelsPresentInRecords, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps, filterNegativeElapsed, ensureSortedByElapsed, DISTANCE_EPSILON_M, detectPowerSource } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -52,16 +52,73 @@ describe('normaliseRecord — power field mapping', () => {
 		expect(record.power).toBe(300);
 	});
 
-	it('normaliseRecord_standardPowerAndDeveloperPower_standardPowerTakesPrecedence', () => {
+	it('normaliseRecord_strydAndNativePowerBothPresent_strydDeveloperFieldTakesPrecedence', () => {
+		// When both Stryd developer field (capital-P 'Power') and native watch power are
+		// present in the same FIT file, Stryd data is more accurate and takes priority.
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, power: 300, 'Power': 221 } as any);
-		expect(record.power).toBe(300);
+		expect(record.power).toBe(221);
 	});
 
 	it('normaliseRecord_noPower_powerIsUndefined', () => {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10 } as any);
 		expect(record.power).toBeUndefined();
+	});
+});
+
+describe('normaliseRecord — Form Power field mapping', () => {
+	it('normaliseRecord_strydFormPower_mapsToFormPower', () => {
+		// Stryd developer field 'Form Power' (with space) maps to ActivityRecord.formPower
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, 'Form Power': 45 } as any);
+		expect(record.formPower).toBe(45);
+	});
+
+	it('normaliseRecord_noFormPower_formPowerIsUndefined', () => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10 } as any);
+		expect(record.formPower).toBeUndefined();
+	});
+
+	it('normaliseRecord_strydPowerAndFormPower_bothMapped', () => {
+		// When Stryd provides both total power and form power, both are extracted independently
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const record = normaliseRecord({ timestamp: new Date(), elapsed_time: 1, distance: 10, 'Power': 280, 'Form Power': 52 } as any);
+		expect(record.power).toBe(280);
+		expect(record.formPower).toBe(52);
+	});
+});
+
+describe('detectPowerSource', () => {
+	it('detectPowerSource_strydDeveloperFieldPresent_returnsStryd', () => {
+		expect(detectPowerSource(true, true, 'running')).toBe('stryd');
+	});
+
+	it('detectPowerSource_strydDeveloperFieldPresent_ignoresSportForStrydClassification', () => {
+		// Stryd classification is determined by the developer field alone, regardless of sport
+		expect(detectPowerSource(true, true, 'cycling')).toBe('stryd');
+		expect(detectPowerSource(true, true, undefined)).toBe('stryd');
+	});
+
+	it('detectPowerSource_nativePowerRunning_returnsNative', () => {
+		expect(detectPowerSource(false, true, 'running')).toBe('native');
+	});
+
+	it('detectPowerSource_nativePowerCycling_returnsCycling', () => {
+		expect(detectPowerSource(false, true, 'cycling')).toBe('cycling');
+	});
+
+	it('detectPowerSource_nativePowerUnknownSport_returnsCycling', () => {
+		// Default to cycling for any non-running sport with power (e.g. triathlon, rowing)
+		expect(detectPowerSource(false, true, undefined)).toBe('cycling');
+		expect(detectPowerSource(false, true, 'triathlon')).toBe('cycling');
+	});
+
+	it('detectPowerSource_noPower_returnsUndefined', () => {
+		expect(detectPowerSource(false, false, 'running')).toBeUndefined();
+		expect(detectPowerSource(false, false, 'cycling')).toBeUndefined();
+		expect(detectPowerSource(false, false, undefined)).toBeUndefined();
 	});
 });
 

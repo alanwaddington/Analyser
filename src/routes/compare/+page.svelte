@@ -22,9 +22,11 @@
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import { buildAnomalyCounts } from '$lib/components/ui/DeviceToggleBar.utils';
 	import { groupAnomalyEvents } from '$lib/analytics/anomalies';
-	import { ftpPct, cpPct, wPerKg, hrZone } from '$lib/analytics/zones';
 	import { athleteProfile } from '$lib/stores/athleteProfile';
 	import type { AthleteProfile } from '$lib/types';
+	import { buildCellContext } from '$lib/utils/summaryContext';
+	import type { CellContext } from '$lib/utils/summaryContext';
+	import { computeRSS } from '$lib/analytics/rss';
 	import { exportActivities } from '$lib/export/exportActivities';
 	import type { ExportFormat } from '$lib/export/columns';
 	import { untrack } from 'svelte';
@@ -153,7 +155,7 @@
 				activity: cfs.activity,
 				colourIndex: colourIdx,
 				colour: FILE_COLOURS[colourIdx % FILE_COLOURS.length],
-				label: deriveDeviceLabel(cfs.stream.device),
+				label: deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity),
 				timeOffset: $timeOffsets.get(cfs.activity.id) ?? 0,
 				distanceOffset: distanceOffsets.get(cfs.activity.id) ?? 0,
 			};
@@ -197,28 +199,6 @@
 	let locationWarningDismissed = $state(false);
 
 	const indoor = createIndoorWarnings(() => $activities);
-
-	// ── Summary table contextual stats ───────────────────────────────────────
-
-	type CellContext = { pctLabel?: string; wkg?: string; zone?: number } | null;
-
-	function buildCellContext(ch: ChannelKey, avg: number, sport: string | undefined, profile: AthleteProfile): CellContext {
-		if (ch === 'power') {
-			const isCycling = sport !== 'running';
-			const pctLabel = isCycling && profile.ftp
-				? `${ftpPct(avg, profile.ftp)}% FTP`
-				: !isCycling && profile.cp
-					? `${cpPct(avg, profile.cp)}% CP`
-					: undefined;
-			const wkg = profile.weight ? wPerKg(avg, profile.weight).toFixed(1) : undefined;
-			return (pctLabel || wkg) ? { pctLabel, wkg } : null;
-		}
-		if (ch === 'heartRate') {
-			const zone = hrZone(avg, profile, sport ?? 'cycling');
-			return zone != null ? { zone } : null;
-		}
-		return null;
-	}
 
 	// Reset location warning whenever the file set changes
 	$effect(() => { void $activities; locationWarningDismissed = false; });
@@ -539,7 +519,7 @@
 										<span class="device-header">
 											<span class="device-dot" style="background:{dotColour}"></span>
 											<span class="device-header-text">
-												<span class="device-name">{deriveDeviceLabel(cfs.stream.device)}</span>
+												<span class="device-name">{deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}</span>
 												{#if multiFile}
 													<span class="device-filename">{cfs.activity.filename}</span>
 												{/if}
@@ -566,15 +546,18 @@
 									{#each activeCrossFileStreams as cfs}
 										{@const s = summarise(extractChannel(cfs.activity.records, ch))}
 										{@const ctx = s ? buildCellContext(ch, s.avg, cfs.activity.sport, $athleteProfile) : null}
+										{@const powerS = ch === 'formPower' ? summarise(extractChannel(cfs.activity.records, 'power')) : null}
+										{@const fpRatio = s && powerS && powerS.avg > 0 ? Math.round(s.avg / powerS.avg * 100) : null}
 										<td class="cell-stat">
 											{#if s}
 												{s.avg.toFixed(1)} / {s.max.toFixed(1)} / {s.min.toFixed(1)}
-												{#if ctx}
+												{#if ctx || fpRatio != null}
 													<span class="cell-context">
-														{#if ctx.pctLabel}{ctx.pctLabel}{/if}
-														{#if ctx.pctLabel && ctx.wkg}&ensp;·&ensp;{/if}
-														{#if ctx.wkg}{ctx.wkg} w/kg{/if}
-														{#if ctx.zone}<span class="zone-badge zone-badge--{ctx.zone}">Z{ctx.zone}</span>{/if}
+														{#if ctx?.pctLabel}{ctx.pctLabel}{/if}
+														{#if ctx?.pctLabel && ctx?.wkg}&ensp;·&ensp;{/if}
+														{#if ctx?.wkg}{ctx.wkg} w/kg{/if}
+														{#if ctx?.zone}<span class="zone-badge zone-badge--{ctx.zone}">Z{ctx.zone}</span>{/if}
+														{#if fpRatio != null}{fpRatio}% of power{/if}
 													</span>
 												{/if}
 											{:else}
@@ -584,6 +567,25 @@
 									{/each}
 								</tr>
 							{/each}
+							{#if $athleteProfile.cp != null && activeCrossFileStreams.some(cfs => cfs.activity.sport === 'running')}
+								<tr class:row-alt={activeChannels.length % 2 === 1}>
+									<td class="cell-label" title="Running Stress Score — analogous to TSS for cycling">RSS</td>
+									{#each activeCrossFileStreams as cfs}
+										{@const pStats = summarise(extractChannel(cfs.activity.records, 'power'))}
+										{@const rssVal = pStats && cfs.activity.sport === 'running' && $athleteProfile.cp
+											? computeRSS(cfs.activity.totalElapsedTime, pStats.avg, $athleteProfile.cp)
+											: null}
+										<td class="cell-stat">
+											{#if rssVal != null}
+												{rssVal.toFixed(1)}
+												<span class="cell-context">Running Stress</span>
+											{:else}
+												—
+											{/if}
+										</td>
+									{/each}
+								</tr>
+							{/if}
 						</tbody>
 					</table>
 				{/if}
@@ -594,6 +596,8 @@
 </div>
 
 <style>
+	@import '$lib/styles/zone-badge.css';
+
 	.page {
 		display: flex;
 		flex-direction: column;
@@ -983,27 +987,6 @@
 		white-space: nowrap;
 		font-family: inherit;
 	}
-
-	.zone-badge {
-		display: inline-block;
-		padding: 1px 5px;
-		border-radius: 3px;
-		font-size: 0.65rem;
-		font-weight: 600;
-		line-height: 1.4;
-		font-family: inherit;
-	}
-
-	.zone-badge--1 { background: rgba(100,116,139,0.2);  color: #94a3b8; }
-	.zone-badge--2 { background: rgba(96,165,250,0.15);  color: #60a5fa; }
-	.zone-badge--3 { background: rgba(74,222,128,0.15);  color: #4ade80; }
-	.zone-badge--4 { background: rgba(251,191,36,0.18);  color: #fbbf24; }
-	.zone-badge--5 { background: rgba(248,113,113,0.18); color: #f87171; }
-
-	:global([data-theme="light"]) .zone-badge--2 { color: #2563eb; }
-	:global([data-theme="light"]) .zone-badge--3 { color: #16a34a; }
-	:global([data-theme="light"]) .zone-badge--4 { color: #d97706; }
-	:global([data-theme="light"]) .zone-badge--5 { color: #dc2626; }
 
 	.row-alt {
 		background: color-mix(in srgb, var(--color-border) 30%, transparent);

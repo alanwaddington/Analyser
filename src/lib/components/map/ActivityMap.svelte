@@ -48,6 +48,7 @@
 	let markers: (import('leaflet').CircleMarker | null)[] = [];
 	let driftMarkers: import('leaflet').CircleMarker[] = [];
 	let resizeObserver: ResizeObserver | undefined;
+	let mapInitialised = false;
 
 	// Metric colouring state
 	let metricChannel = $state<ChannelKey | null>(null);
@@ -109,9 +110,9 @@
 		return { channel: ch, perActivity, globalRange };
 	});
 
-	onMount(async () => {
-		L = await import('leaflet');
-		await import('leaflet/dist/leaflet.css');
+	function initLeafletMap() {
+		if (mapInitialised || !L || !container) return;
+		mapInitialised = true;
 
 		map = L.map(container);
 
@@ -158,17 +159,38 @@
 		});
 
 		new LegendControl({ position: 'bottomright' }).addTo(map);
+		updatePickerPosition();
+	}
 
-		// Invalidate Leaflet's size whenever the container changes dimensions.
-		// This handles tab switches where the container goes from display:none
-		// to display:flex — without this, the map renders grey tiles.
-		// Also reposition the colour-by picker overlay on every resize / tab reveal.
+	onMount(async () => {
+		L = await import('leaflet');
+		await import('leaflet/dist/leaflet.css');
+
+		// Initialise Leaflet only when the container has real dimensions.
+		// The map panel lives permanently in the DOM but its parent has
+		// display:none when another tab is active — calling L.map() on a
+		// zero-size container produces "Initialize failed: invalid dom."
+		// The ResizeObserver fires as soon as the tab becomes visible and
+		// provides the first non-zero layout, at which point we init.
+		// Guard against unmount during the async Leaflet import
+		if (!container) return;
+
 		resizeObserver = new ResizeObserver(() => {
+			if (!container) return;
+			const r = container.getBoundingClientRect();
+			if (!mapInitialised && r.width > 0 && r.height > 0) {
+				initLeafletMap();
+			}
 			map?.invalidateSize();
 			updatePickerPosition();
 		});
 		resizeObserver.observe(container);
-		updatePickerPosition(); // set initial position after Leaflet init
+
+		// If the Map tab is already active on mount, initialise immediately.
+		const initRect = container.getBoundingClientRect();
+		if (initRect.width > 0 && initRect.height > 0) {
+			initLeafletMap();
+		}
 	});
 
 	onDestroy(() => {

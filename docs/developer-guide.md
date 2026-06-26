@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.8 · **Last updated:** June 2026
+> **Version:** 1.9 · **Last updated:** June 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -66,8 +66,12 @@ src/
 │   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection, zone utilities
 │   │                 # - anomalies.ts: detectAnomalies(), groupAnomalyEvents(), groupAnomaliesByChannel()
 │   │                 # - zones.ts: hrZone, hrZoneFromMaxHR, hrZoneFromLTHR, lthrToEstimatedMaxHR,
-│   │                 #   cpZone, ftpPct, cpPct, wPerKg, hrZoneBoundaries, cpZoneBoundaries
+│   │                 #   cpZone, ftpZone, ftpPct, cpPct, wPerKg,
+│   │                 #   hrZoneBoundaries, cpZoneBoundaries, ftpZoneBoundaries
 │   │                 #   All pure functions — no side effects. Re-exported from analytics/index.ts.
+│   │                 # - rss.ts: computeRSS(durationS, avgPower, cp) — Running Stress Score
+│   │                 #   Formula: (durationS × avgPower × IF²) / (CP × 3600), IF = avgPower / CP
+│   │                 #   Returns 0 when any input is zero or negative.
 │   │                 # - stats.ts: mean(), stdDev() — population statistics ignoring null/NaN
 │   │                 # - downsample.ts: downsampleGps(points, maxPoints, epsilon) — GPS polyline
 │   │                 #   simplification; GPS_MAX_POINTS=500 hard cap; iterative RDP (explicit stack,
@@ -117,12 +121,17 @@ src/
 │   │                 # - binarySearch.ts: lowerBound<T>(arr, key, target) — shared lower-bound binary search
 │   │                 # - channels.ts: deriveAvailableChannels()
 │   │                 # - deviceChannels.ts: deviceKey(), deriveDeviceLabel(), groupStreamsByChannel(), isComparableGroup()
+│   │                 #   deriveDeviceLabel() is source-aware for power channels: returns 'Stryd',
+│   │                 #   '[Manufacturer] Running Power', or standard label based on Activity.powerSource
 │   │                 # - fetchWithRetry.ts: fetchWithRetry(), isRetryable(), computeDelay() — retry with backoff
 │   │                 # - formatAge.ts: formatAge(ts) → human-readable relative time string
 │   │                 # - formatting.ts: formatPace(decimalMinutes) → "M:SS" string — single source of truth for pace display
 │   │                 # - indoorWarnings.svelte.ts: createIndoorWarnings() composable
 │   │                 # - lapMarkers.ts: buildLapMarkers()
 │   │                 # - segments.ts: buildSegments()
+│   │                 # - summaryContext.ts: buildCellContext(ch, avg, sport, profile) → CellContext
+│   │                 #   Derives % FTP / % CP label, w/kg, and HR zone for a summary table cell.
+│   │                 #   Returns null when no relevant profile field applies.
 │   ├── validation.ts # Shared regex constants (UUID, short code)
 │   └── types.ts      # Domain types
 │                     # - Anomaly, AnomalyType, DetectionStrategy, AnomalyDetectionOptions
@@ -835,7 +844,7 @@ interface AnomalyDetectionOptions {
 }
 ```
 
-Currently `detectAnomalies(records)` is called without options from `parser.ts` (statistical fallback for all channels). When issue #117 (power source detection) ships, only the call site changes — the detection logic itself is unchanged. The `athleteProfile` option is wired and ready; `maxHrCycling` and `maxHrRunning` are used for sport-aware spike thresholds when provided.
+As of PR #152, `detectAnomalies(records, options)` is called from `parser.ts` with `powerSource` populated from the parsed `Activity`. The detection logic is unchanged — only the call site evolved. The `athleteProfile` option is wired and ready; `maxHrCycling` and `maxHrRunning` are used for sport-aware spike thresholds when provided.
 
 ### Event grouping — `groupAnomalyEvents()`
 
@@ -922,8 +931,10 @@ All functions are pure with no side effects. Every denominator function returns 
 | `ftpPct` | `(watts, ftp) → number` | `round((watts / ftp) * 100)`. Returns `0` when `ftp ≤ 0`. |
 | `cpPct` | `(watts, cp) → number` | `round((watts / cp) * 100)`. Returns `0` when `cp ≤ 0`. |
 | `wPerKg` | `(watts, weightKg) → number` | `round((watts / weightKg) * 10) / 10`. Returns `0` when `weightKg ≤ 0`. |
+| `ftpZone` | `(watts, ftp) → CpZone` | Coggan 5-zone FTP model (Z1 < 55%, Z2 55–75%, Z3 75–90%, Z4 90–105%, Z5 ≥ 105%) |
 | `hrZoneBoundaries` | `(maxHR) → ZoneBand[]` | 5 contiguous `{ min, max, zone }` bands for ECharts `markArea` construction |
-| `cpZoneBoundaries` | `(cp) → ZoneBand[]` | 5 contiguous `{ min, max, zone }` bands for ECharts `markArea` construction |
+| `cpZoneBoundaries` | `(cp) → ZoneBand[]` | 5 contiguous `{ min, max, zone }` bands for ECharts `markArea` construction (Stryd model) |
+| `ftpZoneBoundaries` | `(ftp) → ZoneBand[]` | 5 contiguous `{ min, max, zone }` bands for ECharts `markArea` construction (Coggan model) |
 
 ### How the profile flows into the UI
 
@@ -935,11 +946,11 @@ All three consumers receive `athleteProfile` and `sport` as props from their res
 <MeanMaxChart    athleteProfile={$athleteProfile} sport={$activities[0]?.sport ?? ''} ... />
 ```
 
-**`TimeSeriesChart.svelte`** — adds HR zone `markArea` bands for the `heartRate` channel and CP zone bands for `power` when `sport === 'running'`. Uses the cross-sport maxHR fallback inline (same logic as `hrZone()`), then calls `lthrToEstimatedMaxHR()` for the LTHR path.
+**`TimeSeriesChart.svelte`** — adds zone `markArea` bands per-series using each series' own `s.activity.sport` (not a chart-level `sport` prop). Running activities get CP zone bands (`cpZoneBoundaries`); cycling activities get FTP zone bands (`ftpZoneBoundaries`); HR channels get maxHR bands (`hrZoneBoundaries`), with cross-sport fallback and LTHR path. Each series attaches its own `markArea` so mixed-sport comparisons shade correctly.
 
 **`MeanMaxChart.svelte`** — adds an FTP (cycling) or Critical Power (running) dashed `markLine`. Adds a second w/kg Y-axis when `weight` is set and `weight > 0`.
 
-**`compare/+page.svelte`** — `buildCellContext(ch, avg, sport, profile)` derives the Summary tab context object:
+**`src/lib/utils/summaryContext.ts`** — `buildCellContext(ch, avg, sport, profile)` is the shared utility used by both compare and event pages to derive the Summary tab context object:
 
 ```ts
 // For power channels:
@@ -950,6 +961,8 @@ All three consumers receive `athleteProfile` and `sport` as props from their res
 
 // Returns null when no relevant profile field is set
 ```
+
+**`src/lib/analytics/rss.ts`** — `computeRSS(durationS, avgPower, cp)` computes the Running Stress Score shown in the Summary tab for running activities when CP is set. Returns 0 for zero or negative inputs.
 
 ### Sidebar SSR workaround
 
@@ -996,7 +1009,8 @@ Key parsing details:
 - Device deduplication: duplicate `device_index` entries are discarded (only first occurrence retained).
 - Two-pass channel allocation: external sensors (known ANT+ types) claim channels first; the watch claims remaining channels; any still-unclaimed channels are merged into the first device as a safety net.
 - Enhanced fields: `enhanced_speed` and `enhanced_altitude` are preferred over `speed` and `altitude`.
-- Stryd developer fields: `Power` (capital P), `stance_time`, `step_length` are mapped to standard channel keys.
+- Stryd developer fields: `Power` (capital P), `Form Power`, `stance_time`, `step_length` are mapped to standard channel keys (`power`, `formPower`, `groundContactTime`, `strideLength`).
+- **Power source detection:** After record normalisation, `Activity.powerSource` is set: `'stryd'` when any record contained the Stryd `Power` developer field; `'native'` when native `power` exists on a running activity; `'cycling'` when native power exists on a non-running activity; `undefined` when no power data is present. Both Stryd and native power are stored in the single `power` channel — `powerSource` carries the attribution.
 
 **Sport-specific post-processing** is applied after record normalisation:
 
