@@ -354,6 +354,7 @@
 								{lapMarkers}
 								referenceIndex={$referenceIndex}
 								groupId="event-charts"
+								athleteProfile={$athleteProfile}
 								anomalies={groupAnomalyEvents($activities[0]?.anomalies.filter(a => a.channel === channel) ?? [])}
 								onHoverDistance={chartIdx === 0 ? handleChartHoverDistance : undefined}
 								externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
