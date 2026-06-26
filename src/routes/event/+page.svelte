@@ -29,6 +29,7 @@
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
 	import { athleteProfile } from '$lib/stores/athleteProfile';
 	import { buildCellContext } from '$lib/utils/summaryContext';
+	import { computeRSS } from '$lib/analytics/rss';
 	import '../map-panel.css';
 	import '../export-btn.css';
 	import '../indoor-warning.css';
@@ -407,6 +408,8 @@
 				{/if}
 			</div>
 		{:else if activeTab === 'summary'}
+			{@const showFormPower = summaryRows.some(r => r.activity.powerSource === 'stryd')}
+			{@const showRSS = $athleteProfile.cp != null && summaryRows.some(r => r.activity.sport === 'running')}
 			<div class="summary-scroll">
 				<table class="summary-table">
 					<thead>
@@ -419,15 +422,22 @@
 							<th class="col-stat">Max HR</th>
 							<th class="col-stat">Avg Pace</th>
 							<th class="col-stat">Avg Power</th>
+							{#if showFormPower}<th class="col-stat">Form Power</th>{/if}
+							{#if showRSS}<th class="col-stat" title="Running Stress Score — analogous to TSS for cycling">RSS</th>{/if}
 						</tr>
 					</thead>
 					<tbody>
 						{#each summaryRows as { activity, isReference }, rowIdx}
 							{@const hrStats = summarise(extractChannel(activity.records, 'heartRate'))}
 							{@const powerStats = summarise(extractChannel(activity.records, 'power'))}
+							{@const formPowerStats = summarise(extractChannel(activity.records, 'formPower'))}
 							{@const paceSecPerKm = activity.totalDistance > 0 ? activity.totalElapsedTime / activity.totalDistance * 1000 : null}
 							{@const powerCtx = powerStats ? buildCellContext('power', powerStats.avg, activity.sport, $athleteProfile) : null}
 							{@const hrCtx = hrStats ? buildCellContext('heartRate', hrStats.avg, activity.sport, $athleteProfile) : null}
+							{@const fpRatio = formPowerStats && powerStats && powerStats.avg > 0 ? Math.round(formPowerStats.avg / powerStats.avg * 100) : null}
+							{@const rssVal = powerStats && activity.sport === 'running' && $athleteProfile.cp
+								? computeRSS(activity.totalElapsedTime, powerStats.avg, $athleteProfile.cp)
+								: null}
 							<tr class:row-alt={rowIdx % 2 === 1} class:row-reference={isReference}>
 								<td class="cell-activity">{activity.filename}</td>
 								<td class="cell-stat">{formatDate(activity.startTime)}</td>
@@ -449,6 +459,21 @@
 										</span>
 									{/if}
 								</td>
+								{#if showFormPower}
+									<td class="cell-stat">
+										{#if formPowerStats}
+											{formPowerStats.avg.toFixed(0)} W
+											{#if fpRatio != null}<span class="cell-context">{fpRatio}% of power</span>{/if}
+										{:else}
+											—
+										{/if}
+									</td>
+								{/if}
+								{#if showRSS}
+									<td class="cell-stat">
+										{rssVal != null ? rssVal.toFixed(1) : '—'}
+									</td>
+								{/if}
 							</tr>
 						{/each}
 					</tbody>

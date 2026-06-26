@@ -26,6 +26,7 @@
 	import type { AthleteProfile } from '$lib/types';
 	import { buildCellContext } from '$lib/utils/summaryContext';
 	import type { CellContext } from '$lib/utils/summaryContext';
+	import { computeRSS } from '$lib/analytics/rss';
 	import { exportActivities } from '$lib/export/exportActivities';
 	import type { ExportFormat } from '$lib/export/columns';
 	import { untrack } from 'svelte';
@@ -545,15 +546,18 @@
 									{#each activeCrossFileStreams as cfs}
 										{@const s = summarise(extractChannel(cfs.activity.records, ch))}
 										{@const ctx = s ? buildCellContext(ch, s.avg, cfs.activity.sport, $athleteProfile) : null}
+										{@const powerS = ch === 'formPower' ? summarise(extractChannel(cfs.activity.records, 'power')) : null}
+										{@const fpRatio = s && powerS && powerS.avg > 0 ? Math.round(s.avg / powerS.avg * 100) : null}
 										<td class="cell-stat">
 											{#if s}
 												{s.avg.toFixed(1)} / {s.max.toFixed(1)} / {s.min.toFixed(1)}
-												{#if ctx}
+												{#if ctx || fpRatio != null}
 													<span class="cell-context">
-														{#if ctx.pctLabel}{ctx.pctLabel}{/if}
-														{#if ctx.pctLabel && ctx.wkg}&ensp;·&ensp;{/if}
-														{#if ctx.wkg}{ctx.wkg} w/kg{/if}
-														{#if ctx.zone}<span class="zone-badge zone-badge--{ctx.zone}">Z{ctx.zone}</span>{/if}
+														{#if ctx?.pctLabel}{ctx.pctLabel}{/if}
+														{#if ctx?.pctLabel && ctx?.wkg}&ensp;·&ensp;{/if}
+														{#if ctx?.wkg}{ctx.wkg} w/kg{/if}
+														{#if ctx?.zone}<span class="zone-badge zone-badge--{ctx.zone}">Z{ctx.zone}</span>{/if}
+														{#if fpRatio != null}{fpRatio}% of power{/if}
 													</span>
 												{/if}
 											{:else}
@@ -563,6 +567,26 @@
 									{/each}
 								</tr>
 							{/each}
+							{@const showRSS = $athleteProfile.cp != null && activeCrossFileStreams.some(cfs => cfs.activity.sport === 'running')}
+							{#if showRSS}
+								<tr class:row-alt={activeChannels.length % 2 === 1}>
+									<td class="cell-label" title="Running Stress Score — analogous to TSS for cycling">RSS</td>
+									{#each activeCrossFileStreams as cfs}
+										{@const pStats = summarise(extractChannel(cfs.activity.records, 'power'))}
+										{@const rssVal = pStats && cfs.activity.sport === 'running' && $athleteProfile.cp
+											? computeRSS(cfs.activity.totalElapsedTime, pStats.avg, $athleteProfile.cp)
+											: null}
+										<td class="cell-stat">
+											{#if rssVal != null}
+												{rssVal.toFixed(1)}
+												<span class="cell-context">Running Stress</span>
+											{:else}
+												—
+											{/if}
+										</td>
+									{/each}
+								</tr>
+							{/if}
 						</tbody>
 					</table>
 				{/if}
