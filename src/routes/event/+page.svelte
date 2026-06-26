@@ -484,6 +484,8 @@
 </div>
 
 <style>
+	@import '$lib/styles/zone-badge.css';
+
 	.page {
 		display: flex;
 		flex-direction: column;
@@ -802,8 +804,6 @@
 		color: var(--color-muted);
 		margin-top: 1px;
 	}
-
-	@import '$lib/styles/zone-badge.css';
 
 	.zone-badge {
 		margin-left: 4px;

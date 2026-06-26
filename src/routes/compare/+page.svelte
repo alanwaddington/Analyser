@@ -596,6 +596,8 @@
 </div>
 
 <style>
+	@import '$lib/styles/zone-badge.css';
+
 	.page {
 		display: flex;
 		flex-direction: column;
@@ -985,8 +987,6 @@
 		white-space: nowrap;
 		font-family: inherit;
 	}
-
-	@import '$lib/styles/zone-badge.css';
 
 	.row-alt {
 		background: color-mix(in srgb, var(--color-border) 30%, transparent);
