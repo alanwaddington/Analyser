@@ -63,6 +63,10 @@
 	let zoomRange = $state<{ min: number; max: number } | undefined>(undefined);
 	let _keydownHandler: ((e: KeyboardEvent) => void) | undefined;
 	let _keyupHandler: ((e: KeyboardEvent) => void) | undefined;
+	let _onMouseDown: ((e: MouseEvent) => void) | undefined;
+	let _onMouseUp: ((e: MouseEvent) => void) | undefined;
+	let _mouseDragActive = false;    // true while the primary mouse button is held
+	let _deferCursorReset = false;   // set when Shift is released mid-drag; cleared on mouseup
 
 	// Brush state for drag-to-create-segment (Shift+drag)
 	let pendingSegment = $state<{ startKm: number; endKm: number } | null>(null);
@@ -455,11 +459,37 @@
 		_keyupHandler = (e: KeyboardEvent) => {
 			if (e.key === 'Shift') {
 				shiftDown = false;
+				if (_mouseDragActive) {
+					// Mouse is still held — the user released Shift mid-drag.
+					// Cancelling the brush cursor now would discard the in-progress
+					// selection. Defer the reset until after brushEnd fires
+					// (window mouseup bubbles up after ECharts processes its canvas
+					// mouseup, so _onMouseUp always runs after brushEnd).
+					_deferCursorReset = true;
+				} else {
+					chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
+				}
+			}
+		};
+
+		// Track primary mouse button state so we know whether a brush drag is
+		// in progress when Shift is released.
+		_onMouseDown = (e: MouseEvent) => { if (e.button === 0) _mouseDragActive = true; };
+		_onMouseUp = (e: MouseEvent) => {
+			if (e.button !== 0) return;
+			_mouseDragActive = false;
+			if (_deferCursorReset) {
+				_deferCursorReset = false;
+				// brushEnd has already fired (ECharts' canvas handler runs before
+				// window bubble), so it's safe to reset cursor now.
 				chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
 			}
 		};
+
 		window.addEventListener('keydown', _keydownHandler);
 		window.addEventListener('keyup', _keyupHandler);
+		window.addEventListener('mousedown', _onMouseDown);
+		window.addEventListener('mouseup', _onMouseUp);
 
 		// Brush end → capture selected range and show name prompt
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -503,6 +533,8 @@
 		chart?.dispose();
 		if (_keydownHandler) window.removeEventListener('keydown', _keydownHandler);
 		if (_keyupHandler) window.removeEventListener('keyup', _keyupHandler);
+		if (_onMouseDown) window.removeEventListener('mousedown', _onMouseDown);
+		if (_onMouseUp) window.removeEventListener('mouseup', _onMouseUp);
 	});
 
 	/** Exposed for parent access via bind:this; also used by the inline PNG button. */
