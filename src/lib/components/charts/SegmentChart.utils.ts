@@ -10,6 +10,8 @@ export interface Segment {
 	label: string;
 	startDist: number;
 	endDist: number;
+	custom?: boolean; // true for user-defined custom segments
+	id?: string;      // only set for custom segments (required for CRUD operations)
 }
 
 export function segmentTime(activity: Activity, segment: Segment): number {

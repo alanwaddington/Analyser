@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { getAllLabels, replaceAllLabels, setOnLabelChange } from '$lib/stores/deviceLabels';
+import { getAllSegments, replaceAllSegments, setOnSegmentChange } from '$lib/stores/customSegments';
 import { fetchWithRetry } from '$lib/utils/fetchWithRetry';
 
 // ---------------------------------------------------------------------------
@@ -75,10 +76,11 @@ export async function pushLabels(uuid: string, shortCode: string): Promise<void>
 	updateStatus({ syncing: true });
 	try {
 		const labels = getAllLabels();
+		const segments = getAllSegments();
 		const response = await fetchWithRetry(`/api/labels/${uuid}`, {
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ labels, shortCode }),
+			body: JSON.stringify({ labels, segments, shortCode }),
 		});
 		if (!response.ok) {
 			throw new Error(`Push failed: ${response.status}`);
@@ -113,8 +115,11 @@ export async function pullLabels(uuid: string): Promise<void> {
 		if (!response.ok) {
 			throw new Error(`Pull failed: ${response.status}`);
 		}
-		const data = await response.json() as { labels: Record<string, string> };
+		const data = await response.json() as { labels: Record<string, string>; segments?: Record<string, import('./customSegments').CustomSegment[]> };
 		replaceAllLabels(data.labels);
+		if (data.segments) {
+			replaceAllSegments(data.segments);
+		}
 		const ts = new Date().toISOString();
 		localStorage.setItem(SYNC_TS_KEY, ts);
 		updateStatus({ lastSynced: ts, error: null, syncing: false });
@@ -224,20 +229,23 @@ export async function initSync(): Promise<(() => void) | undefined> {
 		await pullLabels(uuid);
 	}
 
-	// Register the hook so all subsequent label changes trigger an automatic push.
+	// Register hooks so label/segment changes trigger an automatic push.
 	// The captured uuid/shortCode references are refreshed from localStorage each time
 	// so they stay current even after adoptSyncIdentity or resetSyncIdentity.
-	setOnLabelChange(() => {
+	const triggerPush = () => {
 		const currentUuid = localStorage.getItem(SYNC_ID_KEY);
 		const currentCode = localStorage.getItem(SYNC_CODE_KEY);
 		if (currentUuid && currentCode) {
 			// Fire and forget — errors are surfaced in syncStatus
 			pushLabels(currentUuid, currentCode).catch(() => {});
 		}
-	});
+	};
+	setOnLabelChange(triggerPush);
+	setOnSegmentChange(triggerPush);
 
 	return () => {
 		setOnLabelChange(null);
+		setOnSegmentChange(null);
 		_initialised = false;
 	};
 }
