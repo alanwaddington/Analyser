@@ -3,10 +3,12 @@
 	import type { ECharts, EChartsOption } from 'echarts';
 	import { loadECharts, type EChartsModule } from './echarts-loader';
 	import { FILE_COLOURS } from '$lib/types';
+	import type { AthleteProfile } from '$lib/types';
 	import { computeSegmentDeltas } from './SegmentChart.utils.ts';
 	import { isDark } from '$lib/stores/theme';
 	import type { SegmentSeriesInput, Segment } from './SegmentChart.utils.ts';
 	import { downloadPng, localDateString } from '$lib/export/download';
+	import { computeSegmentStats } from '$lib/analytics/segmentStats';
 	import './png-btn.css';
 	import './chart-skeleton.css';
 
@@ -14,10 +16,14 @@
 		seriesInputs,
 		referenceIndex,
 		segments,
+		athleteProfile = {} as AthleteProfile,
+		sport = '',
 	}: {
 		seriesInputs: SegmentSeriesInput[];
 		referenceIndex: number;
 		segments: Segment[];
+		athleteProfile?: AthleteProfile;
+		sport?: string;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -35,6 +41,13 @@
 		}),
 	);
 
+	const segmentStats = $derived(
+		segments.map(seg => refActivity
+			? computeSegmentStats(refActivity, seg, athleteProfile)
+			: null,
+		),
+	);
+
 	let resizeObserver: ResizeObserver | undefined;
 
 	const textColour = () => ($isDark ? '#94a3b8' : '#64748b');
@@ -44,9 +57,25 @@
 	const fasterColour = () => ($isDark ? '#166534' : '#bbf7d0');
 	const slowerColour = () => ($isDark ? '#991b1b' : '#fecaca');
 
+	function fmtPace(minPerKm: number | null): string {
+		if (minPerKm === null) return '—';
+		const totalSec = minPerKm * 60;
+		const m = Math.floor(totalSec / 60);
+		const s = Math.round(totalSec % 60);
+		return `${m}:${String(s).padStart(2, '0')}`;
+	}
+
+	function fmtTime(seconds: number): string {
+		const m = Math.floor(seconds / 60);
+		const s = Math.round(seconds % 60);
+		return m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
+	}
+
 	function buildOption(): EChartsOption {
 		const tc = textColour();
 		const gc = gridColour();
+		const tb = tooltipBg();
+		const tt = tooltipText();
 		const labels = segments.map(s => s.label);
 		const rotate = segments.length > 6 ? 30 : 0;
 
@@ -60,10 +89,14 @@
 					name: s.activity.filename,
 					data: hiddenSeries.has(i)
 						? []
-						: deltas.map(d => ({
+						: deltas.map((d, segIdx) => ({
 								value: d.delta,
 								itemStyle: {
 									color: d.delta >= 0 ? fasterColour() : slowerColour(),
+									// custom segments get a dashed purple border
+									...(segments[segIdx]?.custom
+										? { borderColor: '#8b5cf6', borderWidth: 2, borderType: 'dashed' as const }
+										: {}),
 								},
 							})),
 					itemStyle: { color: FILE_COLOURS[s.colourIndex % FILE_COLOURS.length] },
@@ -96,20 +129,39 @@
 			tooltip: {
 				trigger: 'axis',
 				axisPointer: { type: 'shadow' },
-				backgroundColor: tooltipBg(),
+				backgroundColor: tb,
 				borderColor: gc,
-				textStyle: { color: tooltipText(), fontSize: 12 },
+				textStyle: { color: tt, fontSize: 12 },
 				formatter: (params: unknown) => {
 					const esc = (str: string) =>
 						str.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-					const items = params as { seriesName: string; value: number; name: string }[];
+					const items = params as { seriesName: string; value: number; name: string; dataIndex: number }[];
 					if (items.length === 0) return '';
+					const segIdx = items[0].dataIndex;
 					const segLabel = items[0].name;
-					const lines = items.map(p => {
+					const isCustom = segments[segIdx]?.custom;
+					const stats = segmentStats[segIdx];
+
+					const deltaLines = items.map(p => {
 						const sign = p.value >= 0 ? '+' : '';
 						return `<div>${esc(p.seriesName)}: <b>${sign}${p.value.toFixed(1)}s</b></div>`;
 					});
-					return `<div style="font-size:12px"><div style="margin-bottom:4px">${esc(segLabel)}</div>${lines.join('')}</div>`;
+
+					let statsHtml = '';
+					if (stats) {
+						const parts: string[] = [];
+						if (stats.time > 0) parts.push(`Time: ${fmtTime(stats.time)}`);
+						if (stats.avgPace !== null) parts.push(`Pace: ${fmtPace(stats.avgPace)}/km`);
+						if (stats.avgPower !== null) parts.push(`${stats.powerLabel}: ${Math.round(stats.avgPower)}W avg / ${stats.maxPower}W max`);
+						if (stats.powerPct !== null) parts.push(`${stats.powerPct}% threshold`);
+						if (stats.avgHR !== null) parts.push(`Avg HR: ${Math.round(stats.avgHR)} bpm`);
+						if (parts.length > 0) {
+							statsHtml = `<div style="margin-top:5px;padding-top:5px;border-top:1px solid ${gc};font-size:11px;color:${tc}">${parts.map(p => `<div>${p}</div>`).join('')}</div>`;
+						}
+					}
+
+					const customBadge = isCustom ? `<span style="margin-left:4px;font-size:10px;color:#8b5cf6">✦ custom</span>` : '';
+					return `<div style="font-size:12px"><div style="margin-bottom:4px">${esc(segLabel)}${customBadge}</div>${deltaLines.join('')}${statsHtml}</div>`;
 				},
 			},
 			series,
@@ -162,6 +214,7 @@
 		void seriesInputs;
 		void referenceIndex;
 		void segments;
+		void athleteProfile;
 		chart?.setOption(buildOption(), { notMerge: true });
 	});
 </script>
@@ -210,6 +263,54 @@
 			{/if}
 		{/each}
 	</div>
+
+	{#if refActivity && segments.length > 0}
+		<div class="seg-stats-table-wrap">
+			<table class="seg-stats-table" aria-label="Per-segment reference stats">
+				<thead>
+					<tr>
+						<th class="col-seg">Segment</th>
+						<th class="col-num">Time</th>
+						<th class="col-num">Pace</th>
+						{#if segmentStats.some(s => s?.avgPower != null)}
+							<th class="col-num">Power (avg / max)</th>
+						{/if}
+						{#if segmentStats.some(s => s?.avgHR != null)}
+							<th class="col-num">Avg HR</th>
+						{/if}
+					</tr>
+				</thead>
+				<tbody>
+					{#each segments as seg, i}
+						{@const st = segmentStats[i]}
+						<tr class:seg-custom={seg.custom}>
+							<td class="cell-seg">
+								{seg.label}
+								{#if seg.custom}<span class="custom-badge">✦</span>{/if}
+							</td>
+							<td class="cell-num">{st && st.time > 0 ? fmtTime(st.time) : '—'}</td>
+							<td class="cell-num">{st ? fmtPace(st.avgPace) + (st.avgPace !== null ? '/km' : '') : '—'}</td>
+							{#if segmentStats.some(s => s?.avgPower != null)}
+								<td class="cell-num">
+									{#if st?.avgPower != null}
+										{Math.round(st.avgPower)}W / {st.maxPower}W
+										{#if st.powerPct !== null}<span class="cell-sub">{st.powerPct}%</span>{/if}
+									{:else}
+										—
+									{/if}
+								</td>
+							{/if}
+							{#if segmentStats.some(s => s?.avgHR != null)}
+								<td class="cell-num">
+									{st?.avgHR != null ? Math.round(st.avgHR) + ' bpm' : '—'}
+								</td>
+							{/if}
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -300,5 +401,67 @@
 		max-width: 160px;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	/* Per-segment stats table */
+	.seg-stats-table-wrap {
+		overflow-x: auto;
+		border-top: 1px solid var(--color-border);
+		padding: 0;
+	}
+
+	.seg-stats-table {
+		width: max-content;
+		min-width: 100%;
+		border-collapse: collapse;
+		font-size: 0.75rem;
+	}
+
+	.seg-stats-table th {
+		padding: 5px 10px;
+		text-align: right;
+		font-weight: 600;
+		font-size: 0.68rem;
+		color: var(--color-muted);
+		border-bottom: 1px solid var(--color-border);
+		white-space: nowrap;
+		background: var(--color-card);
+	}
+
+	.seg-stats-table td {
+		padding: 4px 10px;
+		border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+	}
+
+	.col-seg { text-align: left; }
+	.col-num { text-align: right; min-width: 80px; }
+	.cell-seg {
+		text-align: left;
+		color: var(--color-text);
+		white-space: nowrap;
+		font-weight: 500;
+	}
+	.cell-num {
+		text-align: right;
+		color: var(--color-text);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		font-family: ui-monospace, 'Cascadia Code', monospace;
+	}
+	.cell-sub {
+		display: block;
+		font-size: 0.65rem;
+		color: var(--color-muted);
+	}
+
+	.seg-custom .cell-seg {
+		color: #8b5cf6;
+	}
+
+	.custom-badge {
+		font-size: 0.6rem;
+		color: #8b5cf6;
+		margin-left: 3px;
+		vertical-align: middle;
 	}
 </style>

@@ -29,6 +29,8 @@
 		anomalies = undefined,
 		athleteProfile = {} as AthleteProfile,
 		sport = '',
+		customSegmentBands = [],
+		onSegmentCreate = undefined,
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
@@ -47,6 +49,10 @@
 		athleteProfile?: AthleteProfile;
 		/** Sport of the primary activity — used to pick the right HR threshold. */
 		sport?: string;
+		/** Custom segment distance ranges to shade as vertical bands (in metres). */
+		customSegmentBands?: { label: string; startDist: number; endDist: number }[];
+		/** Called when user Shift+drags to create a segment. Receives name, startDist/endDist in metres. */
+		onSegmentCreate?: ((name: string, startDist: number, endDist: number) => void) | undefined;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -55,6 +61,19 @@
 	let ready = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 	let zoomRange = $state<{ min: number; max: number } | undefined>(undefined);
+	let _keydownHandler: ((e: KeyboardEvent) => void) | undefined;
+	let _keyupHandler: ((e: KeyboardEvent) => void) | undefined;
+
+	// Brush state for drag-to-create-segment (Shift+drag)
+	let pendingSegment = $state<{ startKm: number; endKm: number } | null>(null);
+	let pendingName = $state('');
+	let shiftDown = $state(false);
+
+	// Whether brush interaction is available (only in distance mode with a segment callback)
+	const brushActive = $derived(
+		onSegmentCreate != null &&
+		effectiveAxisMode($xAxisMode, forceDistanceAxis) === 'distance',
+	);
 
 	let resizeObserver: ResizeObserver | undefined;
 
@@ -223,6 +242,14 @@
 				},
 			},
 			dataZoom: [{ type: 'inside' }],
+			// Brush is registered but only activated via dispatchAction when Shift is held
+			brush: brushActive ? [{
+				toolbox: [],
+				brushType: 'lineX',
+				brushStyle: { color: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.5)', borderWidth: 1 },
+				throttleType: 'debounce',
+				throttleDelay: 50,
+			}] : undefined,
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			series: (() => {
 				const firstVisibleIdx = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
@@ -262,7 +289,27 @@
 						: null;
 				}
 
-				return ([
+				// Custom segment vertical bands — rendered as a silent helper series with markArea
+			const customBandSeries = customSegmentBands.length > 0 ? [{
+				type: 'line' as const,
+				name: '__custom_bands__',
+				data: [],
+				silent: true,
+				markArea: {
+					silent: true,
+					data: customSegmentBands.map(b => [
+						{
+							xAxis: b.startDist / 1000,
+							itemStyle: { color: 'rgba(139,92,246,0.12)', borderColor: 'rgba(139,92,246,0.4)', borderWidth: 1 },
+							label: { show: true, formatter: b.label, position: 'insideTop' as const, fontSize: 9, color: '#a78bfa' },
+						},
+						{ xAxis: b.endDist / 1000 },
+					]),
+				},
+			}] : [];
+
+			return ([
+					...customBandSeries,
 					...(showAltBackdrop && hasAlt ? [{
 						type: 'line' as const,
 						name: '__alt__',
@@ -390,6 +437,38 @@
 			}
 		});
 
+		// Shift key tracking — activates brush mode when held
+		_keydownHandler = (e: KeyboardEvent) => {
+			if (e.key === 'Shift' && brushActive) {
+				shiftDown = true;
+				chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'lineX' } });
+			}
+		};
+		_keyupHandler = (e: KeyboardEvent) => {
+			if (e.key === 'Shift') {
+				shiftDown = false;
+				chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
+			}
+		};
+		window.addEventListener('keydown', _keydownHandler);
+		window.addEventListener('keyup', _keyupHandler);
+
+		// Brush end → capture selected range and show name prompt
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.on('brushEnd', (params: any) => {
+			if (!brushActive || !shiftDown) return;
+			const areas = params?.areas;
+			if (!areas || areas.length === 0) return;
+			const area = areas[0];
+			const range = area.coordRange as [number, number] | undefined;
+			if (!range || Math.abs(range[1] - range[0]) < 0.001) return; // < 1m — ignore tiny selections
+			const [a, b] = range;
+			pendingSegment = { startKm: Math.min(a, b), endKm: Math.max(a, b) };
+			pendingName = 'Segment';
+			// Clear the brush selection visual
+			chart?.dispatchAction({ type: 'brush', areas: [] });
+		});
+
 		// markPoint click → zoom to ±15s (time) or ±0.05km (distance) around the anomaly
 		chart.on('click', { componentType: 'markPoint' }, (params: unknown) => {
 			const coord = (params as { data?: { coord?: [number, number] } }).data?.coord;
@@ -412,6 +491,8 @@
 	onDestroy(() => {
 		resizeObserver?.disconnect();
 		chart?.dispose();
+		if (_keydownHandler) window.removeEventListener('keydown', _keydownHandler);
+		if (_keyupHandler) window.removeEventListener('keyup', _keyupHandler);
 	});
 
 	/** Exposed for parent access via bind:this; also used by the inline PNG button. */
@@ -440,9 +521,28 @@
 		void referenceIndex;
 		void athleteProfile;
 		void sport;
+		void customSegmentBands;
 		zoomRange = undefined;
 		chart?.setOption(buildOption(), { notMerge: true });
 	});
+
+	function confirmSegment() {
+		if (!pendingSegment || !onSegmentCreate) return;
+		const name = pendingName.trim() || 'Segment';
+		onSegmentCreate(name, pendingSegment.startKm * 1000, pendingSegment.endKm * 1000);
+		pendingSegment = null;
+		pendingName = '';
+	}
+
+	function cancelSegment() {
+		pendingSegment = null;
+		pendingName = '';
+	}
+
+	function onPromptKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') confirmSegment();
+		if (e.key === 'Escape') cancelSegment();
+	}
 
 	// Map → chart sync: drive crosshair programmatically when externalHoverDistance changes.
 	// Uses dispatchAction which propagates to all connected charts via echarts.connect().
@@ -490,10 +590,31 @@
 		</button>
 	</div>
 
+	{#if brushActive}
+		<span class="brush-hint" aria-hidden="true">Hold Shift + drag to add segment</span>
+	{/if}
+
 	{#if !ready}
 		<div class="chart-canvas chart-skeleton" aria-hidden="true"></div>
 	{/if}
 	<div bind:this={container} class="chart-canvas" style:visibility={ready ? 'visible' : 'hidden'}></div>
+
+	{#if pendingSegment}
+		<div class="seg-prompt" role="dialog" aria-label="Name new segment">
+			<span class="seg-prompt-range">{pendingSegment.startKm.toFixed(2)}–{pendingSegment.endKm.toFixed(2)} km</span>
+			<input
+				class="seg-prompt-input"
+				type="text"
+				bind:value={pendingName}
+				placeholder="Segment name"
+				onkeydown={onPromptKeydown}
+				aria-label="Segment name"
+				autofocus
+			/>
+			<button class="seg-prompt-btn seg-prompt-btn--save" onclick={confirmSegment}>Add</button>
+			<button class="seg-prompt-btn seg-prompt-btn--cancel" onclick={cancelSegment}>Cancel</button>
+		</div>
+	{/if}
 
 	<div class="chart-legend" role="group" aria-label="Series visibility toggles">
 		{#each seriesInputs as s, i}
@@ -672,5 +793,87 @@
 	.stat-unit {
 		font-size: 0.625rem;
 		color: var(--color-muted);
+	}
+
+	/* Brush hint */
+	.brush-hint {
+		display: block;
+		padding: 2px 16px;
+		font-size: 0.65rem;
+		color: var(--color-muted);
+		opacity: 0.7;
+		user-select: none;
+	}
+
+	/* Segment name prompt (shown after brush drag) */
+	.seg-prompt {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 16px;
+		border-top: 1px solid var(--color-border);
+		flex-wrap: wrap;
+	}
+
+	.seg-prompt-range {
+		font-size: 0.68rem;
+		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+
+	.seg-prompt-input {
+		flex: 1;
+		min-width: 120px;
+		height: 24px;
+		padding: 0 6px;
+		border: 1px solid var(--color-border);
+		border-radius: 3px;
+		background: var(--color-bg);
+		color: var(--color-text);
+		font-size: 0.75rem;
+		outline: none;
+		transition: border-color 0.1s;
+	}
+
+	.seg-prompt-input:focus {
+		border-color: #8b5cf6;
+	}
+
+	.seg-prompt-btn {
+		flex-shrink: 0;
+		height: 24px;
+		padding: 0 10px;
+		border: 1px solid var(--color-border);
+		border-radius: 3px;
+		background: transparent;
+		cursor: pointer;
+		font-size: 0.72rem;
+		transition: background 0.1s, border-color 0.1s, color 0.1s;
+	}
+
+	.seg-prompt-btn:focus-visible {
+		outline: 2px solid #8b5cf6;
+		outline-offset: 2px;
+	}
+
+	.seg-prompt-btn--save {
+		color: #8b5cf6;
+		border-color: #8b5cf6;
+	}
+
+	.seg-prompt-btn--save:hover {
+		background: rgba(139, 92, 246, 0.12);
+	}
+
+	.seg-prompt-btn--cancel {
+		color: var(--color-muted);
+	}
+
+	.seg-prompt-btn--cancel:hover {
+		background: rgba(239, 68, 68, 0.1);
+		border-color: #ef4444;
+		color: #ef4444;
 	}
 </style>
