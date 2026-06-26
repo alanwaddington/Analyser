@@ -437,11 +437,18 @@
 			}
 		});
 
-		// Shift key tracking — activates brush mode when held
+		// Shift key tracking — activates brush mode when held.
+		// Guard with !e.repeat: key-hold fires keydown continuously; without this,
+		// dispatchAction is called dozens of times per second on all chart instances,
+		// which resets the active brush selection mid-drag and prevents brushEnd from
+		// capturing the range. shiftDown is still updated on repeats (no-op since it's
+		// already true), but the expensive dispatchAction fires only once per key press.
 		_keydownHandler = (e: KeyboardEvent) => {
 			if (e.key === 'Shift' && brushActive) {
 				shiftDown = true;
-				chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'lineX' } });
+				if (!e.repeat) {
+					chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'lineX' } });
+				}
 			}
 		};
 		_keyupHandler = (e: KeyboardEvent) => {
