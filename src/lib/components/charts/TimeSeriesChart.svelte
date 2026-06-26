@@ -118,6 +118,16 @@
 		const altFill = $isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.2)';
 		const altLine = $isDark ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.35)';
 
+		// Whether this channel has zone shading — used to add y-axis headroom so the
+		// top zone band is visible even when the data barely enters it.
+		const hasZoneBands =
+			(channel === 'heartRate' && (
+				athleteProfile?.maxHrRunning != null ||
+				athleteProfile?.maxHrCycling != null ||
+				athleteProfile?.lthr != null
+			)) ||
+			(channel === 'power' && (athleteProfile?.cp != null || athleteProfile?.ftp != null));
+
 		return {
 			grid: { top: 20, right: 16, bottom: 30, left: 55 },
 			xAxis: {
@@ -134,6 +144,7 @@
 					inverse: channel === 'pace',
 					name: meta.unit,
 					nameTextStyle: { color: tc },
+					...(hasZoneBands ? { max: (v: { min: number; max: number }) => Math.ceil(v.max + (v.max - v.min) * 0.12) } : {}),
 					axisLabel: {
 						color: tc,
 						fontSize: 11,
