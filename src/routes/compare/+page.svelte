@@ -22,9 +22,10 @@
 	import CollapsiblePanel from '$lib/components/ui/CollapsiblePanel.svelte';
 	import { buildAnomalyCounts } from '$lib/components/ui/DeviceToggleBar.utils';
 	import { groupAnomalyEvents } from '$lib/analytics/anomalies';
-	import { ftpPct, cpPct, wPerKg, hrZone } from '$lib/analytics/zones';
 	import { athleteProfile } from '$lib/stores/athleteProfile';
 	import type { AthleteProfile } from '$lib/types';
+	import { buildCellContext } from '$lib/utils/summaryContext';
+	import type { CellContext } from '$lib/utils/summaryContext';
 	import { exportActivities } from '$lib/export/exportActivities';
 	import type { ExportFormat } from '$lib/export/columns';
 	import { untrack } from 'svelte';
@@ -197,28 +198,6 @@
 	let locationWarningDismissed = $state(false);
 
 	const indoor = createIndoorWarnings(() => $activities);
-
-	// ── Summary table contextual stats ───────────────────────────────────────
-
-	type CellContext = { pctLabel?: string; wkg?: string; zone?: number } | null;
-
-	function buildCellContext(ch: ChannelKey, avg: number, sport: string | undefined, profile: AthleteProfile): CellContext {
-		if (ch === 'power') {
-			const isCycling = sport !== 'running';
-			const pctLabel = isCycling && profile.ftp
-				? `${ftpPct(avg, profile.ftp)}% FTP`
-				: !isCycling && profile.cp
-					? `${cpPct(avg, profile.cp)}% CP`
-					: undefined;
-			const wkg = profile.weight ? wPerKg(avg, profile.weight).toFixed(1) : undefined;
-			return (pctLabel || wkg) ? { pctLabel, wkg } : null;
-		}
-		if (ch === 'heartRate') {
-			const zone = hrZone(avg, profile, sport ?? 'cycling');
-			return zone != null ? { zone } : null;
-		}
-		return null;
-	}
 
 	// Reset location warning whenever the file set changes
 	$effect(() => { void $activities; locationWarningDismissed = false; });

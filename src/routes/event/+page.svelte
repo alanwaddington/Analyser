@@ -27,6 +27,8 @@
 	import { formatPace } from '$lib/utils/formatting';
 	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
+	import { athleteProfile } from '$lib/stores/athleteProfile';
+	import { buildCellContext } from '$lib/utils/summaryContext';
 	import '../map-panel.css';
 	import '../export-btn.css';
 	import '../indoor-warning.css';
@@ -424,15 +426,29 @@
 							{@const hrStats = summarise(extractChannel(activity.records, 'heartRate'))}
 							{@const powerStats = summarise(extractChannel(activity.records, 'power'))}
 							{@const paceSecPerKm = activity.totalDistance > 0 ? activity.totalElapsedTime / activity.totalDistance * 1000 : null}
+							{@const powerCtx = powerStats ? buildCellContext('power', powerStats.avg, activity.sport, $athleteProfile) : null}
+							{@const hrCtx = hrStats ? buildCellContext('heartRate', hrStats.avg, activity.sport, $athleteProfile) : null}
 							<tr class:row-alt={rowIdx % 2 === 1} class:row-reference={isReference}>
 								<td class="cell-activity">{activity.filename}</td>
 								<td class="cell-stat">{formatDate(activity.startTime)}</td>
 								<td class="cell-stat">{formatDuration(activity.totalElapsedTime)}</td>
 								<td class="cell-stat">{(activity.totalDistance / 1000).toFixed(2)} km</td>
-								<td class="cell-stat">{hrStats ? hrStats.avg.toFixed(0) + ' bpm' : '—'}</td>
+								<td class="cell-stat">
+									{hrStats ? hrStats.avg.toFixed(0) + ' bpm' : '—'}
+									{#if hrCtx?.zone}<span class="zone-badge zone-badge--{hrCtx.zone}">Z{hrCtx.zone}</span>{/if}
+								</td>
 								<td class="cell-stat">{hrStats ? hrStats.max.toFixed(0) + ' bpm' : '—'}</td>
 								<td class="cell-stat">{paceSecPerKm ? formatPace(paceSecPerKm / 60) + ' /km' : '—'}</td>
-								<td class="cell-stat">{powerStats ? powerStats.avg.toFixed(0) + ' W' : '—'}</td>
+								<td class="cell-stat">
+									{powerStats ? powerStats.avg.toFixed(0) + ' W' : '—'}
+									{#if powerCtx}
+										<span class="cell-context">
+											{#if powerCtx.pctLabel}{powerCtx.pctLabel}{/if}
+											{#if powerCtx.pctLabel && powerCtx.wkg}&ensp;·&ensp;{/if}
+											{#if powerCtx.wkg}{powerCtx.wkg} w/kg{/if}
+										</span>
+									{/if}
+								</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -754,4 +770,32 @@
 		outline: 2px solid #22c55e;
 		outline-offset: 1px;
 	}
+
+	.cell-context {
+		display: block;
+		font-size: 0.7rem;
+		color: var(--color-muted);
+		margin-top: 1px;
+	}
+
+	.zone-badge {
+		display: inline-block;
+		font-size: 0.65rem;
+		font-weight: 600;
+		padding: 1px 4px;
+		border-radius: 3px;
+		margin-left: 4px;
+		vertical-align: middle;
+	}
+
+	.zone-badge--1 { background: rgba(100,116,139,0.2);  color: #94a3b8; }
+	.zone-badge--2 { background: rgba(96,165,250,0.15);  color: #60a5fa; }
+	.zone-badge--3 { background: rgba(74,222,128,0.15);  color: #4ade80; }
+	.zone-badge--4 { background: rgba(251,191,36,0.18);  color: #fbbf24; }
+	.zone-badge--5 { background: rgba(248,113,113,0.18); color: #f87171; }
+
+	:global([data-theme="light"]) .zone-badge--2 { color: #2563eb; }
+	:global([data-theme="light"]) .zone-badge--3 { color: #16a34a; }
+	:global([data-theme="light"]) .zone-badge--4 { color: #d97706; }
+	:global([data-theme="light"]) .zone-badge--5 { color: #dc2626; }
 </style>
