@@ -194,30 +194,31 @@
 					5: 'rgba(248,113,113,0.11)',
 				};
 
-				// Determine zone bands for this channel/sport combination
-				const activeSport = sport ?? 'cycling';
-				let zoneBands: { min: number; max: number; zone: number }[] | null = null;
-				if (channel === 'heartRate') {
-					const maxHR = activeSport === 'cycling'
-						? (athleteProfile?.maxHrCycling ?? athleteProfile?.maxHrRunning)
-						: (athleteProfile?.maxHrRunning ?? athleteProfile?.maxHrCycling);
-					if (maxHR != null) {
-						zoneBands = hrZoneBoundaries(maxHR);
-					} else if (athleteProfile?.lthr != null) {
-						zoneBands = hrZoneBoundaries(lthrToEstimatedMaxHR(athleteProfile.lthr));
+				// Compute zone bands for a given series' sport — called per-series so
+				// each activity uses its own sport (running → CP, cycling → FTP).
+				function getMarkAreaData(seriesSport: string) {
+					let zoneBands: { min: number; max: number; zone: number }[] | null = null;
+					if (channel === 'heartRate') {
+						const maxHR = seriesSport === 'cycling'
+							? (athleteProfile?.maxHrCycling ?? athleteProfile?.maxHrRunning)
+							: (athleteProfile?.maxHrRunning ?? athleteProfile?.maxHrCycling);
+						if (maxHR != null) {
+							zoneBands = hrZoneBoundaries(maxHR);
+						} else if (athleteProfile?.lthr != null) {
+							zoneBands = hrZoneBoundaries(lthrToEstimatedMaxHR(athleteProfile.lthr));
+						}
+					} else if (channel === 'power' && seriesSport === 'running' && athleteProfile?.cp != null) {
+						zoneBands = cpZoneBoundaries(athleteProfile.cp);
+					} else if (channel === 'power' && seriesSport !== 'running' && athleteProfile?.ftp != null) {
+						zoneBands = ftpZoneBoundaries(athleteProfile.ftp);
 					}
-				} else if (channel === 'power' && activeSport === 'running' && athleteProfile?.cp != null) {
-					zoneBands = cpZoneBoundaries(athleteProfile.cp);
-				} else if (channel === 'power' && activeSport !== 'running' && athleteProfile?.ftp != null) {
-					zoneBands = ftpZoneBoundaries(athleteProfile.ftp);
+					return zoneBands
+						? zoneBands.map(b => [
+							{ yAxis: b.min, itemStyle: { color: ZONE_COLOURS[b.zone] } },
+							{ yAxis: b.max === Infinity ? Infinity : b.max },
+						  ])
+						: null;
 				}
-
-				const markAreaData = zoneBands
-					? zoneBands.map(b => [
-						{ yAxis: b.min, itemStyle: { color: ZONE_COLOURS[b.zone] } },
-						{ yAxis: b.max === Infinity ? Infinity : b.max },
-					  ])
-					: null;
 
 				return ([
 					...(showAltBackdrop && hasAlt ? [{
@@ -240,6 +241,7 @@
 						if (seriesData.length > DOWNSAMPLE_THRESHOLD) {
 							console.warn(`[TimeSeriesChart] ${channel}: ${seriesData.length} points — ECharts LTTB sampling active`);
 						}
+						const markAreaData = getMarkAreaData(s.activity.sport ?? sport ?? 'cycling');
 						return {
 							type: 'line' as const,
 							name: s.label ?? s.activity.filename,
@@ -282,7 +284,7 @@
 									}),
 								},
 							} : {}),
-							...(i === firstVisibleIdx && markAreaData ? {
+							...(markAreaData ? {
 								markArea: {
 									silent: true,
 									data: markAreaData,

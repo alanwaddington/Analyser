@@ -24,7 +24,7 @@ export function interpolateToDistanceAxis(
 	const axis = Array.from({ length: steps + 1 }, (_, i) => i * stepMetres);
 
 	const channelKeys: ChannelKey[] = [
-		'speed', 'pace', 'heartRate', 'power', 'powerLeft', 'powerRight',
+		'speed', 'pace', 'heartRate', 'power', 'formPower', 'powerLeft', 'powerRight',
 		'cadence', 'altitude', 'temperature', 'coreTemperature',
 		'skinTemperature', 'verticalOscillation', 'groundContactTime', 'strideLength'
 	];
