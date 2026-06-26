@@ -997,6 +997,8 @@ Key responsive components:
 | `CollapsiblePanel.svelte` | Wraps toolbar controls; `display: contents` on desktop, collapsible on mobile |
 | `+layout.svelte` (phone only) | Renders bottom navigation bar at ≤480px |
 
+**Sidebar scroll layout:** Inside `.sidebar`, the logo and mode-nav buttons are pinned at the top (outside any scroll container). A `.sidebar-scroll` wrapper (`flex: 1; overflow-y: auto; min-height: 0`) wraps the file-section and footer, making the sidebar scrollable when expanded panels (Athlete Profile, Sync) push content below the viewport edge. The file-section retains its own independent `overflow-y: auto` for long file lists. A thin 6px scrollbar is applied via `scrollbar-width: thin` (Firefox) and `::-webkit-scrollbar` (Chrome/Safari/Edge) using `--color-border`.
+
 ---
 
 ## 5. FIT Parsing
