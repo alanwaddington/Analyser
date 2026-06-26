@@ -172,7 +172,11 @@
 		// zero-size container produces "Initialize failed: invalid dom."
 		// The ResizeObserver fires as soon as the tab becomes visible and
 		// provides the first non-zero layout, at which point we init.
+		// Guard against unmount during the async Leaflet import
+		if (!container) return;
+
 		resizeObserver = new ResizeObserver(() => {
+			if (!container) return;
 			const r = container.getBoundingClientRect();
 			if (!mapInitialised && r.width > 0 && r.height > 0) {
 				initLeafletMap();

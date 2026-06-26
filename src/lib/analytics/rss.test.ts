@@ -35,6 +35,22 @@ describe('computeRSS', () => {
 		expect(computeRSS(3600, 0, 250)).toBe(0);
 	});
 
+	it('computeRSS_zeroCp_returnsZero', () => {
+		expect(computeRSS(3600, 250, 0)).toBe(0);
+	});
+
+	it('computeRSS_negativeCp_returnsZero', () => {
+		expect(computeRSS(3600, 250, -1)).toBe(0);
+	});
+
+	it('computeRSS_negativeDuration_returnsZero', () => {
+		expect(computeRSS(-100, 250, 250)).toBe(0);
+	});
+
+	it('computeRSS_negativePower_returnsZero', () => {
+		expect(computeRSS(3600, -10, 250)).toBe(0);
+	});
+
 	it('computeRSS_proportionalToDuration', () => {
 		const rss1h = computeRSS(3600, 220, 250);
 		const rss2h = computeRSS(7200, 220, 250);

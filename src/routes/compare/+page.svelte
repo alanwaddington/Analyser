@@ -986,26 +986,7 @@
 		font-family: inherit;
 	}
 
-	.zone-badge {
-		display: inline-block;
-		padding: 1px 5px;
-		border-radius: 3px;
-		font-size: 0.65rem;
-		font-weight: 600;
-		line-height: 1.4;
-		font-family: inherit;
-	}
-
-	.zone-badge--1 { background: rgba(100,116,139,0.2);  color: #94a3b8; }
-	.zone-badge--2 { background: rgba(96,165,250,0.15);  color: #60a5fa; }
-	.zone-badge--3 { background: rgba(74,222,128,0.15);  color: #4ade80; }
-	.zone-badge--4 { background: rgba(251,191,36,0.18);  color: #fbbf24; }
-	.zone-badge--5 { background: rgba(248,113,113,0.18); color: #f87171; }
-
-	:global([data-theme="light"]) .zone-badge--2 { color: #2563eb; }
-	:global([data-theme="light"]) .zone-badge--3 { color: #16a34a; }
-	:global([data-theme="light"]) .zone-badge--4 { color: #d97706; }
-	:global([data-theme="light"]) .zone-badge--5 { color: #dc2626; }
+	@import '$lib/styles/zone-badge.css';
 
 	.row-alt {
 		background: color-mix(in srgb, var(--color-border) 30%, transparent);
