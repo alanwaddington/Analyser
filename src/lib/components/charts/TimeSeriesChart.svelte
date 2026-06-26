@@ -4,7 +4,7 @@
 	import { loadECharts, type EChartsModule } from './echarts-loader';
 	import type { Activity, ChannelKey, Anomaly, AthleteProfile } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
-	import { hrZoneBoundaries, cpZoneBoundaries, lthrToEstimatedMaxHR } from '$lib/analytics/zones';
+	import { hrZoneBoundaries, cpZoneBoundaries, ftpZoneBoundaries, lthrToEstimatedMaxHR } from '$lib/analytics/zones';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
@@ -208,6 +208,8 @@
 					}
 				} else if (channel === 'power' && activeSport === 'running' && athleteProfile?.cp != null) {
 					zoneBands = cpZoneBoundaries(athleteProfile.cp);
+				} else if (channel === 'power' && activeSport !== 'running' && athleteProfile?.ftp != null) {
+					zoneBands = ftpZoneBoundaries(athleteProfile.ftp);
 				}
 
 				const markAreaData = zoneBands

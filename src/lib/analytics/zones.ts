@@ -98,3 +98,26 @@ export function cpZoneBoundaries(cp: number): ZoneBand[] {
 		{ min: cp * 1.20,  max: Infinity,  zone: 5 },
 	];
 }
+
+// FTP zone — Coggan 5-zone cycling power model
+// Z1 (Active Recovery) < 55%, Z2 (Endurance) 55–75%, Z3 (Tempo) 75–90%,
+// Z4 (Threshold) 90–105%, Z5 (VO2Max) ≥ 105%
+export function ftpZone(watts: number, ftp: number): CpZone {
+	const pct = watts / ftp;
+	if (pct < 0.55) return 1;
+	if (pct < 0.75) return 2;
+	if (pct < 0.90) return 3;
+	if (pct < 1.05) return 4;
+	return 5;
+}
+
+// FTP zone boundary array for markArea construction (Coggan model)
+export function ftpZoneBoundaries(ftp: number): ZoneBand[] {
+	return [
+		{ min: 0,           max: ftp * 0.55, zone: 1 },
+		{ min: ftp * 0.55,  max: ftp * 0.75, zone: 2 },
+		{ min: ftp * 0.75,  max: ftp * 0.90, zone: 3 },
+		{ min: ftp * 0.90,  max: ftp * 1.05, zone: 4 },
+		{ min: ftp * 1.05,  max: Infinity,   zone: 5 },
+	];
+}

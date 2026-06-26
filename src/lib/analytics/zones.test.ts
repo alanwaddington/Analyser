@@ -5,11 +5,13 @@ import {
 	hrZone,
 	lthrToEstimatedMaxHR,
 	cpZone,
+	ftpZone,
 	ftpPct,
 	cpPct,
 	wPerKg,
 	hrZoneBoundaries,
 	cpZoneBoundaries,
+	ftpZoneBoundaries,
 } from './zones.ts';
 import type { AthleteProfile } from '$lib/types';
 
@@ -291,5 +293,80 @@ describe('cpZoneBoundaries', () => {
 	it('cpZoneBoundaries_lastZoneEndsAtInfinity', () => {
 		const bands = cpZoneBoundaries(300);
 		expect(bands[4].max).toBe(Infinity);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// ftpZone — Coggan 5-zone model
+// ---------------------------------------------------------------------------
+
+describe('ftpZone', () => {
+	it('ftpZone_below55pct_returnsZone1', () => {
+		// Active Recovery: < 55% FTP
+		expect(ftpZone(130, 250)).toBe(1); // 52%
+	});
+
+	it('ftpZone_exactly55pct_returnsZone2', () => {
+		// Endurance starts at 55%
+		expect(ftpZone(138, 250)).toBe(2); // 55.2%
+	});
+
+	it('ftpZone_75pctBoundary_returnsZone3', () => {
+		// Tempo starts at 75%
+		expect(ftpZone(188, 250)).toBe(3); // 75.2%
+	});
+
+	it('ftpZone_90pctBoundary_returnsZone4', () => {
+		// Threshold starts at 90%
+		expect(ftpZone(225, 250)).toBe(4); // 90%
+	});
+
+	it('ftpZone_above105pct_returnsZone5', () => {
+		// VO2Max: ≥ 105% FTP
+		expect(ftpZone(263, 250)).toBe(5); // 105.2%
+		expect(ftpZone(300, 250)).toBe(5); // 120%
+	});
+
+	it('ftpZone_atExactlyFtp_returnsZone4', () => {
+		// 100% FTP is within zone 4 (90–105%)
+		expect(ftpZone(250, 250)).toBe(4);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// ftpZoneBoundaries
+// ---------------------------------------------------------------------------
+
+describe('ftpZoneBoundaries', () => {
+	it('ftpZoneBoundaries_250ftp_returns5Zones', () => {
+		const bands = ftpZoneBoundaries(250);
+		expect(bands).toHaveLength(5);
+	});
+
+	it('ftpZoneBoundaries_zonesAreContiguous', () => {
+		const bands = ftpZoneBoundaries(250);
+		for (let i = 1; i < bands.length; i++) {
+			expect(bands[i].min).toBe(bands[i - 1].max);
+		}
+	});
+
+	it('ftpZoneBoundaries_firstZoneStartsAtZero', () => {
+		const bands = ftpZoneBoundaries(250);
+		expect(bands[0].min).toBe(0);
+	});
+
+	it('ftpZoneBoundaries_lastZoneEndsAtInfinity', () => {
+		const bands = ftpZoneBoundaries(250);
+		expect(bands[4].max).toBe(Infinity);
+	});
+
+	it('ftpZoneBoundaries_zoneNumbersAscend', () => {
+		const bands = ftpZoneBoundaries(250);
+		bands.forEach((b, i) => expect(b.zone).toBe(i + 1));
+	});
+
+	it('ftpZoneBoundaries_zone2StartsAt55pctFtp', () => {
+		const bands = ftpZoneBoundaries(250);
+		expect(bands[1].min).toBeCloseTo(250 * 0.55, 5);
 	});
 });
