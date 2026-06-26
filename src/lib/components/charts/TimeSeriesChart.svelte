@@ -68,6 +68,7 @@
 	let pendingSegment = $state<{ startKm: number; endKm: number } | null>(null);
 	let pendingName = $state('');
 	let shiftDown = $state(false);
+	let promptInputEl: HTMLInputElement | undefined = $state();
 
 	// Whether brush interaction is available (only in distance mode with a segment callback)
 	const brushActive = $derived(
@@ -463,7 +464,9 @@
 		// Brush end → capture selected range and show name prompt
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		chart.on('brushEnd', (params: any) => {
-			if (!brushActive || !shiftDown) return;
+			// Don't check shiftDown here — the browser may deliver keyup before mouseup,
+			// so shiftDown can be false even when the drag was initiated with Shift held.
+			if (!brushActive) return;
 			const areas = params?.areas;
 			if (!areas || areas.length === 0) return;
 			const area = areas[0];
@@ -572,6 +575,10 @@
 		const pixelY = top + (containerHeight - top - bottom) / 2;
 		chart.dispatchAction({ type: 'showTip', x: pixelX, y: pixelY });
 	});
+
+	$effect(() => {
+		if (pendingSegment) promptInputEl?.focus();
+	});
 </script>
 
 <div class="chart-card">
@@ -612,11 +619,11 @@
 			<input
 				class="seg-prompt-input"
 				type="text"
+				bind:this={promptInputEl}
 				bind:value={pendingName}
 				placeholder="Segment name"
 				onkeydown={onPromptKeydown}
 				aria-label="Segment name"
-				autofocus
 			/>
 			<button class="seg-prompt-btn seg-prompt-btn--save" onclick={confirmSegment}>Add</button>
 			<button class="seg-prompt-btn seg-prompt-btn--cancel" onclick={cancelSegment}>Cancel</button>

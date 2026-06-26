@@ -332,6 +332,7 @@
 					<div class="seg-manager-wrap">
 						<SegmentManager
 							courseKey={currentCourseKey}
+							revision={segmentsRevision}
 							onSegmentsChanged={refreshCustomSegments}
 						/>
 					</div>

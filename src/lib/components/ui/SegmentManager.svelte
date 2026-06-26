@@ -4,17 +4,22 @@
 
 	let {
 		courseKey,
+		revision = 0,
 		onSegmentsChanged = undefined,
 	}: {
 		courseKey: string;
+		revision?: number;
 		onSegmentsChanged?: () => void;
 	} = $props();
 
-	// Reactive segment list — re-read when courseKey changes
+	// Reactive segment list — re-read when courseKey or revision changes.
+	// revision is incremented by the parent when a segment is added externally
+	// (e.g. via the Shift+drag brush flow) so the list stays in sync.
 	let segments = $state<CustomSegment[]>([]);
 
 	$effect(() => {
 		void courseKey;
+		void revision;
 		segments = getSegments(courseKey);
 	});
 
