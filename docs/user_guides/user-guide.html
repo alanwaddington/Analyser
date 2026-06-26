@@ -106,7 +106,7 @@
 <body>
 <h1 id="analyser--user-guide">Analyser — User Guide</h1>
 <blockquote>
-<p><strong>Version:</strong> 2.0 · <strong>Last updated:</strong> June 2026</p>
+<p><strong>Version:</strong> 2.1 · <strong>Last updated:</strong> June 2026</p>
 </blockquote>
 <p>Analyser is a browser-based tool for inspecting and comparing <code>.fit</code> activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.</p>
 <hr>
@@ -308,8 +308,9 @@
 <ul>
 <li><strong>Heart Rate</strong> — five colour bands (Z1–Z5) are drawn based on your sport-specific maximum heart rate (or LTHR when maxHR is absent). The bands update automatically if you change the profile.</li>
 <li><strong>Power (running)</strong> — five CP zone bands are drawn when you have set a Critical Power value and the activity is a running file with Stryd power data.</li>
+<li><strong>Power (cycling)</strong> — five FTP zone bands (Coggan model) are drawn when you have set an FTP value and the activity is a cycling file.</li>
 </ul>
-<p>Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.</p>
+<p>Zone bands are drawn per-series — when multiple activities are loaded each series uses its own sport&#39;s zone model. Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.</p>
 <p><strong>Smoothing:</strong></p>
 <p>A smoothing control lets you apply a rolling average to reduce sensor noise. Increase the window (in seconds) to smooth out spikes; set it to 1 s for raw data. Smoothing applies to all channels simultaneously.</p>
 <hr>
@@ -371,7 +372,27 @@
 <td>HR zone (Z1–Z5) of the average HR using the sport-appropriate threshold</td>
 </tr>
 </tbody></table>
-<p>These columns are absent when the relevant profile fields are not set, so the table stays clean for users who have not configured a profile.</p>
+<p><strong>Additional rows for Stryd activities</strong> — when Stryd power data is present, the Summary tab shows two extra rows:</p>
+<table>
+<thead>
+<tr>
+<th>Row</th>
+<th>When shown</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Form Power ratio</strong></td>
+<td>Stryd file loaded</td>
+<td>Form Power as a percentage of total power — lower is more efficient</td>
+</tr>
+<tr>
+<td><strong>Running Stress Score (RSS)</strong></td>
+<td>Stryd file + CP set</td>
+<td>Session load score analogous to TSS; measures training stress relative to your Critical Power</td>
+</tr>
+</tbody></table>
+<p>These columns and rows are absent when the relevant profile fields are not set, so the table stays clean for users who have not configured a profile.</p>
 <p>Toggling devices in the Device Toggle Bar updates the Summary table immediately.</p>
 <hr>
 <h3 id="34-meanmax-tab">3.4 Mean/Max Tab</h3>
@@ -801,12 +822,24 @@
 <td>Z1–Z5 CP zone shading bands (Stryd power only)</td>
 </tr>
 <tr>
+<td><strong>Charts tab — Power chart (cycling)</strong></td>
+<td>Z1–Z5 FTP zone shading bands (Coggan model)</td>
+</tr>
+<tr>
 <td><strong>Summary tab — Power rows</strong></td>
 <td>% FTP (cycling) or % CP (running) column; w/kg column</td>
 </tr>
 <tr>
 <td><strong>Summary tab — Heart Rate row</strong></td>
 <td>Zone badge (Z1–Z5)</td>
+</tr>
+<tr>
+<td><strong>Summary tab — Form Power ratio</strong></td>
+<td>Stryd activities: Form Power as % of total power</td>
+</tr>
+<tr>
+<td><strong>Summary tab — Running Stress Score</strong></td>
+<td>Stryd activities + CP set: session RSS score</td>
 </tr>
 <tr>
 <td><strong>Mean/Max tab</strong></td>

@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 2.0 · **Last updated:** June 2026
+> **Version:** 2.1 · **Last updated:** June 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -191,8 +191,9 @@ When you have configured an [Athlete Profile](#8-athlete-profile), the Charts ta
 
 - **Heart Rate** — five colour bands (Z1–Z5) are drawn based on your sport-specific maximum heart rate (or LTHR when maxHR is absent). The bands update automatically if you change the profile.
 - **Power (running)** — five CP zone bands are drawn when you have set a Critical Power value and the activity is a running file with Stryd power data.
+- **Power (cycling)** — five FTP zone bands (Coggan model) are drawn when you have set an FTP value and the activity is a cycling file.
 
-Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.
+Zone bands are drawn per-series — when multiple activities are loaded each series uses its own sport's zone model. Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.
 
 **Smoothing:**
 
@@ -224,7 +225,14 @@ For each channel, the table shows:
 | **w/kg** | Any power + weight set | Average power divided by body weight |
 | **Zone** | Heart Rate + maxHR or LTHR set | HR zone (Z1–Z5) of the average HR using the sport-appropriate threshold |
 
-These columns are absent when the relevant profile fields are not set, so the table stays clean for users who have not configured a profile.
+**Additional rows for Stryd activities** — when Stryd power data is present, the Summary tab shows two extra rows:
+
+| Row | When shown | Meaning |
+|-----|-----------|---------|
+| **Form Power ratio** | Stryd file loaded | Form Power as a percentage of total power — lower is more efficient |
+| **Running Stress Score (RSS)** | Stryd file + CP set | Session load score analogous to TSS; measures training stress relative to your Critical Power |
+
+These columns and rows are absent when the relevant profile fields are not set, so the table stays clean for users who have not configured a profile.
 
 Toggling devices in the Device Toggle Bar updates the Summary table immediately.
 
@@ -577,8 +585,11 @@ Your settings are saved automatically when you leave each field (press **Enter**
 |-------|-------------|
 | **Charts tab — Heart Rate chart** | Z1–Z5 background shading bands based on sport-appropriate maxHR (or LTHR estimate) |
 | **Charts tab — Power chart (running)** | Z1–Z5 CP zone shading bands (Stryd power only) |
+| **Charts tab — Power chart (cycling)** | Z1–Z5 FTP zone shading bands (Coggan model) |
 | **Summary tab — Power rows** | % FTP (cycling) or % CP (running) column; w/kg column |
 | **Summary tab — Heart Rate row** | Zone badge (Z1–Z5) |
+| **Summary tab — Form Power ratio** | Stryd activities: Form Power as % of total power |
+| **Summary tab — Running Stress Score** | Stryd activities + CP set: session RSS score |
 | **Mean/Max tab** | FTP or Critical Power dashed reference line; w/kg secondary Y axis |
 
 All overlays and columns are silently absent when the relevant profile field is not configured. Loading a file with no matching power or HR data is unaffected.
