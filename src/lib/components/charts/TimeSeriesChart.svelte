@@ -1,3 +1,22 @@
+<script module lang="ts">
+	// ── Truly module-level state (shared across ALL instances) ────────────
+	// In Svelte 5, <script module> is the only way to share state across
+	// component instances. Regular <script> code runs per-instance.
+
+	// Primary-mouse-button tracking: all instances share one flag so every
+	// keyup handler sees the same drag state. Prevents non-dragging charts
+	// from dispatching takeGlobalCursor(false) and cancelling an active drag.
+	export let _modulePrimaryDown = false;
+	export let _moduleMouseRefCount = 0;
+	export function _onGlobalMouseDown(e: MouseEvent) { if (e.button === 0) _modulePrimaryDown = true; }
+	export function _onGlobalMouseUp(e: MouseEvent)   { if (e.button === 0) _modulePrimaryDown = false; }
+
+	// brushEnd deduplication: each connected chart fires its own debounced
+	// brushEnd independently. Track the last time each groupId processed one;
+	// any event within 300ms in the same group is treated as a duplicate.
+	export const _brushGroupHandledMs: Record<string, number> = {};
+</script>
+
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { ECharts, EChartsOption } from 'echarts';
@@ -12,6 +31,7 @@
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
 	import { downloadPng, localDateString } from '$lib/export/download';
+	import { addToast } from '$lib/stores/toast';
 	import './png-btn.css';
 	import './chart-skeleton.css';
 
@@ -29,6 +49,9 @@
 		anomalies = undefined,
 		athleteProfile = {} as AthleteProfile,
 		sport = '',
+		customSegmentBands = [],
+		onSegmentCreate = undefined,
+		onSegmentResize = undefined,
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
@@ -47,6 +70,12 @@
 		athleteProfile?: AthleteProfile;
 		/** Sport of the primary activity — used to pick the right HR threshold. */
 		sport?: string;
+		/** Custom segment distance ranges to shade as vertical bands (in metres). id is required for resize handles. */
+		customSegmentBands?: { label: string; startDist: number; endDist: number; id?: string }[];
+		/** Called when user Shift+drags to create a segment. Receives name, startDist/endDist in metres. */
+		onSegmentCreate?: ((name: string, startDist: number, endDist: number) => void) | undefined;
+		/** Called when user drags a segment boundary handle to resize an existing segment. */
+		onSegmentResize?: ((id: string, newStartDist: number, newEndDist: number) => void) | undefined;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -55,6 +84,41 @@
 	let ready = $state(false);
 	let hiddenSeries = $state(new Set<number>());
 	let zoomRange = $state<{ min: number; max: number } | undefined>(undefined);
+	let _keydownHandler: ((e: KeyboardEvent) => void) | undefined;
+	let _keyupHandler: ((e: KeyboardEvent) => void) | undefined;
+
+	// Brush state for drag-to-create-segment (Shift+drag)
+	let pendingSegment = $state<{ startKm: number; endKm: number } | null>(null);
+	let pendingName = $state('');
+	let shiftDown = $state(false);
+	let promptInputEl: HTMLInputElement | undefined = $state();
+
+	// Whether brush interaction is available (only in distance mode with a segment callback)
+	const brushActive = $derived(
+		onSegmentCreate != null &&
+		effectiveAxisMode($xAxisMode, forceDistanceAxis) === 'distance',
+	);
+
+	// Resize handle state for dragging existing segment boundaries
+	// Uses plain let (not $state) — values are read synchronously in event handlers
+	// and buildOption(); the $effect is bypassed by calling chart.setOption() directly.
+	let resizeDrag: {
+		segId: string;
+		segIndex: number;
+		side: 'start' | 'end';
+		oppositeKm: number; // the fixed boundary (km)
+	} | null = null;
+	let hoverBoundary: { segIndex: number; side: 'start' | 'end' } | null = null;
+	let resizePreviewKm: number | null = null;
+	let _resizeMoveHandler: ((e: MouseEvent) => void) | undefined;
+	let _resizeUpHandler: ((e: MouseEvent) => void) | undefined;
+
+	// Whether resize handles are available: distance mode, resize callback set, bands with ids exist
+	const resizeActive = $derived(
+		onSegmentResize != null &&
+		effectiveAxisMode($xAxisMode, forceDistanceAxis) === 'distance' &&
+		customSegmentBands.some(b => b.id != null),
+	);
 
 	let resizeObserver: ResizeObserver | undefined;
 
@@ -223,6 +287,17 @@
 				},
 			},
 			dataZoom: [{ type: 'inside' }],
+			// Brush is registered but only activated via dispatchAction when Shift is held.
+			// xAxisIndex: [0] binds the brush to the x-axis so ECharts populates
+			// area.coordRange with data coordinates (km) rather than just pixel range.
+			brush: brushActive ? [{
+				toolbox: [],
+				brushType: 'lineX',
+				xAxisIndex: [0],
+				brushStyle: { color: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.5)', borderWidth: 1 },
+				throttleType: 'debounce',
+				throttleDelay: 50,
+			}] : undefined,
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			series: (() => {
 				const firstVisibleIdx = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
@@ -262,7 +337,38 @@
 						: null;
 				}
 
-				return ([
+				// Custom segment vertical bands — rendered as a silent helper series with markArea.
+			// During a resize drag, the dragged boundary uses the preview position.
+			const effectiveBands = (resizeDrag !== null && resizePreviewKm !== null)
+				? customSegmentBands.map((b, i) => {
+					if (i !== resizeDrag!.segIndex) return b;
+					return {
+						...b,
+						startDist: resizeDrag!.side === 'start' ? resizePreviewKm! * 1000 : b.startDist,
+						endDist:   resizeDrag!.side === 'end'   ? resizePreviewKm! * 1000 : b.endDist,
+					};
+				})
+				: customSegmentBands;
+			const customBandSeries = effectiveBands.length > 0 ? [{
+				type: 'line' as const,
+				name: '__custom_bands__',
+				data: [],
+				silent: true,
+				markArea: {
+					silent: true,
+					data: effectiveBands.map(b => [
+						{
+							xAxis: b.startDist / 1000,
+							itemStyle: { color: 'rgba(139,92,246,0.12)', borderColor: 'rgba(139,92,246,0.4)', borderWidth: 1 },
+							label: { show: true, formatter: b.label, position: 'insideTop' as const, fontSize: 9, color: '#a78bfa' },
+						},
+						{ xAxis: b.endDist / 1000 },
+					]),
+				},
+			}] : [];
+
+			return ([
+					...customBandSeries,
 					...(showAltBackdrop && hasAlt ? [{
 						type: 'line' as const,
 						name: '__alt__',
@@ -377,6 +483,7 @@
 			});
 		}
 
+
 		// Zoom → stats sync: capture the visible x-axis extent after any dataZoom event.
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		chart.on('dataZoom', () => {
@@ -387,6 +494,179 @@
 				zoomRange = { min: extent[0], max: extent[1] };
 			} else {
 				zoomRange = undefined;
+			}
+		});
+
+		// Shift key tracking — activates brush mode when held.
+		// Guard with !e.repeat: key-hold fires keydown continuously; without this,
+		// dispatchAction is called dozens of times per second on all chart instances,
+		// which resets the active brush selection mid-drag and prevents brushEnd from
+		// capturing the range.
+		_keydownHandler = (e: KeyboardEvent) => {
+			if (e.key === 'Shift' && brushActive) {
+				shiftDown = true;
+				if (!e.repeat) {
+					chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'lineX' } });
+				}
+			}
+		};
+		_keyupHandler = (e: KeyboardEvent) => {
+			if (e.key === 'Shift') {
+				shiftDown = false;
+				if (!_modulePrimaryDown) {
+					// Mouse is not held — safe to reset cursor immediately.
+					chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
+				}
+				// If mouse IS held: do NOT reset cursor. brushEnd will fire when
+				// the mouse is released, capture the range, and reset the cursor.
+				// (_modulePrimaryDown is module-level so all 8 chart instances agree —
+				// preventing the 7 idle charts from cancelling the active drag.)
+			}
+		};
+
+		// Register module-level capture-phase mouse listeners (shared across instances).
+		// Capture phase fires BEFORE ECharts' canvas handlers, so _modulePrimaryDown
+		// is already false when brushEnd fires on mouseup.
+		if (_moduleMouseRefCount++ === 0) {
+			window.addEventListener('mousedown', _onGlobalMouseDown, true);
+			window.addEventListener('mouseup', _onGlobalMouseUp, true);
+		}
+
+		window.addEventListener('keydown', _keydownHandler);
+		window.addEventListener('keyup', _keyupHandler);
+
+		// ── Resize handle interaction ─────────────────────────────────────────
+		// Detect proximity to custom segment boundaries (col-resize cursor feedback)
+		// and drag to reposition them. Only active when resizeActive is true.
+		const RESIZE_THRESHOLD_PX = 8;
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.getZr().on('mousemove', (e: any) => {
+			if (!resizeActive || shiftDown || resizeDrag) return;
+			const km = chart!.convertFromPixel({ xAxisIndex: 0 }, e.offsetX) as number | null;
+			if (km == null) { hoverBoundary = null; container.style.cursor = ''; return; }
+
+			let nearest: typeof hoverBoundary = null;
+			let nearestPx = RESIZE_THRESHOLD_PX + 1;
+			for (let i = 0; i < customSegmentBands.length; i++) {
+				const b = customSegmentBands[i];
+				if (!b.id) continue;
+				const startPx = chart!.convertToPixel({ xAxisIndex: 0 }, b.startDist / 1000) as number;
+				const endPx   = chart!.convertToPixel({ xAxisIndex: 0 }, b.endDist   / 1000) as number;
+				const dStart = Math.abs(e.offsetX - startPx);
+				const dEnd   = Math.abs(e.offsetX - endPx);
+				if (dStart <= RESIZE_THRESHOLD_PX && dStart < nearestPx) {
+					nearestPx = dStart;
+					nearest = { segIndex: i, side: 'start' };
+				}
+				if (dEnd <= RESIZE_THRESHOLD_PX && dEnd < nearestPx) {
+					nearestPx = dEnd;
+					nearest = { segIndex: i, side: 'end' };
+				}
+			}
+			hoverBoundary = nearest;
+			container.style.cursor = nearest ? 'col-resize' : '';
+		});
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.getZr().on('mouseout', () => {
+			if (!resizeDrag) { hoverBoundary = null; container.style.cursor = ''; }
+		});
+
+		// Intercept mousedown near a boundary to start a resize drag.
+		// e.stop() prevents propagation to ECharts' dataZoom:inside handler.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.getZr().on('mousedown', (e: any) => {
+			if (!resizeActive || !hoverBoundary || shiftDown) return;
+			const b = customSegmentBands[hoverBoundary.segIndex];
+			if (!b?.id) return;
+			const km = chart!.convertFromPixel({ xAxisIndex: 0 }, e.offsetX) as number;
+			resizeDrag = {
+				segId: b.id,
+				segIndex: hoverBoundary.segIndex,
+				side: hoverBoundary.side,
+				oppositeKm: hoverBoundary.side === 'start' ? b.endDist / 1000 : b.startDist / 1000,
+			};
+			resizePreviewKm = km;
+			// Temporarily disable pan/zoom so the drag doesn't also pan the chart
+			chart?.setOption({ dataZoom: [{ type: 'inside', disabled: true }] });
+			e.stop();
+		});
+
+		// Track drag position and update band preview in real time (window-level for out-of-canvas dragging)
+		_resizeMoveHandler = (e: MouseEvent) => {
+			if (!resizeDrag) return;
+			const rect = container.getBoundingClientRect();
+			const x = e.clientX - rect.left;
+			const km = chart!.convertFromPixel({ xAxisIndex: 0 }, x) as number | null;
+			if (km == null) return;
+			resizePreviewKm = km;
+			// Direct setOption call (bypasses $effect) for smooth real-time feedback
+			chart?.setOption(buildOption(), { notMerge: true });
+		};
+
+		// Commit resize on mouseup: call onSegmentResize with validated new distances
+		_resizeUpHandler = () => {
+			if (!resizeDrag) return;
+			const drag = resizeDrag;
+			const previewKm = resizePreviewKm;
+			resizeDrag = null;
+			resizePreviewKm = null;
+			hoverBoundary = null;
+			container.style.cursor = '';
+			// Re-enable dataZoom inside
+			chart?.setOption({ dataZoom: [{ type: 'inside', disabled: false }] });
+			if (previewKm != null && onSegmentResize) {
+				const newDistM = previewKm * 1000;
+				const fixedDistM = drag.oppositeKm * 1000;
+				const newStartDist = drag.side === 'start'
+					? Math.min(newDistM, fixedDistM - 1)
+					: fixedDistM;
+				const newEndDist = drag.side === 'end'
+					? Math.max(newDistM, fixedDistM + 1)
+					: fixedDistM;
+				if (newStartDist < newEndDist) {
+					onSegmentResize(drag.segId, newStartDist, newEndDist);
+				}
+			}
+		};
+
+		window.addEventListener('mousemove', _resizeMoveHandler);
+		window.addEventListener('mouseup', _resizeUpHandler);
+
+		// Brush end → capture selected range and show name prompt.
+		// ec.connect forwards brushEnd synchronously to ALL charts in the same group.
+		// _brushEndInProgress (module-level) ensures only the first chart to run this
+		// handler processes the event; the rest skip. setTimeout(0) resets the flag
+		// after all synchronous handlers have fired.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.on('brushEnd', (params: any) => {
+			if (!brushActive) return;
+			const areas = params?.areas;
+			if (!areas || areas.length === 0) {
+				// Empty brushEnd (cancelled or accidental click). Reset cursor if needed.
+				if (!shiftDown) {
+					chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
+				}
+				return;
+			}
+			const area = areas[0];
+			const range = area.coordRange as [number, number] | undefined;
+			if (!range || Math.abs(range[1] - range[0]) < 0.001) return; // < 1m — ignore tiny selections
+			// Debounce duplicate brushEnd events from connected charts in the same group.
+			// Each chart fires its own debounced brushEnd independently; within 300ms
+			// of the first, all others are treated as duplicates and skipped.
+			const now = Date.now();
+			if ((now - (_brushGroupHandledMs[groupId] ?? 0)) < 300) return;
+			_brushGroupHandledMs[groupId] = now;
+			const [a, b] = range;
+			pendingSegment = { startKm: Math.min(a, b), endKm: Math.max(a, b) };
+			pendingName = 'Segment';
+			// Clear the brush selection visual
+			chart?.dispatchAction({ type: 'brush', areas: [] });
+			// Reset cursor if Shift was released before mouseup
+			if (!shiftDown) {
+				chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
 			}
 		});
 
@@ -412,6 +692,17 @@
 	onDestroy(() => {
 		resizeObserver?.disconnect();
 		chart?.dispose();
+		if (_keydownHandler) window.removeEventListener('keydown', _keydownHandler);
+		if (_keyupHandler) window.removeEventListener('keyup', _keyupHandler);
+		if (--_moduleMouseRefCount === 0) {
+			window.removeEventListener('mousedown', _onGlobalMouseDown, true);
+			window.removeEventListener('mouseup', _onGlobalMouseUp, true);
+		}
+		// m2: release per-group dedup entry so stale timestamps don't linger after unmount
+		if (groupId) delete _brushGroupHandledMs[groupId];
+		// S1: remove resize drag window listeners
+		if (_resizeMoveHandler) window.removeEventListener('mousemove', _resizeMoveHandler);
+		if (_resizeUpHandler) window.removeEventListener('mouseup', _resizeUpHandler);
 	});
 
 	/** Exposed for parent access via bind:this; also used by the inline PNG button. */
@@ -440,9 +731,28 @@
 		void referenceIndex;
 		void athleteProfile;
 		void sport;
+		void customSegmentBands;
 		zoomRange = undefined;
 		chart?.setOption(buildOption(), { notMerge: true });
 	});
+
+	function confirmSegment() {
+		if (!pendingSegment || !onSegmentCreate) return;
+		const name = pendingName.trim() || 'Segment';
+		onSegmentCreate(name, pendingSegment.startKm * 1000, pendingSegment.endKm * 1000);
+		pendingSegment = null;
+		pendingName = '';
+	}
+
+	function cancelSegment() {
+		pendingSegment = null;
+		pendingName = '';
+	}
+
+	function onPromptKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') confirmSegment();
+		if (e.key === 'Escape') cancelSegment();
+	}
 
 	// Map → chart sync: drive crosshair programmatically when externalHoverDistance changes.
 	// Uses dispatchAction which propagates to all connected charts via echarts.connect().
@@ -464,6 +774,10 @@
 		const bottom = typeof grid?.bottom === 'number' ? grid.bottom : 30;
 		const pixelY = top + (containerHeight - top - bottom) / 2;
 		chart.dispatchAction({ type: 'showTip', x: pixelX, y: pixelY });
+	});
+
+	$effect(() => {
+		if (pendingSegment) promptInputEl?.focus();
 	});
 </script>
 
@@ -490,10 +804,31 @@
 		</button>
 	</div>
 
+	{#if brushActive}
+		<span class="brush-hint" aria-hidden="true">Hold Shift + drag to add segment</span>
+	{/if}
+
 	{#if !ready}
 		<div class="chart-canvas chart-skeleton" aria-hidden="true"></div>
 	{/if}
 	<div bind:this={container} class="chart-canvas" style:visibility={ready ? 'visible' : 'hidden'}></div>
+
+	{#if pendingSegment}
+		<div class="seg-prompt" role="dialog" aria-label="Name new segment">
+			<span class="seg-prompt-range">{pendingSegment.startKm.toFixed(2)}–{pendingSegment.endKm.toFixed(2)} km</span>
+			<input
+				class="seg-prompt-input"
+				type="text"
+				bind:this={promptInputEl}
+				bind:value={pendingName}
+				placeholder="Segment name"
+				onkeydown={onPromptKeydown}
+				aria-label="Segment name"
+			/>
+			<button class="seg-prompt-btn seg-prompt-btn--save" onclick={confirmSegment}>Add</button>
+			<button class="seg-prompt-btn seg-prompt-btn--cancel" onclick={cancelSegment}>Cancel</button>
+		</div>
+	{/if}
 
 	<div class="chart-legend" role="group" aria-label="Series visibility toggles">
 		{#each seriesInputs as s, i}
@@ -672,5 +1007,87 @@
 	.stat-unit {
 		font-size: 0.625rem;
 		color: var(--color-muted);
+	}
+
+	/* Brush hint */
+	.brush-hint {
+		display: block;
+		padding: 2px 16px;
+		font-size: 0.65rem;
+		color: var(--color-muted);
+		opacity: 0.7;
+		user-select: none;
+	}
+
+	/* Segment name prompt (shown after brush drag) */
+	.seg-prompt {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 16px;
+		border-top: 1px solid var(--color-border);
+		flex-wrap: wrap;
+	}
+
+	.seg-prompt-range {
+		font-size: 0.68rem;
+		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+
+	.seg-prompt-input {
+		flex: 1;
+		min-width: 120px;
+		height: 24px;
+		padding: 0 6px;
+		border: 1px solid var(--color-border);
+		border-radius: 3px;
+		background: var(--color-bg);
+		color: var(--color-text);
+		font-size: 0.75rem;
+		outline: none;
+		transition: border-color 0.1s;
+	}
+
+	.seg-prompt-input:focus {
+		border-color: #8b5cf6;
+	}
+
+	.seg-prompt-btn {
+		flex-shrink: 0;
+		height: 24px;
+		padding: 0 10px;
+		border: 1px solid var(--color-border);
+		border-radius: 3px;
+		background: transparent;
+		cursor: pointer;
+		font-size: 0.72rem;
+		transition: background 0.1s, border-color 0.1s, color 0.1s;
+	}
+
+	.seg-prompt-btn:focus-visible {
+		outline: 2px solid #8b5cf6;
+		outline-offset: 2px;
+	}
+
+	.seg-prompt-btn--save {
+		color: #8b5cf6;
+		border-color: #8b5cf6;
+	}
+
+	.seg-prompt-btn--save:hover {
+		background: rgba(139, 92, 246, 0.12);
+	}
+
+	.seg-prompt-btn--cancel {
+		color: var(--color-muted);
+	}
+
+	.seg-prompt-btn--cancel:hover {
+		background: rgba(239, 68, 68, 0.1);
+		border-color: #ef4444;
+		color: #ef4444;
 	}
 </style>

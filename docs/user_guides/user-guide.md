@@ -1,6 +1,6 @@
 # Analyser — User Guide
 
-> **Version:** 2.1 · **Last updated:** June 2026
+> **Version:** 2.2 · **Last updated:** June 2026
 
 Analyser is a browser-based tool for inspecting and comparing `.fit` activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.
 
@@ -26,6 +26,7 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 4.3 [Multi-File Device Bar](#43-multi-file-device-bar)
    - 4.4 [Fine-Tuning Timing](#44-fine-tuning-timing)
 5. [Event Comparison](#5-event-comparison)
+   - 5.1 [Custom Segments](#51-custom-segments)
 6. [Exporting Data](#6-exporting-data)
    - 6.1 [CSV Export](#61-csv-export)
    - 6.2 [Excel Export](#62-excel-export)
@@ -409,7 +410,6 @@ Both banners are dismissible and reset automatically when you change the loaded 
 
 ## 5. Event Comparison
 
-
 The **Event Comparison** view (🏃) is designed for comparing multiple runs of the same course — for example, several parkruns on the same route — aligned by **distance** to show exactly where time was gained or lost.
 
 ![Event Comparison view](screenshots/14-event-comparison.png)
@@ -418,9 +418,41 @@ Load two or more `.fit` files, then switch to the Event Comparison tab. The view
 
 - **Time delta plot** — cumulative seconds gained or lost versus distance. Positive values mean you were ahead of the reference run; negative values mean you were behind.
 - **Overlaid time-series charts** — pace, speed, heart rate, and power for all files on a shared distance axis.
-- **Segment bar chart** — per-kilometre or per-lap time difference, highlighting your best and worst segments.
+- **Segment bar chart** — per-kilometre or per-lap time difference, plus any custom segments you have defined.
 
 > **Tip:** Select a reference run using the controls in the sidebar. The time delta is calculated relative to the reference. Try different reference runs to understand where you consistently gain or lose time.
+
+### 5.1 Custom Segments
+
+You can define your own named course sections — a known climb, a flat finishing straight, a technical descent — and compare your performance on each across all loaded files.
+
+Custom segments are saved per course and reloaded automatically the next time you open files from the same event.
+
+**Creating a segment:**
+
+1. On any time-series chart (Pace, Heart Rate, Power, etc.), hold **Shift** and click-drag across the range you want.
+2. A blue selection band appears while you drag.
+3. Release the mouse. A dialog box prompts you to **name** the segment.
+4. Type a name and press **Enter** (or click **Save**) to confirm. Press **Escape** to cancel.
+
+The segment immediately appears in the **Segment** tab bar alongside auto-laps, with full per-file statistics (time, pace, power, heart rate).
+
+**Resizing a segment:**
+
+Hover near the left or right edge of a segment band on any chart. The cursor changes to a resize arrow. Click-drag to move that boundary. The segment is updated as soon as you release.
+
+**Managing segments:**
+
+Click the **Segments ▾** button in the toolbar to open the Segment Manager. Here you can:
+
+| Action | How |
+|--------|-----|
+| Rename a segment | Click the segment name and type a new one |
+| Delete a segment | Click the **✕** button next to the segment |
+| Export segments | Click **Export JSON** to download all course segments |
+| Import segments | Click **Import JSON** and choose a previously exported file |
+
+> **Note:** Segments are keyed by sport and approximate distance (rounded to the nearest 100 m). A 5 km parkrun recorded as 5.01 km and one recorded as 4.98 km are treated as the same course, so segments defined in one session appear in both. If you load files from a significantly different distance (e.g. a 10 km race), a separate segment set is maintained.
 
 ---
 
@@ -651,6 +683,8 @@ All overlays and columns are silently absent when the relevant profile field is 
 | Sync panel shows "⚠ Sync error" | Network error or server unavailable | Click **retry** in the Sync panel; your local labels are unaffected |
 | Short code entry says "Code not found" | Code is invalid, mistyped, or the 90-day TTL has expired | Check the code format (`XXX-XXXXX`) and re-copy it from the originating device |
 | Labels on second device are out of date | Sync has not triggered yet | Open the Sync panel — pulling happens automatically on load; refresh the page if needed |
+| Custom segments not appearing in Event Comparison | Files may be from a different course length | Segments are keyed by sport + distance (±100 m). Check that the loaded files match the course the segments were created for. |
+| Segment dialog did not appear after Shift+drag | Drag may have been too small | Try dragging a wider range (at least a few hundred metres). The dialog appears on mouse release. |
 | Sync panel shows "Setting up sync…" for a long time | Connectivity issue on first visit | Check your network; the sync identity is assigned locally first so labels still work offline |
 
 ---

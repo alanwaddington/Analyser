@@ -527,11 +527,13 @@ describe('resetSyncIdentity', () => {
 	it('resetSyncIdentity_pushesCurrentLabelsUnderNewIdentity', async () => {
 		setDeviceLabel('ant:42', 'My HRM');
 		(crypto.randomUUID as Mock).mockReturnValueOnce(MOCK_UUID_2);
-		mockFetchOk({ ok: true });
+		mockFetchOk({ ok: true }); // DELETE old UUID (fire-and-forget)
+		mockFetchOk({ ok: true }); // PUT new UUID (push)
 
 		await resetSyncIdentity();
 
-		const callArgs = (mockFetch as Mock).mock.calls[0];
+		// calls[0] = DELETE to old UUID; calls[1] = PUT to new UUID
+		const callArgs = (mockFetch as Mock).mock.calls[1];
 		expect(callArgs[0]).toBe(`/api/labels/${MOCK_UUID_2}`);
 		const body = JSON.parse(callArgs[1].body as string);
 		expect(body.labels).toEqual({ 'ant:42': 'My HRM' });

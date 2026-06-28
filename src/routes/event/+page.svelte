@@ -7,6 +7,8 @@
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
 	import { buildSegments } from '$lib/utils/segments';
+	import { courseKey as getCourseKey, getSegments, addSegment, resizeSegment } from '$lib/stores/customSegments';
+	import SegmentManager from '$lib/components/ui/SegmentManager.svelte';
 	import { summarise } from '$lib/analytics/summary';
 	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils';
 	import type { SeriesInput } from '$lib/components/charts/TimeSeriesChart.utils';
@@ -86,7 +88,29 @@
 		})),
 	);
 	const lapMarkers = $derived(buildLapMarkers($activities[$referenceIndex], $xAxisMode));
-	const segments = $derived(buildSegments($activities[$referenceIndex]));
+	const currentCourseKey = $derived(getCourseKey($activities[$referenceIndex]));
+
+	// Custom segments — revision counter makes these re-derive on CRUD changes
+	let segmentsRevision = $state(0);
+	function refreshCustomSegments() { segmentsRevision++; }
+	const customSegments = $derived.by(() => {
+		void segmentsRevision;
+		return getSegments(currentCourseKey);
+	});
+	const customSegmentBands = $derived(
+		customSegments.map(s => ({ id: s.id, label: s.name, startDist: s.startDist, endDist: s.endDist })),
+	);
+	const segments = $derived(buildSegments($activities[$referenceIndex], customSegments));
+
+	function handleSegmentCreate(name: string, startDist: number, endDist: number) {
+		addSegment(currentCourseKey, name, startDist, endDist);
+		refreshCustomSegments();
+	}
+
+	function handleSegmentResize(id: string, newStartDist: number, newEndDist: number) {
+		resizeSegment(currentCourseKey, id, newStartDist, newEndDist);
+		refreshCustomSegments();
+	}
 	const summaryRows = $derived(
 		$activities
 			.map((activity, i) => ({ activity, isReference: i === $referenceIndex }))
@@ -309,6 +333,15 @@
 						>Distance</button>
 					</div>
 				</div>
+				{#if $activities.length > 0}
+					<div class="seg-manager-wrap">
+						<SegmentManager
+							courseKey={currentCourseKey}
+							revision={segmentsRevision}
+							onSegmentsChanged={refreshCustomSegments}
+						/>
+					</div>
+				{/if}
 			</CollapsiblePanel>
 
 			{#if indoor.hasMixedIndoorOutdoor && !indoor.mixedWarningDismissed}
@@ -358,6 +391,9 @@
 								anomalies={groupAnomalyEvents($activities[0]?.anomalies.filter(a => a.channel === channel) ?? [])}
 								onHoverDistance={chartIdx === 0 ? handleChartHoverDistance : undefined}
 								externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
+								{customSegmentBands}
+								onSegmentCreate={handleSegmentCreate}
+								onSegmentResize={handleSegmentResize}
 							/>
 						</div>
 					{/each}
@@ -404,6 +440,8 @@
 							seriesInputs={seriesInputs as SegmentSeriesInput[]}
 							referenceIndex={$referenceIndex}
 							{segments}
+							athleteProfile={$athleteProfile}
+							sport={$activities[$referenceIndex]?.sport ?? ''}
 						/>
 					</div>
 				{/if}
@@ -560,6 +598,10 @@
 		align-items: flex-start;
 		gap: 12px;
 		flex-wrap: wrap;
+	}
+
+	.seg-manager-wrap {
+		padding: 0 16px 8px;
 	}
 
 	.axis-toggle {

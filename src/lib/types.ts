@@ -196,6 +196,13 @@ export interface AthleteProfile {
 	lthr?: number;          // bpm — Lactate Threshold Heart Rate (HR zone fallback)
 }
 
+export interface CustomSegment {
+	id: string;
+	name: string;
+	startDist: number; // metres
+	endDist: number;   // metres
+}
+
 export interface AnomalyDetectionOptions {
 	powerSource?: 'stryd' | 'native';
 	athleteProfile?: AthleteProfile;
