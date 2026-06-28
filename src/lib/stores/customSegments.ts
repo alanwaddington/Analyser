@@ -63,7 +63,7 @@ function saveCache(map: Record<string, CustomSegment[]>): void {
 
 /** Return all custom segments for a given course key. */
 export function getSegments(key: string): CustomSegment[] {
-	return getCache()[key] ?? [];
+	return [...(getCache()[key] ?? [])];
 }
 
 /** Add a new custom segment for a course. Generates a UUID for the segment. */
