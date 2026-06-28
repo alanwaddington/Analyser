@@ -82,6 +82,10 @@
 	let pendingName = $state('');
 	let shiftDown = $state(false);
 	let promptInputEl: HTMLInputElement | undefined = $state();
+	// True only on the chart instance where the user physically pressed the mouse to start a
+	// Shift+drag. Prevents ec.connect from forwarding the brushEnd event to all connected charts
+	// and causing every chart to show a name prompt simultaneously.
+	let _isActiveBrushChart = false;
 
 	// Whether brush interaction is available (only in distance mode with a segment callback)
 	const brushActive = $derived(
@@ -438,6 +442,12 @@
 			});
 		}
 
+		// Track which chart instance the user physically drags on so brushEnd forwarded
+		// via ec.connect to all other connected charts does not trigger duplicate prompts.
+		chart.getZr().on('mousedown', () => {
+			if (shiftDown) _isActiveBrushChart = true;
+		});
+
 		// Zoom → stats sync: capture the visible x-axis extent after any dataZoom event.
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		chart.on('dataZoom', () => {
@@ -489,10 +499,14 @@
 		window.addEventListener('keydown', _keydownHandler);
 		window.addEventListener('keyup', _keyupHandler);
 
-		// Brush end → capture selected range and show name prompt
+		// Brush end → capture selected range and show name prompt.
+		// ec.connect forwards brushEnd to all connected charts; only the chart where
+		// the user physically dragged (_isActiveBrushChart) should handle it.
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		chart.on('brushEnd', (params: any) => {
 			if (!brushActive) return;
+			if (!_isActiveBrushChart) return;
+			_isActiveBrushChart = false;
 			const areas = params?.areas;
 			if (!areas || areas.length === 0) {
 				// Empty brushEnd (cancelled or accidental click). If Shift is no longer
