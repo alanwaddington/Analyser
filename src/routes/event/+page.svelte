@@ -7,7 +7,7 @@
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
 	import { buildSegments } from '$lib/utils/segments';
-	import { courseKey as getCourseKey, getSegments, addSegment } from '$lib/stores/customSegments';
+	import { courseKey as getCourseKey, getSegments, addSegment, resizeSegment } from '$lib/stores/customSegments';
 	import SegmentManager from '$lib/components/ui/SegmentManager.svelte';
 	import { summarise } from '$lib/analytics/summary';
 	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils';
@@ -98,12 +98,17 @@
 		return getSegments(currentCourseKey);
 	});
 	const customSegmentBands = $derived(
-		customSegments.map(s => ({ label: s.name, startDist: s.startDist, endDist: s.endDist })),
+		customSegments.map(s => ({ id: s.id, label: s.name, startDist: s.startDist, endDist: s.endDist })),
 	);
 	const segments = $derived(buildSegments($activities[$referenceIndex], customSegments));
 
 	function handleSegmentCreate(name: string, startDist: number, endDist: number) {
 		addSegment(currentCourseKey, name, startDist, endDist);
+		refreshCustomSegments();
+	}
+
+	function handleSegmentResize(id: string, newStartDist: number, newEndDist: number) {
+		resizeSegment(currentCourseKey, id, newStartDist, newEndDist);
 		refreshCustomSegments();
 	}
 	const summaryRows = $derived(
@@ -388,6 +393,7 @@
 								externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
 								{customSegmentBands}
 								onSegmentCreate={handleSegmentCreate}
+								onSegmentResize={handleSegmentResize}
 							/>
 						</div>
 					{/each}

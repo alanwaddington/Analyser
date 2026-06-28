@@ -1,14 +1,9 @@
-import type { Activity } from '$lib/types';
+import type { Activity, CustomSegment } from '$lib/types';
 import { addToast } from './toast';
 
-const STORAGE_KEY = 'analyser-custom-segments';
+export type { CustomSegment };
 
-export interface CustomSegment {
-	id: string;
-	name: string;
-	startDist: number; // metres
-	endDist: number;   // metres
-}
+const STORAGE_KEY = 'analyser-custom-segments';
 
 // In-memory cache; populated lazily on first access.
 let _cache: Record<string, CustomSegment[]> | null = null;

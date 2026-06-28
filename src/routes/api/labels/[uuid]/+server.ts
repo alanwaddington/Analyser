@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { getRedis } from '$lib/server/redis';
 import { UUID_REGEX, SHORT_CODE_REGEX } from '$lib/validation';
-import type { CustomSegment } from '$lib/stores/customSegments';
+import type { CustomSegment } from '$lib/types';
 
 const TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
@@ -50,6 +50,33 @@ export const GET: RequestHandler = async ({ params }) => {
 		return json(response);
 	} catch (err) {
 		console.error('GET /api/labels/[uuid] error:', err);
+		return json({ error: 'Internal server error' }, { status: 500 });
+	}
+};
+
+/**
+ * DELETE /api/labels/[uuid]
+ * Removes the label map and segments for this sync identity from the remote store.
+ * Called by resetSyncIdentity() to clean up the old UUID's KV keys before switching.
+ * The code index key (code:${shortCode}) is left to expire naturally via TTL — it is
+ * a secondary lookup only and a 404 on labels is the canonical "not found" response.
+ */
+export const DELETE: RequestHandler = async ({ params }) => {
+	const { uuid } = params;
+
+	if (!uuid || !UUID_REGEX.test(uuid)) {
+		return json({ error: 'Invalid UUID format' }, { status: 400 });
+	}
+
+	try {
+		const redis = getRedis();
+		await Promise.all([
+			redis.del(`labels:${uuid}`),
+			redis.del(`segments:${uuid}`),
+		]);
+		return json({ ok: true });
+	} catch (err) {
+		console.error('DELETE /api/labels/[uuid] error:', err);
 		return json({ error: 'Internal server error' }, { status: 500 });
 	}
 };

@@ -1,6 +1,6 @@
 import type { Activity } from '$lib/types';
 import type { Segment } from '$lib/components/charts/SegmentChart.utils';
-import type { CustomSegment } from '$lib/stores/customSegments';
+import type { CustomSegment } from '$lib/types';
 
 export function buildSegments(activity: Activity | undefined, customSegments?: CustomSegment[]): Segment[] {
 	if (!activity || activity.records.length === 0) return [];

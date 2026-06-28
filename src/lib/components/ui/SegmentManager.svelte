@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getSegments, addSegment, renameSegment, resizeSegment, removeSegment } from '$lib/stores/customSegments';
-	import type { CustomSegment } from '$lib/stores/customSegments';
+	import type { CustomSegment } from '$lib/types';
 
 	let {
 		courseKey,
@@ -105,6 +105,9 @@
 						typeof seg.startDist !== 'number' ||
 						typeof seg.endDist !== 'number') {
 						throw new Error('Invalid segment format — each item needs name, startDist, endDist');
+					}
+					if (seg.startDist >= seg.endDist) {
+						throw new Error(`Invalid segment "${seg.name}" — startDist must be less than endDist`);
 					}
 					addSegment(courseKey, seg.name, seg.startDist, seg.endDist);
 				}

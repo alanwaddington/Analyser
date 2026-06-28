@@ -51,6 +51,7 @@
 		sport = '',
 		customSegmentBands = [],
 		onSegmentCreate = undefined,
+		onSegmentResize = undefined,
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
@@ -69,10 +70,12 @@
 		athleteProfile?: AthleteProfile;
 		/** Sport of the primary activity — used to pick the right HR threshold. */
 		sport?: string;
-		/** Custom segment distance ranges to shade as vertical bands (in metres). */
-		customSegmentBands?: { label: string; startDist: number; endDist: number }[];
+		/** Custom segment distance ranges to shade as vertical bands (in metres). id is required for resize handles. */
+		customSegmentBands?: { label: string; startDist: number; endDist: number; id?: string }[];
 		/** Called when user Shift+drags to create a segment. Receives name, startDist/endDist in metres. */
 		onSegmentCreate?: ((name: string, startDist: number, endDist: number) => void) | undefined;
+		/** Called when user drags a segment boundary handle to resize an existing segment. */
+		onSegmentResize?: ((id: string, newStartDist: number, newEndDist: number) => void) | undefined;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -94,6 +97,27 @@
 	const brushActive = $derived(
 		onSegmentCreate != null &&
 		effectiveAxisMode($xAxisMode, forceDistanceAxis) === 'distance',
+	);
+
+	// Resize handle state for dragging existing segment boundaries
+	// Uses plain let (not $state) — values are read synchronously in event handlers
+	// and buildOption(); the $effect is bypassed by calling chart.setOption() directly.
+	let resizeDrag: {
+		segId: string;
+		segIndex: number;
+		side: 'start' | 'end';
+		oppositeKm: number; // the fixed boundary (km)
+	} | null = null;
+	let hoverBoundary: { segIndex: number; side: 'start' | 'end' } | null = null;
+	let resizePreviewKm: number | null = null;
+	let _resizeMoveHandler: ((e: MouseEvent) => void) | undefined;
+	let _resizeUpHandler: ((e: MouseEvent) => void) | undefined;
+
+	// Whether resize handles are available: distance mode, resize callback set, bands with ids exist
+	const resizeActive = $derived(
+		onSegmentResize != null &&
+		effectiveAxisMode($xAxisMode, forceDistanceAxis) === 'distance' &&
+		customSegmentBands.some(b => b.id != null),
 	);
 
 	let resizeObserver: ResizeObserver | undefined;
@@ -313,15 +337,26 @@
 						: null;
 				}
 
-				// Custom segment vertical bands — rendered as a silent helper series with markArea
-			const customBandSeries = customSegmentBands.length > 0 ? [{
+				// Custom segment vertical bands — rendered as a silent helper series with markArea.
+			// During a resize drag, the dragged boundary uses the preview position.
+			const effectiveBands = (resizeDrag !== null && resizePreviewKm !== null)
+				? customSegmentBands.map((b, i) => {
+					if (i !== resizeDrag!.segIndex) return b;
+					return {
+						...b,
+						startDist: resizeDrag!.side === 'start' ? resizePreviewKm! * 1000 : b.startDist,
+						endDist:   resizeDrag!.side === 'end'   ? resizePreviewKm! * 1000 : b.endDist,
+					};
+				})
+				: customSegmentBands;
+			const customBandSeries = effectiveBands.length > 0 ? [{
 				type: 'line' as const,
 				name: '__custom_bands__',
 				data: [],
 				silent: true,
 				markArea: {
 					silent: true,
-					data: customSegmentBands.map(b => [
+					data: effectiveBands.map(b => [
 						{
 							xAxis: b.startDist / 1000,
 							itemStyle: { color: 'rgba(139,92,246,0.12)', borderColor: 'rgba(139,92,246,0.4)', borderWidth: 1 },
@@ -500,6 +535,105 @@
 		window.addEventListener('keydown', _keydownHandler);
 		window.addEventListener('keyup', _keyupHandler);
 
+		// ── Resize handle interaction ─────────────────────────────────────────
+		// Detect proximity to custom segment boundaries (col-resize cursor feedback)
+		// and drag to reposition them. Only active when resizeActive is true.
+		const RESIZE_THRESHOLD_PX = 8;
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.getZr().on('mousemove', (e: any) => {
+			if (!resizeActive || shiftDown || resizeDrag) return;
+			const km = chart!.convertFromPixel({ xAxisIndex: 0 }, e.offsetX) as number | null;
+			if (km == null) { hoverBoundary = null; container.style.cursor = ''; return; }
+
+			let nearest: typeof hoverBoundary = null;
+			let nearestPx = RESIZE_THRESHOLD_PX + 1;
+			for (let i = 0; i < customSegmentBands.length; i++) {
+				const b = customSegmentBands[i];
+				if (!b.id) continue;
+				const startPx = chart!.convertToPixel({ xAxisIndex: 0 }, b.startDist / 1000) as number;
+				const endPx   = chart!.convertToPixel({ xAxisIndex: 0 }, b.endDist   / 1000) as number;
+				const dStart = Math.abs(e.offsetX - startPx);
+				const dEnd   = Math.abs(e.offsetX - endPx);
+				if (dStart <= RESIZE_THRESHOLD_PX && dStart < nearestPx) {
+					nearestPx = dStart;
+					nearest = { segIndex: i, side: 'start' };
+				}
+				if (dEnd <= RESIZE_THRESHOLD_PX && dEnd < nearestPx) {
+					nearestPx = dEnd;
+					nearest = { segIndex: i, side: 'end' };
+				}
+			}
+			hoverBoundary = nearest;
+			container.style.cursor = nearest ? 'col-resize' : '';
+		});
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.getZr().on('mouseout', () => {
+			if (!resizeDrag) { hoverBoundary = null; container.style.cursor = ''; }
+		});
+
+		// Intercept mousedown near a boundary to start a resize drag.
+		// e.stop() prevents propagation to ECharts' dataZoom:inside handler.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		chart.getZr().on('mousedown', (e: any) => {
+			if (!resizeActive || !hoverBoundary || shiftDown) return;
+			const b = customSegmentBands[hoverBoundary.segIndex];
+			if (!b?.id) return;
+			const km = chart!.convertFromPixel({ xAxisIndex: 0 }, e.offsetX) as number;
+			resizeDrag = {
+				segId: b.id,
+				segIndex: hoverBoundary.segIndex,
+				side: hoverBoundary.side,
+				oppositeKm: hoverBoundary.side === 'start' ? b.endDist / 1000 : b.startDist / 1000,
+			};
+			resizePreviewKm = km;
+			// Temporarily disable pan/zoom so the drag doesn't also pan the chart
+			chart?.setOption({ dataZoom: [{ type: 'inside', disabled: true }] });
+			e.stop();
+		});
+
+		// Track drag position and update band preview in real time (window-level for out-of-canvas dragging)
+		_resizeMoveHandler = (e: MouseEvent) => {
+			if (!resizeDrag) return;
+			const rect = container.getBoundingClientRect();
+			const x = e.clientX - rect.left;
+			const km = chart!.convertFromPixel({ xAxisIndex: 0 }, x) as number | null;
+			if (km == null) return;
+			resizePreviewKm = km;
+			// Direct setOption call (bypasses $effect) for smooth real-time feedback
+			chart?.setOption(buildOption(), { notMerge: true });
+		};
+
+		// Commit resize on mouseup: call onSegmentResize with validated new distances
+		_resizeUpHandler = () => {
+			if (!resizeDrag) return;
+			const drag = resizeDrag;
+			const previewKm = resizePreviewKm;
+			resizeDrag = null;
+			resizePreviewKm = null;
+			hoverBoundary = null;
+			container.style.cursor = '';
+			// Re-enable dataZoom inside
+			chart?.setOption({ dataZoom: [{ type: 'inside', disabled: false }] });
+			if (previewKm != null && onSegmentResize) {
+				const newDistM = previewKm * 1000;
+				const fixedDistM = drag.oppositeKm * 1000;
+				const newStartDist = drag.side === 'start'
+					? Math.min(newDistM, fixedDistM - 1)
+					: fixedDistM;
+				const newEndDist = drag.side === 'end'
+					? Math.max(newDistM, fixedDistM + 1)
+					: fixedDistM;
+				if (newStartDist < newEndDist) {
+					onSegmentResize(drag.segId, newStartDist, newEndDist);
+				}
+			}
+		};
+
+		window.addEventListener('mousemove', _resizeMoveHandler);
+		window.addEventListener('mouseup', _resizeUpHandler);
+
 		// Brush end → capture selected range and show name prompt.
 		// ec.connect forwards brushEnd synchronously to ALL charts in the same group.
 		// _brushEndInProgress (module-level) ensures only the first chart to run this
@@ -564,6 +698,11 @@
 			window.removeEventListener('mousedown', _onGlobalMouseDown, true);
 			window.removeEventListener('mouseup', _onGlobalMouseUp, true);
 		}
+		// m2: release per-group dedup entry so stale timestamps don't linger after unmount
+		if (groupId) delete _brushGroupHandledMs[groupId];
+		// S1: remove resize drag window listeners
+		if (_resizeMoveHandler) window.removeEventListener('mousemove', _resizeMoveHandler);
+		if (_resizeUpHandler) window.removeEventListener('mouseup', _resizeUpHandler);
 	});
 
 	/** Exposed for parent access via bind:this; also used by the inline PNG button. */

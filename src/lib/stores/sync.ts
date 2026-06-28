@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import { getAllLabels, replaceAllLabels, setOnLabelChange } from '$lib/stores/deviceLabels';
 import { getAllSegments, replaceAllSegments, setOnSegmentChange } from '$lib/stores/customSegments';
+import type { CustomSegment } from '$lib/types';
 import { fetchWithRetry } from '$lib/utils/fetchWithRetry';
 
 // ---------------------------------------------------------------------------
@@ -115,7 +116,7 @@ export async function pullLabels(uuid: string): Promise<void> {
 		if (!response.ok) {
 			throw new Error(`Pull failed: ${response.status}`);
 		}
-		const data = await response.json() as { labels: Record<string, string>; segments?: Record<string, import('./customSegments').CustomSegment[]> };
+		const data = await response.json() as { labels: Record<string, string>; segments?: Record<string, CustomSegment[]> };
 		replaceAllLabels(data.labels);
 		if (data.segments) {
 			replaceAllSegments(data.segments);
@@ -166,15 +167,22 @@ export async function adoptSyncIdentity(uuid: string): Promise<void> {
 
 /**
  * Generate a new sync identity, abandoning the current sync ring.
- * Pushes current labels under the new identity so no data is lost.
+ * Deletes the old UUID's remote data (labels + segments) then pushes current
+ * local data under the new identity so no data is lost.
  */
 export async function resetSyncIdentity(): Promise<void> {
+	const oldUuid = localStorage.getItem(SYNC_ID_KEY);
 	const newUuid = crypto.randomUUID();
 	const newShortCode = deriveShortCode(newUuid);
 	localStorage.setItem(SYNC_ID_KEY, newUuid);
 	localStorage.setItem(SYNC_CODE_KEY, newShortCode);
 	localStorage.removeItem(SYNC_TS_KEY);
 	updateStatus({ uuid: newUuid, shortCode: newShortCode, lastSynced: null, error: null });
+	// Clean up old remote data (fire-and-forget; failure is non-blocking).
+	// The code index key (code:${oldShortCode}) is left to expire via 90-day TTL.
+	if (oldUuid) {
+		fetchWithRetry(`/api/labels/${oldUuid}`, { method: 'DELETE' }).catch(() => {});
+	}
 	await pushLabels(newUuid, newShortCode);
 }
 
