@@ -1,8 +1,8 @@
 # Analyser — API Reference
 
-> **Version:** 1.0 · **Last updated:** May 2026
+> **Version:** 1.1 · **Last updated:** June 2026
 
-The Analyser API provides server-side endpoints for the cross-device label sync feature (PR #80). All routes are SvelteKit server endpoints located under `src/routes/api/`.
+The Analyser API provides server-side endpoints for the cross-device label sync feature (PR #80) and custom event segments sync (PR #156). All routes are SvelteKit server endpoints located under `src/routes/api/`.
 
 ---
 
@@ -12,6 +12,7 @@ The Analyser API provides server-side endpoints for the cross-device label sync 
 2. [Endpoints](#2-endpoints)
    - [GET /api/labels/[uuid]](#get-apilabelsuuid)
    - [PUT /api/labels/[uuid]](#put-apilabelsuuid)
+   - [DELETE /api/labels/[uuid]](#delete-apilabelsuuid)
    - [GET /api/labels/resolve/[code]](#get-apilabelsresolvecode)
 3. [Error Responses](#3-error-responses)
 4. [Rate Limiting](#4-rate-limiting)
@@ -47,11 +48,18 @@ Returns the stored label map for a sync identity.
   "labels": {
     "garmin:3151:120": "Polar H10",
     "garmin:3151:11":  "Assioma Duo"
+  },
+  "segments": {
+    "running:50": [
+      { "id": "abc-123", "name": "The Hill", "startDist": 1200, "endDist": 2400 }
+    ]
   }
 }
 ```
 
 The `labels` object is a `Record<string, string>` mapping device keys (as produced by `deviceKey()` in `src/lib/utils/deviceChannels.ts`) to user-assigned label strings.
+
+The `segments` field is a `Record<string, CustomSegment[]>` keyed by course identity string (`${sport}:${Math.round(totalDistance/100)}`). It is **omitted** from the response when no segments have been stored for this identity — callers should treat its absence as an empty map.
 
 `400 Bad Request` — UUID does not match the expected format.
 ```json
@@ -89,14 +97,20 @@ This endpoint is called by `pushLabels()` in `src/lib/stores/sync.ts` — once o
   "labels": {
     "garmin:3151:120": "Polar H10"
   },
-  "shortCode": "E6Y-NXEMF"
+  "shortCode": "E6Y-NXEMF",
+  "segments": {
+    "running:50": [
+      { "id": "abc-123", "name": "The Hill", "startDist": 1200, "endDist": 2400 }
+    ]
+  }
 }
 ```
 
-| Field | Type | Validation |
-|-------|------|------------|
-| `labels` | `Record<string, string>` | All values must be strings |
-| `shortCode` | `string` | Must match `XXX-XXXXX` (3 alphanumeric, dash, 5 alphanumeric) |
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `labels` | `Record<string, string>` | Yes | All values must be strings |
+| `shortCode` | `string` | Yes | Must match `XXX-XXXXX` (3 alphanumeric, dash, 5 alphanumeric) |
+| `segments` | `Record<string, CustomSegment[]>` | No | Omit when no segments are stored; structure validated at write time |
 
 **Responses**
 
@@ -114,10 +128,43 @@ This endpoint is called by `pushLabels()` in `src/lib/stores/sync.ts` — once o
 
 **Side effects**
 
-Two Redis keys are written (or refreshed) atomically:
+Two or three Redis keys are written (or refreshed) in parallel:
 
 - `labels:{uuid}` — the label map, with a rolling 90-day TTL
 - `code:{shortCode}` — the UUID string, with a rolling 90-day TTL
+- `segments:{uuid}` — the custom segments map (only written when `segments` is present in the request body), with a rolling 90-day TTL
+
+---
+
+### DELETE /api/labels/[uuid]
+
+Removes the label map and custom segments for a sync identity from the remote store. Called by `resetSyncIdentity()` in `sync.ts` to clean up the old UUID's Redis keys before switching to a new identity.
+
+**Path parameter**
+
+| Parameter | Format | Description |
+|-----------|--------|-------------|
+| `uuid` | UUIDv4 | The sync identity UUID to delete |
+
+**Responses**
+
+`200 OK`
+```json
+{ "ok": true }
+```
+
+`400 Bad Request` — UUID does not match the expected format.
+```json
+{ "error": "Invalid UUID format" }
+```
+
+`500 Internal Server Error`
+
+**Behaviour notes**
+
+- Deletes `labels:{uuid}` and `segments:{uuid}` keys in parallel via `redis.del()`.
+- The `code:{shortCode}` reverse-lookup key is intentionally **not** deleted — it is left to expire via its 90-day TTL. A 404 on `GET /api/labels/{uuid}` is the canonical signal that an identity no longer exists.
+- The call is fire-and-forget from the client side (errors are silently swallowed). Failure does not prevent the new identity from being established.
 
 ---
 
@@ -192,7 +239,15 @@ The `GET /api/labels/[uuid]` and `PUT /api/labels/[uuid]` endpoints are not rate
 
 ## 5. Data Expiry
 
-All Redis entries use a **90-day rolling TTL**. The TTL is refreshed on every successful PUT, so active users never lose their labels. Inactive identities expire automatically with no explicit cleanup required.
+All Redis entries use a **90-day rolling TTL**. The TTL is refreshed on every successful PUT, so active users never lose their data. Inactive identities expire automatically with no explicit cleanup required.
+
+**Redis key reference:**
+
+| Key pattern | Value | TTL | Written by |
+|-------------|-------|-----|------------|
+| `labels:{uuid}` | `Record<string, string>` — device key → label | 90 days, rolling | PUT |
+| `segments:{uuid}` | `Record<string, CustomSegment[]>` — course key → segments | 90 days, rolling | PUT (when segments present) |
+| `code:{shortCode}` | UUID string | 90 days, rolling | PUT |
 
 After expiry:
 - `GET /api/labels/{uuid}` returns 404 — treated by the client as "no remote data yet"

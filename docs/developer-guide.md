@@ -1,6 +1,6 @@
 # Analyser — Developer Guide
 
-> **Version:** 1.9 · **Last updated:** June 2026
+> **Version:** 2.0 · **Last updated:** June 2026
 
 This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.
 
@@ -32,6 +32,7 @@ This guide covers the technical internals of the Analyser application for contri
 3d. [Activity Alignment — GPS Anchor](#3d-activity-alignment--gps-anchor-and-indoor-detection)
 3e. [Data Anomaly Detection](#3e-data-anomaly-detection)
 3f. [Athlete Profile](#3f-athlete-profile)
+3g. [Custom Event Segments](#3g-custom-event-segments)
 4. [Responsive Layout](#4-responsive-layout)
 5. [FIT Parsing](#5-fit-parsing)
 6. [Testing](#6-testing)
@@ -63,7 +64,7 @@ src/
 │   ├── align/        # Activity alignment (timestamp sync, distance interpolation)
 │   │                 # - distance.ts: interpolateToDistanceAxis, distanceStep(totalDistanceMetres)
 │   │                 #   distanceStep: ≤50 km → 10 m step; >50 km → 20 m step (halves point count)
-│   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection, zone utilities
+│   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection, zone utilities, segment stats
 │   │                 # - anomalies.ts: detectAnomalies(), groupAnomalyEvents(), groupAnomaliesByChannel()
 │   │                 # - zones.ts: hrZone, hrZoneFromMaxHR, hrZoneFromLTHR, lthrToEstimatedMaxHR,
 │   │                 #   cpZone, ftpZone, ftpPct, cpPct, wPerKg,
@@ -72,6 +73,8 @@ src/
 │   │                 # - rss.ts: computeRSS(durationS, avgPower, cp) — Running Stress Score
 │   │                 #   Formula: (durationS × avgPower × IF²) / (CP × 3600), IF = avgPower / CP
 │   │                 #   Returns 0 when any input is zero or negative.
+│   │                 # - segmentStats.ts: computeSegmentStats(activity, segment, profile?) → SegmentStats
+│   │                 #   Computes time, avgPace, avgPower, maxPower, powerPct, avgHR, hrZones (see §3g)
 │   │                 # - stats.ts: mean(), stdDev() — population statistics ignoring null/NaN
 │   │                 # - downsample.ts: downsampleGps(points, maxPoints, epsilon) — GPS polyline
 │   │                 #   simplification; GPS_MAX_POINTS=500 hard cap; iterative RDP (explicit stack,
@@ -112,8 +115,12 @@ src/
 │   │   │                     # - setProfileField(key, value): updates store + persists; removes key if undefined/NaN
 │   │   │                     # - initAthleteProfile(): loads from localStorage; SSR-safe (typeof localStorage guard)
 │   │   │                     # - Storage key: 'analyser-athlete-profile'; quota errors surface as toast warnings
+│   │   ├── customSegments.ts # Custom event segment CRUD + localStorage (see §3g)
+│   │   │                     # - Storage key: 'analyser-custom-segments'; keyed by courseKey()
+│   │   │                     # - getSegments/addSegment/renameSegment/resizeSegment/removeSegment
+│   │   │                     # - getAllSegments/replaceAllSegments/setOnSegmentChange (sync hooks)
 │   │   ├── deviceLabels.ts  # Device label persistence (localStorage)
-│   │   ├── sync.ts          # Cross-device sync logic
+│   │   ├── sync.ts          # Cross-device sync logic (labels + segments)
 │   │   ├── session.ts       # Activity session state; activityColourMap assigns stable colours by activity.id
 │   │   ├── toast.ts         # Transient toast notification store (addToast, removeToast, auto-dismiss)
 │   │   └── viewport.ts      # Responsive breakpoint store
@@ -128,7 +135,8 @@ src/
 │   │                 # - formatting.ts: formatPace(decimalMinutes) → "M:SS" string — single source of truth for pace display
 │   │                 # - indoorWarnings.svelte.ts: createIndoorWarnings() composable
 │   │                 # - lapMarkers.ts: buildLapMarkers()
-│   │                 # - segments.ts: buildSegments()
+│   │                 # - segments.ts: buildSegments(activity, customSegments?) — auto-laps first,
+│   │                 #   then custom segments appended with custom: true flag and id (see §3g)
 │   │                 # - summaryContext.ts: buildCellContext(ch, avg, sport, profile) → CellContext
 │   │                 #   Derives % FTP / % CP label, w/kg, and HR zone for a summary table cell.
 │   │                 #   Returns null when no relevant profile field applies.
@@ -136,6 +144,7 @@ src/
 │   └── types.ts      # Domain types
 │                     # - Anomaly, AnomalyType, DetectionStrategy, AnomalyDetectionOptions
 │                     # - ChannelKey now includes 'position' (GPS-only; no numeric series, badge-only via DeviceToggleBar GPS section)
+│                     # - CustomSegment { id: string; name: string; startDist: number; endDist: number } (metres)
 │                     # - GpsPointWithDistance: lat, lon, distance, recordIndex (O(1) metric lookup)
 │                     # - GpsPointWithMetric extends GpsPointWithDistance: metricValue
 └── routes/
@@ -262,19 +271,26 @@ First visit:
   crypto.randomUUID() → uuid
   deriveShortCode(uuid) → shortCode
   localStorage: SYNC_ID_KEY, SYNC_CODE_KEY
-  PUT /api/labels/{uuid} → seed remote with current labels
+  PUT /api/labels/{uuid} → seed remote with current labels + segments
 
 Returning visit:
   Read uuid / shortCode from localStorage
-  GET /api/labels/{uuid} → pull remote labels → replaceAllLabels()
+  GET /api/labels/{uuid} → pull remote labels + segments
+    → replaceAllLabels(), replaceAllSegments() (if segments present)
 
 Label change (any visit):
   setOnLabelChange hook → pushLabels(uuid, shortCode) [fire and forget]
+    (push includes current segments alongside labels)
+
+Segment change (any visit):
+  setOnSegmentChange hook → pushLabels(uuid, shortCode) [fire and forget]
 
 Adopt external identity (QR / copy-link / short code):
   adoptSyncIdentity(uuid) → store uuid in localStorage → pullLabels(uuid)
+    (pull applies both labels and segments from remote)
 
 Reset identity:
+  DELETE /api/labels/{oldUuid} → remove old labels + segments [fire and forget]
   crypto.randomUUID() → new uuid
   localStorage cleared of old identity
   pushLabels(newUuid, newShortCode) → seed remote under new identity
@@ -294,7 +310,7 @@ Exports:
 | `pullLabels(uuid)` | `async` | Download labels from Redis. Retries up to 3× on transient errors. Sets `syncStatus.syncing` while in progress. |
 | `resolveCode(code)` | `async → uuid` | Resolve short code to UUID via API. Retries up to 3× on transient errors. Throws on 404. |
 | `adoptSyncIdentity(uuid)` | `async` | Replace local identity with external UUID and pull. |
-| `resetSyncIdentity()` | `async` | Generate fresh UUID, push current labels under it. |
+| `resetSyncIdentity()` | `async` | Fire-and-forget `DELETE` on old UUID, then generate fresh UUID and push current labels + segments under it. |
 | `deriveShortCode(uuid)` | `string` | Pure function: BigInt base-36 encode of UUID, 8 chars, `XXX-XXXXX`. |
 | `getSyncStatus()` | `SyncStatus` | Non-reactive snapshot (for use outside Svelte components). |
 
@@ -430,9 +446,11 @@ Each toast has a level-appropriate left-border accent and dismiss button (`×`).
 
 See the full API reference in [`docs/api-reference.md`](api-reference.md).
 
-**`GET /api/labels/[uuid]`** — returns `{ labels }` or 404.
+**`GET /api/labels/[uuid]`** — returns `{ labels, segments? }` or 404. The `segments` field is included when custom segments have been stored for that identity.
 
-**`PUT /api/labels/[uuid]`** — expects `{ labels: Record<string,string>, shortCode: string }`. Writes both `labels:{uuid}` and `code:{shortCode}` to Redis with a 90-day TTL.
+**`PUT /api/labels/[uuid]`** — expects `{ labels: Record<string,string>, shortCode: string, segments?: Record<string, CustomSegment[]> }`. Writes `labels:{uuid}`, `code:{shortCode}`, and (when provided) `segments:{uuid}` to Redis with a 90-day TTL.
+
+**`DELETE /api/labels/[uuid]`** — deletes `labels:{uuid}` and `segments:{uuid}`. Called by `resetSyncIdentity()` as a fire-and-forget cleanup before establishing a new identity. The `code:{shortCode}` key is left to expire via TTL.
 
 **`GET /api/labels/resolve/[code]`** — resolves short code to UUID. Rate-limited at 10 req/min/IP via Redis `INCR`/`EXPIRE` pipeline (globally enforced across all Vercel instances). Responds 429 with `Retry-After` header on limit exceeded; fails open if Redis is unavailable.
 
@@ -976,6 +994,145 @@ onMount(() => { mounted = true; });
 ```
 
 This prevents an SSR hydration crash where the panel's `<button>` element was absent from server-rendered HTML, causing Svelte 5's `sibling()` to consume the wrong DOM node. The workaround causes the Profile toggle button to appear only after client hydration (brief FOUC on first load). Tracked in issue #151.
+
+---
+
+## 3g. Custom Event Segments
+
+PR #156 added user-defined course sections ("custom segments") to the Event Comparison view. Users hold Shift and drag on any time-series chart to select a distance range, name the segment, and have it persist across sessions for the same course.
+
+### Domain type — `CustomSegment`
+
+**Location:** `src/lib/types.ts`
+
+```ts
+interface CustomSegment {
+  id:        string;  // UUID generated at creation
+  name:      string;  // user-supplied label
+  startDist: number;  // metres from activity start
+  endDist:   number;  // metres from activity start
+}
+```
+
+### Segment store — `customSegments.ts`
+
+**Location:** `src/lib/stores/customSegments.ts`
+
+Segments are stored in `localStorage` under the key `'analyser-custom-segments'` as a `Record<courseKey, CustomSegment[]>`. An in-memory write-through cache (`_cache`) avoids repeated JSON parse on every read.
+
+#### Course identity key
+
+```ts
+courseKey(activity: Activity): string
+// Format: `${sport}:${Math.round(totalDistance / 100)}`
+// Example: 'running:50' for a 5.0 km parkrun
+```
+
+Rounding to the nearest 100 m tolerates GPS drift between sessions: a course recorded as 5.01 km and one as 4.98 km both resolve to `'running:50'`, sharing the same segment set.
+
+#### Public API
+
+| Export | Description |
+|--------|-------------|
+| `courseKey(activity)` | Derive the stable course identity key |
+| `getSegments(key)` | Return a shallow copy of all segments for a course (empty array if none) |
+| `addSegment(key, name, startDist, endDist)` | Add a new segment; generates a UUID id. Fires `_onSegmentChange` |
+| `renameSegment(key, id, newName)` | Rename by id; no-op if id not found. Fires `_onSegmentChange` |
+| `resizeSegment(key, id, startDist, endDist)` | Update distance bounds by id; no-op if id not found. Fires `_onSegmentChange` |
+| `removeSegment(key, id)` | Remove by id; no-op if id not found. Fires `_onSegmentChange` |
+| `getAllSegments()` | Return a shallow copy of the full cache (for sync serialisation) |
+| `replaceAllSegments(map)` | Bulk-overwrite cache and localStorage (sync pull — does NOT fire onChange) |
+| `setOnSegmentChange(fn \| null)` | Register/deregister the callback invoked after every user-initiated write |
+
+`getSegments()` returns a copy (not the live array) so Svelte reactivity can detect changes when callers reassign their local variable from the return value.
+
+`localStorage` quota errors surface as `'warning'` toasts via `addToast()`, matching the pattern used by `deviceLabels.ts` and `athleteProfile.ts`.
+
+#### Sync integration
+
+`customSegments.ts` mirrors the `deviceLabels.ts` pattern: `setOnSegmentChange` lets `sync.ts` register a push callback during `initSync()`. After that, any user-initiated segment write (add/rename/resize/remove) automatically triggers a `pushLabels()` call that includes the full segment map alongside labels. On pull, `replaceAllSegments()` is called when the response contains a `segments` field.
+
+### Segment stats engine — `segmentStats.ts`
+
+**Location:** `src/lib/analytics/segmentStats.ts`
+
+`computeSegmentStats(activity, segment, profile?)` returns a `SegmentStats` object for one activity over one segment:
+
+```ts
+interface SegmentStats {
+  time:        number;         // seconds
+  avgPace:     number | null;  // min/km
+  avgPower:    number | null;  // watts
+  maxPower:    number | null;  // watts
+  powerPct:    number | null;  // % CP (running) or % FTP (cycling); null when no profile threshold
+  powerLabel:  string;         // 'Stryd' | 'Running Power' | 'Power'
+  avgHR:       number | null;  // bpm
+  hrZones:     number[] | null; // [z1%, z2%, z3%, z4%, z5%] — null when no HR threshold set
+}
+```
+
+**Time computation** uses `timeAtDistance()` from `src/lib/compare/delta.ts` — linear interpolation on the distance axis, matching the same logic used by the delta chart. This ensures the segment time matches the delta plot value.
+
+**Power label** is derived from `activity.powerSource` (`'stryd'` → `'Stryd'`; `'native'` → `'Running Power'`; otherwise `'Power'`).
+
+**HR zone distribution** is computed only when `profile` is provided and at least one of `maxHrRunning`, `maxHrCycling`, or `lthr` is set. Each record in the segment is classified into a zone via `hrZone()` from `src/lib/analytics/zones.ts`, and the result is expressed as integer percentages summing to ≈100.
+
+### `buildSegments()` — custom segment merging
+
+**Location:** `src/lib/utils/segments.ts`
+
+`buildSegments(activity, customSegments?)` accepts an optional `CustomSegment[]` second argument. Custom segments are appended **after** auto-lap or kilometre-split segments, each tagged with `custom: true` and `id`:
+
+```ts
+// Auto-lap result:
+{ label: 'Lap 1', startDist: 0, endDist: 1000 }
+
+// Custom segment result:
+{ label: 'The Hill', startDist: 1200, endDist: 2400, custom: true, id: 'abc-123' }
+```
+
+The `custom` and `id` fields are used by:
+- `event/+page.svelte` to identify which segments to show resize handles for
+- `SegmentManager.svelte` to identify which segments can be renamed/deleted
+
+### `SegmentManager.svelte` component
+
+**Location:** `src/lib/components/ui/SegmentManager.svelte`
+
+A collapsible toolbar panel that lets users view, rename, delete, export, and import custom segments for the current course. It is shown only on the Event page when `currentCourseKey` is non-null (i.e. at least one activity is loaded).
+
+Key props:
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `courseKey` | `string` | The active course identity key |
+| `segments` | `CustomSegment[]` | Current segment list (read-only display) |
+| `onchange` | `() => void` | Called after any mutation so the page re-reads from the store |
+
+Export writes a JSON file (`analyser-segments-<date>.json`) containing a `{ courseKey, segments }` envelope. Import validates that `startDist < endDist` for every entry and rejects the file with a toast error if any segment is malformed.
+
+### `TimeSeriesChart.svelte` — Shift+drag and resize
+
+**Location:** `src/lib/components/charts/TimeSeriesChart.svelte`
+
+Two new interaction modes are added when the `resizeActive` prop is `true` (Event page only):
+
+#### Shift+drag — segment creation
+
+When the user holds Shift, ECharts brush mode is enabled (`brushType: 'lineX'`). On brush end, the selected x-axis range is converted to metres and emitted via the `onBrushSelect` prop. The Event page receives this and opens a name-prompt dialog.
+
+ECharts `connect()` links all chart instances in the `groupId` group. To prevent a brush selection on one chart from firing `brushEnd` on all connected charts, a module-level `_brushGroupHandledMs` map (keyed by `groupId`) deduplicates the event: only the first handler within the same millisecond advances; subsequent calls are no-ops.
+
+#### Resize drag handles
+
+When `customSegmentBands` are passed to the chart, each band edge becomes a drag target:
+
+1. A ZRender `mousemove` handler checks proximity (< 8 px) to any segment boundary and sets `cursor: col-resize`.
+2. A ZRender `mousedown` handler (when near a boundary) begins a drag: stores `{ segId, side, oppositeKm }`, disables `dataZoom inside`, and calls `e.stop()` to prevent ECharts from also handling the event.
+3. Window-level `mousemove` / `mouseup` handlers track the drag out-of-canvas and commit the resize via the `onSegmentResize` prop on `mouseup`.
+4. `onDestroy` removes both window listeners and cleans up the `_brushGroupHandledMs` entry for the chart's group.
+
+`onSegmentResize(id, newStartDist, newEndDist)` is called with distances in metres; the Event page handler calls `resizeSegment()` and re-reads the store.
 
 ---
 
