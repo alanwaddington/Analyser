@@ -1,3 +1,22 @@
+<script module lang="ts">
+	// ── Truly module-level state (shared across ALL instances) ────────────
+	// In Svelte 5, <script module> is the only way to share state across
+	// component instances. Regular <script> code runs per-instance.
+
+	// Primary-mouse-button tracking: all instances share one flag so every
+	// keyup handler sees the same drag state. Prevents non-dragging charts
+	// from dispatching takeGlobalCursor(false) and cancelling an active drag.
+	export let _modulePrimaryDown = false;
+	export let _moduleMouseRefCount = 0;
+	export function _onGlobalMouseDown(e: MouseEvent) { if (e.button === 0) _modulePrimaryDown = true; }
+	export function _onGlobalMouseUp(e: MouseEvent)   { if (e.button === 0) _modulePrimaryDown = false; }
+
+	// brushEnd deduplication: each connected chart fires its own debounced
+	// brushEnd independently. Track the last time each groupId processed one;
+	// any event within 300ms in the same group is treated as a duplicate.
+	export const _brushGroupHandledMs: Record<string, number> = {};
+</script>
+
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { ECharts, EChartsOption } from 'echarts';
@@ -17,26 +36,6 @@
 	import './chart-skeleton.css';
 
 	const DOWNSAMPLE_THRESHOLD = 2000;
-
-	// ── Module-level primary-mouse-button state ────────────────────────────
-	// Shared across ALL TimeSeriesChart instances so every keyup handler sees
-	// the same drag state. Without this, the 7 charts that are NOT the drag
-	// target each see _mouseDragActive=false and dispatch takeGlobalCursor
-	// (which, via ec.connect, cancels the brush on ALL connected charts).
-	// Capture-phase listeners run before ECharts' own canvas handlers, so
-	// _modulePrimaryDown is set to false before brushEnd fires — the brushEnd
-	// handler can safely read it to decide whether to reset the cursor.
-	let _modulePrimaryDown = false;
-	let _moduleMouseRefCount = 0;
-	function _onGlobalMouseDown(e: MouseEvent) { if (e.button === 0) _modulePrimaryDown = true; }
-	function _onGlobalMouseUp(e: MouseEvent)   { if (e.button === 0) _modulePrimaryDown = false; }
-
-	// ── Module-level brushEnd deduplication (per group) ───────────────────
-	// Each connected chart in the same group fires its own debounced brushEnd
-	// independently. Without deduplication, every chart shows its own name
-	// prompt for the same drag. We track the last time each groupId processed
-	// a brushEnd; any event within 300ms in the same group is a duplicate.
-	const _brushGroupHandledMs: Record<string, number> = {};
 
 	let {
 		channel,
