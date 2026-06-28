@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildSegments } from './segments.ts';
 import type { Activity, Lap, ActivityRecord } from '$lib/types';
-import type { CustomSegment } from '$lib/stores/customSegments';
+import type { CustomSegment } from '$lib/types';
 import { makeBaseActivity } from '$lib/test-utils';
 
 function makeRecord(distance: number, elapsedSeconds: number): ActivityRecord {
