@@ -12,6 +12,7 @@
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
 	import { downloadPng, localDateString } from '$lib/export/download';
+	import { addToast } from '$lib/stores/toast';
 	import './png-btn.css';
 	import './chart-skeleton.css';
 
@@ -29,6 +30,13 @@
 	let _moduleMouseRefCount = 0;
 	function _onGlobalMouseDown(e: MouseEvent) { if (e.button === 0) _modulePrimaryDown = true; }
 	function _onGlobalMouseUp(e: MouseEvent)   { if (e.button === 0) _modulePrimaryDown = false; }
+
+	// ── Module-level brushEnd deduplication (per group) ───────────────────
+	// Each connected chart in the same group fires its own debounced brushEnd
+	// independently. Without deduplication, every chart shows its own name
+	// prompt for the same drag. We track the last time each groupId processed
+	// a brushEnd; any event within 300ms in the same group is a duplicate.
+	const _brushGroupHandledMs: Record<string, number> = {};
 
 	let {
 		channel,
@@ -82,10 +90,6 @@
 	let pendingName = $state('');
 	let shiftDown = $state(false);
 	let promptInputEl: HTMLInputElement | undefined = $state();
-	// True only on the chart instance where the user physically pressed the mouse to start a
-	// Shift+drag. Prevents ec.connect from forwarding the brushEnd event to all connected charts
-	// and causing every chart to show a name prompt simultaneously.
-	let _isActiveBrushChart = false;
 
 	// Whether brush interaction is available (only in distance mode with a segment callback)
 	const brushActive = $derived(
@@ -260,10 +264,13 @@
 				},
 			},
 			dataZoom: [{ type: 'inside' }],
-			// Brush is registered but only activated via dispatchAction when Shift is held
+			// Brush is registered but only activated via dispatchAction when Shift is held.
+			// xAxisIndex: [0] binds the brush to the x-axis so ECharts populates
+			// area.coordRange with data coordinates (km) rather than just pixel range.
 			brush: brushActive ? [{
 				toolbox: [],
 				brushType: 'lineX',
+				xAxisIndex: [0],
 				brushStyle: { color: 'rgba(139,92,246,0.15)', borderColor: 'rgba(139,92,246,0.5)', borderWidth: 1 },
 				throttleType: 'debounce',
 				throttleDelay: 50,
@@ -442,11 +449,6 @@
 			});
 		}
 
-		// Track which chart instance the user physically drags on so brushEnd forwarded
-		// via ec.connect to all other connected charts does not trigger duplicate prompts.
-		chart.getZr().on('mousedown', () => {
-			if (shiftDown) _isActiveBrushChart = true;
-		});
 
 		// Zoom → stats sync: capture the visible x-axis extent after any dataZoom event.
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -500,17 +502,16 @@
 		window.addEventListener('keyup', _keyupHandler);
 
 		// Brush end → capture selected range and show name prompt.
-		// ec.connect forwards brushEnd to all connected charts; only the chart where
-		// the user physically dragged (_isActiveBrushChart) should handle it.
+		// ec.connect forwards brushEnd synchronously to ALL charts in the same group.
+		// _brushEndInProgress (module-level) ensures only the first chart to run this
+		// handler processes the event; the rest skip. setTimeout(0) resets the flag
+		// after all synchronous handlers have fired.
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		chart.on('brushEnd', (params: any) => {
 			if (!brushActive) return;
-			if (!_isActiveBrushChart) return;
-			_isActiveBrushChart = false;
 			const areas = params?.areas;
 			if (!areas || areas.length === 0) {
-				// Empty brushEnd (cancelled or accidental click). If Shift is no longer
-				// held, reset cursor so we don't leave brush mode active.
+				// Empty brushEnd (cancelled or accidental click). Reset cursor if needed.
 				if (!shiftDown) {
 					chart?.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: false } });
 				}
@@ -519,6 +520,12 @@
 			const area = areas[0];
 			const range = area.coordRange as [number, number] | undefined;
 			if (!range || Math.abs(range[1] - range[0]) < 0.001) return; // < 1m — ignore tiny selections
+			// Debounce duplicate brushEnd events from connected charts in the same group.
+			// Each chart fires its own debounced brushEnd independently; within 300ms
+			// of the first, all others are treated as duplicates and skipped.
+			const now = Date.now();
+			if ((now - (_brushGroupHandledMs[groupId] ?? 0)) < 300) return;
+			_brushGroupHandledMs[groupId] = now;
 			const [a, b] = range;
 			pendingSegment = { startKm: Math.min(a, b), endKm: Math.max(a, b) };
 			pendingName = 'Segment';
