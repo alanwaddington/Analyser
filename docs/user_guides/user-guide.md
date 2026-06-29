@@ -137,6 +137,14 @@ When Analyser detects sensor anomalies (signal spikes, data dropouts, or GPS dri
 
 Double-click any device pill to rename it. Type the new label and press **Enter** to confirm, or **Escape** to cancel. Labels are saved locally in your browser and are restored automatically the next time you load a file from the same device — this works for all device types, including Garmin watches, Stryd pods, ANT+ sensors, and BLE devices.
 
+**Undoing a rename:**
+
+Press **Ctrl+Z** (Cmd+Z on macOS) at any time to undo the most recent device rename. Press **Ctrl+Shift+Z** (or **Ctrl+Y**) to redo. A brief notification confirms each undo or redo. The undo history is in-memory only — it is cleared when you refresh the page.
+
+**Rename history popover:**
+
+Hover over any device pill to see a compact history popover listing the last 5 renames for that device (old name → new name, with relative timestamps). If the most recent global rename was for this device, an **↩ Undo last rename** button appears at the bottom of the popover for mouse-only users.
+
 ---
 
 ### 3.2 Charts Tab
@@ -700,8 +708,12 @@ All overlays and columns are silently absent when the relevant profile field is 
 | Key | Action |
 |-----|--------|
 | **Double-click** a chart | Reset zoom |
+| **Double-click** a device pill | Begin renaming that device |
 | **Enter** (in rename input) | Confirm device rename |
 | **Escape** (in rename input) | Cancel device rename |
+| **Ctrl+Z / Cmd+Z** | Undo the most recent device rename |
+| **Ctrl+Shift+Z / Ctrl+Y** | Redo the last undone rename |
+| **Escape** (with history popover open) | Close the rename history popover |
 | **Enter** (in offset input) | Confirm time offset |
 
 ### Supported Sensor Types

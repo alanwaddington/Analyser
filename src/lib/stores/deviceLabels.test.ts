@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Device } from '$lib/types';
+import type { LabelEdit } from './deviceLabels';
+
+vi.mock('./toast', () => ({ addToast: vi.fn() }));
 
 // localStorage mock — same pattern as theme.test.ts
 const localStorageMock = (() => {
@@ -24,6 +27,14 @@ let resolveLabel: (device: Device) => string | undefined;
 let getAllLabels: () => Record<string, string>;
 let replaceAllLabels: (labels: Record<string, string>) => void;
 let setOnLabelChange: (callback: () => void) => void;
+let recordEdit: (key: string, from: string, to: string) => void;
+let undoLabelEdit: () => void;
+let redoLabelEdit: () => void;
+let getEditHistory: (deviceKey?: string) => LabelEdit[];
+let canUndo: () => boolean;
+let canRedo: () => boolean;
+let clearEditHistory: () => void;
+let addToastMock: ReturnType<typeof vi.fn>;
 
 beforeEach(async () => {
 	vi.resetModules();
@@ -40,6 +51,16 @@ beforeEach(async () => {
 	getAllLabels = mod.getAllLabels;
 	replaceAllLabels = mod.replaceAllLabels;
 	setOnLabelChange = mod.setOnLabelChange;
+	recordEdit = mod.recordEdit;
+	undoLabelEdit = mod.undoLabelEdit;
+	redoLabelEdit = mod.redoLabelEdit;
+	getEditHistory = mod.getEditHistory;
+	canUndo = mod.canUndo;
+	canRedo = mod.canRedo;
+	clearEditHistory = mod.clearEditHistory;
+	const toastMod = await import('./toast.ts');
+	addToastMock = vi.mocked(toastMod.addToast);
+	addToastMock.mockClear();
 });
 
 function makeDevice(overrides: Partial<Device> = {}): Device {
@@ -330,5 +351,287 @@ describe('setOnLabelChange', () => {
 		});
 		setDeviceLabel('ant:42', 'My HRM');
 		expect(labelAtCallbackTime).toBe('My HRM');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// recordEdit
+// ---------------------------------------------------------------------------
+
+describe('recordEdit', () => {
+	it('recordEdit_basicEdit_addsToHistory', () => {
+		recordEdit('ant:42', '', 'Polar H10');
+		const history = getEditHistory();
+		expect(history).toHaveLength(1);
+		expect(history[0]).toMatchObject({ deviceKey: 'ant:42', from: '', to: 'Polar H10' });
+	});
+
+	it('recordEdit_storesTimestamp', () => {
+		const before = Date.now();
+		recordEdit('ant:42', '', 'Polar H10');
+		const after = Date.now();
+		const ts = getEditHistory()[0].timestamp;
+		expect(ts).toBeGreaterThanOrEqual(before);
+		expect(ts).toBeLessThanOrEqual(after);
+	});
+
+	it('recordEdit_afterRecord_canUndo', () => {
+		recordEdit('ant:42', '', 'Polar H10');
+		expect(canUndo()).toBe(true);
+	});
+
+	it('recordEdit_clearsRedoStack', () => {
+		recordEdit('ant:42', '', 'First');
+		undoLabelEdit();
+		expect(canRedo()).toBe(true);
+		recordEdit('ant:42', '', 'Second');
+		expect(canRedo()).toBe(false);
+	});
+
+	it('recordEdit_exceedsMaxHistory_dropsOldest', () => {
+		for (let i = 0; i < 21; i++) {
+			recordEdit('ant:42', String(i), String(i + 1));
+		}
+		const history = getEditHistory();
+		expect(history.length).toBe(20);
+		expect(history[0].from).toBe('1'); // edit 0 (from='0') was shifted off
+	});
+});
+
+// ---------------------------------------------------------------------------
+// canUndo / canRedo
+// ---------------------------------------------------------------------------
+
+describe('canUndo / canRedo', () => {
+	it('canUndo_emptyHistory_returnsFalse', () => {
+		expect(canUndo()).toBe(false);
+	});
+
+	it('canUndo_nonEmptyHistory_returnsTrue', () => {
+		recordEdit('ant:42', '', 'Polar H10');
+		expect(canUndo()).toBe(true);
+	});
+
+	it('canRedo_emptyRedoStack_returnsFalse', () => {
+		expect(canRedo()).toBe(false);
+	});
+
+	it('canRedo_nonEmptyRedoStack_returnsTrue', () => {
+		recordEdit('ant:42', '', 'Polar H10');
+		undoLabelEdit();
+		expect(canRedo()).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// undoLabelEdit
+// ---------------------------------------------------------------------------
+
+describe('undoLabelEdit', () => {
+	it('undoLabelEdit_emptyHistory_doesNothing', () => {
+		expect(() => undoLabelEdit()).not.toThrow();
+		expect(addToastMock).not.toHaveBeenCalled();
+	});
+
+	it('undoLabelEdit_nonEmptyHistory_restoresFromLabel', () => {
+		setDeviceLabel('ant:42', 'Polar H10');
+		recordEdit('ant:42', '', 'Polar H10');
+		undoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBeUndefined();
+	});
+
+	it('undoLabelEdit_fromIsNonEmpty_setsFromLabel', () => {
+		setDeviceLabel('ant:42', 'New Name');
+		recordEdit('ant:42', 'Old Name', 'New Name');
+		undoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBe('Old Name');
+	});
+
+	it('undoLabelEdit_fromIsEmpty_removesLabel', () => {
+		setDeviceLabel('ant:42', 'Polar H10');
+		recordEdit('ant:42', '', 'Polar H10');
+		undoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBeUndefined();
+	});
+
+	it('undoLabelEdit_firesAddToast', () => {
+		recordEdit('ant:42', '', 'Polar H10');
+		undoLabelEdit();
+		expect(addToastMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('undoLabelEdit_movesEditToRedoStack', () => {
+		recordEdit('ant:42', '', 'Polar H10');
+		undoLabelEdit();
+		expect(canUndo()).toBe(false);
+		expect(canRedo()).toBe(true);
+	});
+
+	it('undoLabelEdit_multipleEdits_undoesInOrder', () => {
+		setDeviceLabel('ant:42', 'First');
+		recordEdit('ant:42', '', 'First');
+		setDeviceLabel('ant:42', 'Second');
+		recordEdit('ant:42', 'First', 'Second');
+		undoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBe('First');
+		undoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBeUndefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// redoLabelEdit
+// ---------------------------------------------------------------------------
+
+describe('redoLabelEdit', () => {
+	it('redoLabelEdit_emptyRedoStack_doesNothing', () => {
+		expect(() => redoLabelEdit()).not.toThrow();
+	});
+
+	it('redoLabelEdit_nonEmptyRedoStack_restoresToLabel', () => {
+		recordEdit('ant:42', '', 'Polar H10');
+		undoLabelEdit();
+		redoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBe('Polar H10');
+	});
+
+	it('redoLabelEdit_toIsEmpty_removesLabel', () => {
+		setDeviceLabel('ant:42', 'Polar H10');
+		recordEdit('ant:42', 'Polar H10', '');
+		undoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBe('Polar H10');
+		redoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBeUndefined();
+	});
+
+	it('redoLabelEdit_movesEditBackToHistory', () => {
+		recordEdit('ant:42', '', 'Polar H10');
+		undoLabelEdit();
+		redoLabelEdit();
+		expect(canRedo()).toBe(false);
+		expect(canUndo()).toBe(true);
+	});
+
+	it('redoLabelEdit_multipleUndos_redoesInOrder', () => {
+		recordEdit('ant:42', '', 'First');
+		setDeviceLabel('ant:42', 'First');
+		recordEdit('ant:42', 'First', 'Second');
+		setDeviceLabel('ant:42', 'Second');
+		undoLabelEdit();
+		undoLabelEdit();
+		redoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBe('First');
+		redoLabelEdit();
+		expect(getDeviceLabel('ant:42')).toBe('Second');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// getEditHistory
+// ---------------------------------------------------------------------------
+
+describe('getEditHistory', () => {
+	it('getEditHistory_noEdits_returnsEmpty', () => {
+		expect(getEditHistory()).toEqual([]);
+	});
+
+	it('getEditHistory_noFilter_returnsAllHistory', () => {
+		recordEdit('ant:42', '', 'HRM');
+		recordEdit('serial:999', '', 'Watch');
+		expect(getEditHistory()).toHaveLength(2);
+	});
+
+	it('getEditHistory_withKey_returnsOnlyMatchingEdits', () => {
+		recordEdit('ant:42', '', 'HRM');
+		recordEdit('serial:999', '', 'Watch');
+		const filtered = getEditHistory('ant:42');
+		expect(filtered).toHaveLength(1);
+		expect(filtered[0].deviceKey).toBe('ant:42');
+	});
+
+	it('getEditHistory_withKey_limitsToFive', () => {
+		for (let i = 0; i < 8; i++) {
+			recordEdit('ant:42', String(i), String(i + 1));
+		}
+		expect(getEditHistory('ant:42')).toHaveLength(5);
+	});
+
+	it('getEditHistory_withKey_returnsNewestFirst', () => {
+		recordEdit('ant:42', '', 'First');
+		recordEdit('ant:42', 'First', 'Second');
+		const history = getEditHistory('ant:42');
+		expect(history[0].to).toBe('Second');
+		expect(history[1].to).toBe('First');
+	});
+
+	it('getEditHistory_unknownKey_returnsEmpty', () => {
+		recordEdit('ant:42', '', 'HRM');
+		expect(getEditHistory('serial:999')).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// clearEditHistory
+// ---------------------------------------------------------------------------
+
+describe('clearEditHistory', () => {
+	it('clearEditHistory_clearsHistory', () => {
+		recordEdit('ant:42', '', 'HRM');
+		clearEditHistory();
+		expect(getEditHistory()).toHaveLength(0);
+	});
+
+	it('clearEditHistory_clearsRedoStack', () => {
+		recordEdit('ant:42', '', 'HRM');
+		undoLabelEdit();
+		clearEditHistory();
+		expect(canRedo()).toBe(false);
+	});
+
+	it('clearEditHistory_afterClear_cannotUndo', () => {
+		recordEdit('ant:42', '', 'HRM');
+		clearEditHistory();
+		expect(canUndo()).toBe(false);
+	});
+});
+
+describe('canUndoFor', () => {
+	let canUndoFor: typeof import('./deviceLabels').canUndoFor;
+
+	beforeEach(async () => {
+		vi.resetModules();
+		const mod = await import('./deviceLabels');
+		({ canUndoFor } = mod);
+		// also pull these for setup
+		({ recordEdit, undoLabelEdit } = mod);
+	});
+
+	it('canUndoFor_noHistory_returnsFalse', () => {
+		expect(canUndoFor('ant:42')).toBe(false);
+	});
+
+	it('canUndoFor_mostRecentEditMatchesKey_returnsTrue', () => {
+		recordEdit('ant:42', '', 'HRM');
+		expect(canUndoFor('ant:42')).toBe(true);
+	});
+
+	it('canUndoFor_mostRecentEditDifferentKey_returnsFalse', () => {
+		recordEdit('ant:42', '', 'HRM');
+		recordEdit('ant:11', '', 'Power');
+		expect(canUndoFor('ant:42')).toBe(false);
+	});
+
+	it('canUndoFor_mostRecentEditDifferentKey_trueForThatKey', () => {
+		recordEdit('ant:42', '', 'HRM');
+		recordEdit('ant:11', '', 'Power');
+		expect(canUndoFor('ant:11')).toBe(true);
+	});
+
+	it('canUndoFor_afterUndoMovesToPreviousDevice', () => {
+		recordEdit('ant:42', '', 'HRM');
+		recordEdit('ant:11', '', 'Power');
+		undoLabelEdit();
+		expect(canUndoFor('ant:42')).toBe(true);
+		expect(canUndoFor('ant:11')).toBe(false);
 	});
 });

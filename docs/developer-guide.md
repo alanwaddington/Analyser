@@ -144,6 +144,10 @@ src/
 │   │                 #   '[Manufacturer] Running Power', or standard label based on Activity.powerSource
 │   │                 # - fetchWithRetry.ts: fetchWithRetry(), isRetryable(), computeDelay() — retry with backoff
 │   │                 # - formatAge.ts: formatAge(ts) → human-readable relative time string
+│   │                 # - relativeTime.ts: relativeTime(ts, now?) → human-readable relative time string
+│   │                 #   ('just now', 'N min ago', 'N hr(s) ago', 'yesterday', formatted date)
+│   │                 #   Injectable `now` parameter keeps tests deterministic without mocking Date.now()
+│   │                 #   Used by LabelHistoryPopover to display rename timestamps
 │   │                 # - formatting.ts: formatPace(decimalMinutes) → "M:SS" string — single source of truth for pace display
 │   │                 # - indoorWarnings.svelte.ts: createIndoorWarnings() composable
 │   │                 # - lapMarkers.ts: buildLapMarkers()
@@ -405,6 +409,72 @@ Three additions support sync:
 
 Only one change callback can be registered at a time. `initSync` registers its push callback after the initial push/pull, so subsequent label changes auto-push. The cleanup function returned by `initSync` calls `setOnLabelChange(null)` to deregister on teardown.
 
+#### Label edit history (PR #161)
+
+PR #161 added an in-memory undo/redo history stack alongside the existing label persistence functions. The history is module-level state — not persisted, cleared on page refresh.
+
+**`LabelEdit` interface:**
+
+```ts
+export interface LabelEdit {
+  deviceKey: string;  // storage key (e.g. 'ant:42', 'serial:999')
+  from:      string;  // label value before the edit (empty string = was unset)
+  to:        string;  // label value after the edit  (empty string = cleared)
+  timestamp: number;  // Date.now() at time of edit
+}
+```
+
+**History functions:**
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `recordEdit` | `(key, from, to) → void` | Push an edit onto `_editHistory` (capped at `MAX_HISTORY = 20`). Clears `_redoStack`. Called by `DeviceToggleBar.commitRename()` before every `setDeviceLabel` / `removeDeviceLabel`. |
+| `undoLabelEdit` | `() → LabelEdit \| undefined` | Pop the most recent edit, push it to `_redoStack`, call `setDeviceLabel()`/`removeDeviceLabel()` to restore the `from` value (which fires `_onLabelChange` → Redis sync automatically), and emit a `'Label change undone'` info toast. Returns the undone edit so the caller can sync reactive UI state. No-op (returns `undefined`, no toast) when history is empty. |
+| `redoLabelEdit` | `() → LabelEdit \| undefined` | Pop from `_redoStack`, push back to `_editHistory`, call `setDeviceLabel()`/`removeDeviceLabel()` to restore the `to` value. Returns the redone edit. No toast on redo. |
+| `getEditHistory` | `(key?) → LabelEdit[]` | Without a key: returns a shallow copy of the full history (all devices, chronological). With a key: filters to that device, returns the last 5 entries newest-first. Used by `LabelHistoryPopover` to render the entry list. |
+| `canUndo` | `() → boolean` | `true` when `_editHistory` has at least one entry. |
+| `canRedo` | `() → boolean` | `true` when `_redoStack` has at least one entry. |
+| `canUndoFor` | `(key) → boolean` | `true` only when the most recent global undo candidate (`_editHistory[last]`) belongs to the specified device key. Used to control per-device undo button visibility in `LabelHistoryPopover`. |
+| `clearEditHistory` | `() → void` | Resets both stacks to `[]`. Used in tests and available for session teardown. |
+
+**Why `recordEdit` is separate from `setDeviceLabel`:**
+
+Calling `setDeviceLabel` inside `undoLabelEdit`/`redoLabelEdit` would create infinite recursion if history recording were built into `setDeviceLabel`. The explicit `recordEdit()` call-before-write pattern keeps `setDeviceLabel` pure and free of side effects, while still ensuring undo/redo operations fire `_onLabelChange` for Redis sync automatically.
+
+### 3.5a LabelHistoryPopover and historyTick
+
+**Component:** `src/lib/components/ui/LabelHistoryPopover.svelte`
+
+A hover-triggered popover that appears when the user moves over any device pill in `DeviceToggleBar`. It shows the last 5 renames for that device (via `getEditHistory(dKey)`) with relative timestamps (via `relativeTime()`), and optionally an "↩ Undo last rename" button.
+
+**Props:**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `history` | `LabelEdit[]` | Edits to display (newest first, max 5) — caller passes `getEditHistory(dKey)` |
+| `currentLabel` | `string` | The device's current display label (shown in the popover header) |
+| `deviceKey` | `string \| null` | Storage key for the device — passed back via `onundo` callback |
+| `canUndoDevice` | `boolean` | When `true`, renders the "↩ Undo last rename" button. Caller passes `canUndoFor(dKey)` (device-scoped, not global `canUndo()`). |
+| `onundo` | `() => void` | Callback invoked when the undo button is clicked |
+
+The popover is positioned absolutely (`top: calc(100% + 7px)`) inside a `.pill-wrap` container (which is `position: relative`). A CSS `::after` pseudo-element on `.pill-wrap` (height 10px, `top: 100%`) creates an invisible bridge over the gap so that `mouseleave` does not fire while the cursor moves between the pill and the popover.
+
+**`historyTick` — bridging non-reactive arrays to Svelte:**
+
+`_editHistory` and `_redoStack` are plain module-level JavaScript arrays. Svelte 5's reactivity system cannot track mutations to these arrays directly. To force `getEditHistory()` and `canUndoFor()` to re-evaluate in popover prop expressions, `DeviceToggleBar` maintains a `historyTick = $state(0)` counter that is incremented on every `recordEdit`, `undoLabelEdit`, and `redoLabelEdit` call. Prop expressions read `historyTick` (e.g. `historyTick >= 0 && canUndoFor(dKey)`) which creates a Svelte dependency — when `historyTick` changes, the prop re-evaluates:
+
+```svelte
+<LabelHistoryPopover
+  history={historyTick >= 0 ? getEditHistory(dKey ?? undefined) : []}
+  canUndoDevice={historyTick >= 0 && dKey != null && canUndoFor(dKey)}
+  onundo={() => { const e = undoLabelEdit(); if (e) { applyEditToReactiveState(e, e.from); historyTick++; } hoveredKey = null; }}
+/>
+```
+
+**Hover management:**
+
+`DeviceToggleBar` uses a 200ms close timer (`hoverCloseTimer`) via `openHover(key)` / `scheduleCloseHover()` instead of closing the popover immediately on `mouseleave`. This gives the cursor time to traverse the 7px gap without the popover disappearing. The CSS `::after` bridge is the primary mechanism; the timer is a belt-and-suspenders fallback.
+
 ### 3.6 Toast Notification Store
 
 **Location:** `src/lib/stores/toast.ts`  
@@ -450,6 +520,7 @@ Each toast has a level-appropriate left-border accent and dismiss button (`×`).
 |--------|-------|---------|
 | `athleteProfile.ts` — `_persist` catch | `warning` | `'Athlete profile could not be saved — storage full'` (QuotaExceededError) or `'Athlete profile could not be saved'` (other errors) |
 | `deviceLabels.ts` — `saveLabels` catch | `warning` | `'Device label could not be saved — storage full'` (QuotaExceededError) or `'Device label could not be saved'` (other errors) |
+| `deviceLabels.ts` — `undoLabelEdit()` | `info` | `'Label change undone'` — fired after every successful undo. Not fired on redo or on empty-stack no-op. |
 | `DropZone.svelte` — parse error catch (single-file and multi-file) | `error` | `'<filename>: <parser error message>'` — fires alongside the existing inline error text so the error persists after navigation |
 | `parser.ts` — `normalise()` negative elapsed | `warning` | `'"<filename>": N record(s) with negative elapsed time were removed.'` |
 | `parser.ts` — `normalise()` out-of-order records | `warning` | `'"<filename>": records were out of order and have been sorted automatically.'` |

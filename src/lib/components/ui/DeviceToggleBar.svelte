@@ -7,9 +7,23 @@
 		groupStreamsByChannel,
 		isComparableGroup,
 	} from '$lib/utils/deviceChannels';
-	import { setDeviceLabel, removeDeviceLabel, deviceStorageKey } from '$lib/stores/deviceLabels';
+	import type { LabelEdit } from '$lib/stores/deviceLabels';
+	import {
+		setDeviceLabel,
+		removeDeviceLabel,
+		getDeviceLabel,
+		deviceStorageKey,
+		recordEdit,
+		undoLabelEdit,
+		redoLabelEdit,
+		canUndo,
+		canRedo,
+		canUndoFor,
+		getEditHistory,
+	} from '$lib/stores/deviceLabels';
 	import { buildAnomalyCounts } from './DeviceToggleBar.utils';
 	import type { AnomalyCount } from './DeviceToggleBar.utils';
+	import LabelHistoryPopover from './LabelHistoryPopover.svelte';
 
 	let { streams, multiFile = false, anomalyCounts = undefined }: {
 		streams: CrossFileStream[];
@@ -58,6 +72,23 @@
 	// Bounded in practice by MAX_FILES × devices_per_file (≤ ~60 entries).
 	let renamedLabels = $state(new Map<string, string>());
 
+	// Which pill is currently hovered — drives the history popover
+	let hoveredKey = $state<string | null>(null);
+	// Reactive counter bumped whenever _editHistory mutates (undo/redo/record).
+	// Svelte can't track the plain module-level array, so this counter is read
+	// in popover prop expressions to force re-evaluation after each history change.
+	let historyTick = $state(0);
+	let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function openHover(key: string) {
+		if (hoverCloseTimer !== null) { clearTimeout(hoverCloseTimer); hoverCloseTimer = null; }
+		hoveredKey = key;
+	}
+
+	function scheduleCloseHover() {
+		hoverCloseTimer = setTimeout(() => { hoveredKey = null; hoverCloseTimer = null; }, 200);
+	}
+
 	// File groups for multi-file mode: ordered list derived from stream order
 	const fileGroups = $derived.by(() => {
 		const seen = new Map<string, { filename: string; colourIndex: number; streams: CrossFileStream[] }>();
@@ -103,21 +134,66 @@
 		if (renamingDevice !== cfs.key) return;
 		const trimmed = renameValue.trim();
 		const key = deviceStorageKey(cfs.stream.device);
-		if (trimmed && key != null) {
-			setDeviceLabel(key, trimmed);
-			cfs.stream.device.label = trimmed;
-			// Update reactive map so the pill re-renders immediately
-			renamedLabels = new Map(renamedLabels).set(cfs.key, trimmed);
-		} else if (!trimmed && key != null) {
-			removeDeviceLabel(key);
-			cfs.stream.device.label = undefined;
-			const next = new Map(renamedLabels);
-			next.delete(cfs.key);
-			renamedLabels = next;
+		if (key != null) {
+			const from = getDeviceLabel(key) ?? '';
+			const to   = trimmed;
+			if (trimmed) {
+				recordEdit(key, from, to);
+				historyTick++;
+				setDeviceLabel(key, trimmed);
+				cfs.stream.device.label = trimmed;
+				// Update reactive map so the pill re-renders immediately
+				renamedLabels = new Map(renamedLabels).set(cfs.key, trimmed);
+			} else {
+				recordEdit(key, from, '');
+				historyTick++;
+				removeDeviceLabel(key);
+				cfs.stream.device.label = undefined;
+				const next = new Map(renamedLabels);
+				next.delete(cfs.key);
+				renamedLabels = next;
+			}
 		}
 		renamingDevice = null;
 		renamingChannelKey = null;
 	}
+
+	function applyEditToReactiveState(edit: LabelEdit, label: string) {
+		const cfs = streams.find(s => deviceStorageKey(s.stream.device) === edit.deviceKey);
+		if (!cfs) return;
+		if (label) {
+			renamedLabels = new Map(renamedLabels).set(cfs.key, label);
+			cfs.stream.device.label = label;
+		} else {
+			const next = new Map(renamedLabels);
+			next.delete(cfs.key);
+			renamedLabels = next;
+			cfs.stream.device.label = undefined;
+		}
+	}
+
+	$effect(() => {
+		function handleKeydown(e: KeyboardEvent) {
+			if (renamingDevice !== null) return;
+			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+				if (canUndo()) {
+					e.preventDefault();
+					const edit = undoLabelEdit();
+					if (edit) { applyEditToReactiveState(edit, edit.from); historyTick++; }
+				}
+			} else if ((e.ctrlKey || e.metaKey) && ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key.toLowerCase() === 'y')) {
+				if (canRedo()) {
+					e.preventDefault();
+					const edit = redoLabelEdit();
+					if (edit) { applyEditToReactiveState(edit, edit.to); historyTick++; }
+				}
+			} else if (e.key === 'Escape' && hoveredKey !== null) {
+				hoveredKey = null;
+			}
+		}
+		document.addEventListener('keydown', handleKeydown);
+		return () => document.removeEventListener('keydown', handleKeydown);
+	});
 
 	function cancelRename() {
 		renamingDevice = null;
@@ -168,6 +244,7 @@
 	{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}
 	{@const isActive = $activeDeviceIndices.has(cfs.key)}
 	{@const isExpanded = expandedDevices.has(cfs.key)}
+	{@const dKey = deviceStorageKey(cfs.stream.device)}
 	<div class="multi-device">
 		<div class="multi-row">
 			{#if renaming === cfs.key}
@@ -184,14 +261,30 @@
 					aria-label="Rename device"
 				/>
 			{:else}
-				<button
-					class="pill"
-					class:active={isActive}
-					onclick={() => toggleDevice(cfs.key)}
-					ondblclick={() => startRename(cfs.key, label)}
-					aria-pressed={isActive}
-					title="Double-click to rename"
-				>{label}</button>
+				<div
+					class="pill-wrap"
+					role="group"
+					onmouseenter={() => openHover(cfs.key)}
+					onmouseleave={scheduleCloseHover}
+				>
+					<button
+						class="pill"
+						class:active={isActive}
+						onclick={() => toggleDevice(cfs.key)}
+						ondblclick={() => startRename(cfs.key, label)}
+						aria-pressed={isActive}
+						title="Double-click to rename"
+					>{label}</button>
+					{#if hoveredKey === cfs.key}
+						<LabelHistoryPopover
+							history={historyTick >= 0 ? getEditHistory(dKey ?? undefined) : []}
+							currentLabel={label}
+							deviceKey={dKey}
+							canUndoDevice={historyTick >= 0 && dKey != null && canUndoFor(dKey)}
+							onundo={() => { const e = undoLabelEdit(); if (e) { applyEditToReactiveState(e, e.from); historyTick++; } hoveredKey = null; }}
+						/>
+					{/if}
+				</div>
 			{/if}
 			<button
 				class="expand-btn"
@@ -229,6 +322,7 @@
 			{#each group.streams as cfs (cfs.key)}
 				{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}
 				{@const isActive = $activeDeviceIndices.has(cfs.key)}
+				{@const dKey = deviceStorageKey(cfs.stream.device)}
 				{#if renaming === cfs.key && renamingCh === group.channelKey}
 					<input
 						class="rename-input"
@@ -243,14 +337,30 @@
 						aria-label="Rename device"
 					/>
 				{:else}
-					<button
-						class="pill"
-						class:active={isActive}
-						onclick={() => toggleDevice(cfs.key)}
-						ondblclick={() => startRename(cfs.key, label, group.channelKey)}
-						aria-pressed={isActive}
-						title="Double-click to rename"
-					>{label}</button>
+					<div
+						class="pill-wrap"
+						role="group"
+						onmouseenter={() => openHover(cfs.key)}
+						onmouseleave={scheduleCloseHover}
+					>
+						<button
+							class="pill"
+							class:active={isActive}
+							onclick={() => toggleDevice(cfs.key)}
+							ondblclick={() => startRename(cfs.key, label, group.channelKey)}
+							aria-pressed={isActive}
+							title="Double-click to rename"
+						>{label}</button>
+						{#if hoveredKey === cfs.key}
+							<LabelHistoryPopover
+								history={historyTick >= 0 ? getEditHistory(dKey ?? undefined) : []}
+								currentLabel={label}
+								deviceKey={dKey}
+								canUndoDevice={historyTick >= 0 && dKey != null && canUndoFor(dKey)}
+								onundo={() => { const e = undoLabelEdit(); if (e) { applyEditToReactiveState(e, e.from); historyTick++; } hoveredKey = null; }}
+							/>
+						{/if}
+					</div>
 				{/if}
 			{/each}
 		</div>
@@ -442,6 +552,23 @@
 	}
 
 	/* ── Pills ───────────────────────────────────────────────────── */
+
+	.pill-wrap {
+		position: relative;
+		display: inline-flex;
+	}
+
+	/* Invisible bridge so mouseleave doesn't fire while crossing the gap
+	   between the pill bottom and the popover top (which is absolutely
+	   positioned below the pill-wrap's layout height). */
+	.pill-wrap::after {
+		content: '';
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		height: 10px;
+	}
 
 	.pill {
 		padding: 3px 10px;
