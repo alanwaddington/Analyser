@@ -248,12 +248,16 @@
 					else if (seriesSport !== 'running' && athleteProfile?.ftp != null) bands = ftpZoneBoundaries(athleteProfile.ftp);
 				}
 				if (bands) {
-					const sorted = [...bands].sort((a, b) => b.zone - a.zone);
-					const topZone = sorted[0];
-					const secondZone = sorted[1];
-					if (topZone && secondZone) {
-						topZoneStart = Math.max(topZoneStart, topZone.min);
-						z4Width = Math.max(z4Width, secondZone.max - secondZone.min);
+					// Clip at Z5/Z4 boundary regardless of total zone count (HR=5, CP=5, FTP=7).
+					// Sort ascending and take index 4 (Z5) and 3 (Z4). For a 5-zone model
+					// these are the top two zones; for a 7-zone model this deliberately
+					// ignores Z6/Z7 so the y-axis stays at ~1.20× threshold.
+					const asc = [...bands].sort((a, b) => a.zone - b.zone);
+					const clipZone = asc[Math.min(4, asc.length - 1)];
+					const prevZone = asc[Math.min(3, asc.length - 2)];
+					if (clipZone && prevZone) {
+						topZoneStart = Math.max(topZoneStart, clipZone.min);
+						z4Width = Math.max(z4Width, prevZone.max - prevZone.min);
 					}
 				}
 			}
