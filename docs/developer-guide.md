@@ -102,6 +102,9 @@ src/
 │   │   │             #   All line series use sampling: 'lttb' (Largest-Triangle-Three-Buckets) for
 │   │   │             #   automatic ECharts-side downsampling on large datasets (>2000 points warns)
 │   │   │             # - TimeSeriesChart.utils.ts: computeSeriesStats(), formatStatValue(), SeriesStats
+│   │             #   selectFtpBands(bands, useFullFtpZones): sorts + slices to 5 or 7 FTP zone bands
+│   │             #   computeZoneAxisCap(useFullFtpZones, ftpDataMax, zoneAxisMax): ECharts-safe axisCap
+│   │             #   shouldUseFullFtpZones(data, ftp): true when any point exceeds 120% FTP
 │   │   │             # - StripChart.svelte: metric strip chart wrapper (map tab)
 │   │   │             # - StripToggle.svelte: line/gradient pill toggle
 │   │   │             # - StripChart.utils.ts: shouldShowGradient(), GRADIENT_COLOUR_TOKEN
@@ -973,7 +976,21 @@ All three consumers receive `athleteProfile` and `sport` as props from their res
 <MeanMaxChart    athleteProfile={$athleteProfile} sport={$activities[0]?.sport ?? ''} ... />
 ```
 
-**`TimeSeriesChart.svelte`** — adds zone `markArea` bands per-series using each series' own `s.activity.sport` (not a chart-level `sport` prop). Running activities get CP zone bands (`cpZoneBoundaries`); cycling activities get FTP zone bands (`ftpZoneBoundaries`); HR channels get maxHR bands (`hrZoneBoundaries`), with cross-sport fallback and LTHR path. Each series attaches its own `markArea` so mixed-sport comparisons shade correctly.
+**`TimeSeriesChart.svelte`** — adds zone `markArea` bands per-series using each series' own `s.activity.sport` (not a chart-level `sport` prop). Running activities get CP zone bands (`cpZoneBoundaries`); cycling activities get adaptive FTP zone bands (`ftpZoneBoundaries` — see below); HR channels get maxHR bands (`hrZoneBoundaries`), with cross-sport fallback and LTHR path. Each series attaches its own `markArea` so mixed-sport comparisons shade correctly.
+
+**Adaptive FTP zone shading (PR #159):** `buildOption()` pre-computes all series data into a `dataCache` Map before zone/axis decisions. For cycling power charts with an FTP set, it scans the cache to find `ftpDataMax` (the max power value across all cycling series). Then:
+
+- `useFullFtpZones = ftpDataMax > ftp * 1.20` — when true, all 7 Coggan zones are shown and `zoneAxisMax` is cleared so the y-axis auto-scales to data.
+- When false, only Z1–Z5 are rendered and `zoneAxisMax` clips the y-axis at ~120% FTP for a compact view.
+
+Two pure helpers in `TimeSeriesChart.utils.ts` support this:
+
+| Helper | Signature | Description |
+|--------|-----------|-------------|
+| `selectFtpBands(bands, useFullFtpZones)` | `<T extends { zone: number }>(T[], boolean) → T[]` | Sorts bands by zone number and returns all 7 (7-zone mode) or the first 5 (5-zone mode). Does not mutate the input. |
+| `computeZoneAxisCap(useFullFtpZones, ftpDataMax, zoneAxisMax)` | `(boolean, number, number \| undefined) → number` | Returns `Math.ceil(ftpDataMax × 1.2)` in 7-zone mode (bounds the open-ended Z7 `markArea` band without ECharts `Infinity` errors), or `zoneAxisMax ?? 9999` in 5-zone mode. |
+
+The `dataCache` Map (`Map<number, [number, number | null][]>`) also eliminates redundant `buildData()` calls — the series loop reads from cache instead of recomputing. HR (5-zone) and CP running power (5-zone) zones are completely unaffected by this logic.
 
 **`MeanMaxChart.svelte`** — adds an FTP (cycling) or Critical Power (running) dashed `markLine`. Adds a second w/kg Y-axis when `weight` is set and `weight > 0`.
 

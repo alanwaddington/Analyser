@@ -189,7 +189,9 @@ When you have configured an [Athlete Profile](#8-athlete-profile), the Charts ta
 
 - **Heart Rate** — five colour bands (Z1–Z5) are drawn based on your sport-specific maximum heart rate (or LTHR when maxHR is absent). The bands update automatically if you change the profile.
 - **Power (running)** — five CP zone bands are drawn when you have set a Critical Power value and the activity is a running file with Stryd power data.
-- **Power (cycling)** — seven FTP zone bands (Coggan Z1–Z7 model) are drawn when you have set an FTP value and the activity is a cycling file.
+- **Power (cycling)** — FTP zone bands (Coggan model) are drawn when you have set an FTP value and the activity is a cycling file. The number of bands adapts to your data:
+  - **5 bands (Z1–Z5)** — shown when all power values stay below 120% FTP. The y-axis is clipped to the top of Z5, keeping the chart compact for aerobic rides.
+  - **7 bands (Z1–Z7)** — shown when any power value exceeds 120% FTP (i.e. data reaches Z6 or Z7). The y-axis auto-scales to your data so Z6 and Z7 shading is fully visible. The open-ended Z7 band is capped at 120% of your maximum recorded power to avoid stretching the chart excessively.
 
 Zone bands are drawn per-series — when multiple activities are loaded each series uses its own sport's zone model. Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.
 
@@ -668,7 +670,7 @@ Your settings are saved automatically when you leave each field (press **Enter**
 |-------|-------------|
 | **Charts tab — Heart Rate chart** | Z1–Z5 background shading bands based on sport-appropriate maxHR (or LTHR estimate) |
 | **Charts tab — Power chart (running)** | Z1–Z5 CP zone shading bands (Stryd power only) |
-| **Charts tab — Power chart (cycling)** | Z1–Z7 FTP zone shading bands (Coggan 7-zone model) |
+| **Charts tab — Power chart (cycling)** | Adaptive FTP zone shading: Z1–Z5 for aerobic efforts (≤120% FTP); Z1–Z7 when data reaches Z6/Z7 (>120% FTP) |
 | **Summary tab — Power rows** | % FTP (cycling) or % CP (running) column; w/kg column |
 | **Summary tab — Heart Rate row** | Zone badge (Z1–Z5) |
 | **Summary tab — Form Power ratio** | Stryd activities: Form Power as % of total power |
