@@ -16,6 +16,7 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 3.3 [Summary Tab](#33-summary-tab)
    - 3.4 [Mean/Max Tab](#34-meanmax-tab)
    - 3.5 [Map Tab](#35-map-tab)
+   - 3.6 [Record Filter](#36-record-filter)
 8. [Athlete Profile](#8-athlete-profile)
    - 8.1 [Opening the Profile Panel](#81-opening-the-profile-panel)
    - 8.2 [Profile Fields](#82-profile-fields)
@@ -32,10 +33,6 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 6.2 [Excel Export](#62-excel-export)
    - 6.3 [PNG Chart Export](#63-png-chart-export)
 7. [Syncing Device Labels Across Devices](#7-syncing-device-labels-across-devices)
-   - 7.1 [How Sync Works](#71-how-sync-works)
-   - 7.2 [Linking a Second Device](#72-linking-a-second-device)
-   - 7.3 [Sync Status and Errors](#73-sync-status-and-errors)
-   - 7.4 [Resetting Your Sync Identity](#74-resetting-your-sync-identity)
    - 7.1 [How Sync Works](#71-how-sync-works)
    - 7.2 [Linking a Second Device](#72-linking-a-second-device)
    - 7.3 [Sync Status and Errors](#73-sync-status-and-errors)
@@ -192,7 +189,7 @@ When you have configured an [Athlete Profile](#8-athlete-profile), the Charts ta
 
 - **Heart Rate** — five colour bands (Z1–Z5) are drawn based on your sport-specific maximum heart rate (or LTHR when maxHR is absent). The bands update automatically if you change the profile.
 - **Power (running)** — five CP zone bands are drawn when you have set a Critical Power value and the activity is a running file with Stryd power data.
-- **Power (cycling)** — five FTP zone bands (Coggan model) are drawn when you have set an FTP value and the activity is a cycling file.
+- **Power (cycling)** — seven FTP zone bands (Coggan Z1–Z7 model) are drawn when you have set an FTP value and the activity is a cycling file.
 
 Zone bands are drawn per-series — when multiple activities are loaded each series uses its own sport's zone model. Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.
 
@@ -307,6 +304,60 @@ The map and strip chart are linked in both directions:
 **Hover interaction (Charts tab):**
 
 Hovering over the map route also shows a crosshair on all open Charts-tab charts, letting you pinpoint exactly what your metrics were at a specific GPS location.
+
+---
+
+---
+
+### 3.6 Record Filter
+
+The **Filter** button in the toolbar lets you highlight specific portions of an activity — threshold power efforts, climbing sections, high-cadence intervals, or any combination — while greying out everything else.
+
+**Opening the filter panel:**
+
+Click the **Filter** button in the toolbar (next to the Device Toggle Bar). A compact dropdown panel appears. An active filter count badge (e.g. **2**) appears on the button when any constraint is set.
+
+**Setting a filter:**
+
+Each row in the panel has a channel label and two numeric inputs (**Min** and **Max**). Fill in one or both to constrain that channel. You can constrain multiple channels simultaneously — records must pass all active constraints to be highlighted.
+
+| Channel | Unit | Notes |
+|---------|------|-------|
+| Pace / Speed | min/km (running) or km/h (cycling) | Label switches automatically based on activity type |
+| Power | W | Label shows the power source: **Stryd Power**, **Running Power**, or **Power** |
+| Heart Rate | bpm | |
+| Cadence | spm (running) or rpm (cycling) | |
+| Gradient | % | Derived from altitude + distance. Only shown when altitude data is available. |
+
+Charts update in real time as you type — no apply button needed. Records that pass the filter are shown at full colour; records that fail are dimmed to grey.
+
+**Zone preset buttons:**
+
+When you have set up an [Athlete Profile](#8-athlete-profile), zone preset buttons (`Z1`, `Z2`, … up to `Z5` for HR/CP or `Z7` for FTP) appear below the Power and Heart Rate rows. Click a zone button to fill in the exact boundary values for that zone immediately.
+
+**Named presets:**
+
+At the top of the panel, quick-access preset pills appear based on your profile:
+
+| Preset | What it does |
+|--------|-------------|
+| **Above CP** | Filters to records where power ≥ your Critical Power (running) |
+| **Z4+ FTP** | Filters to records where power ≥ 90% of your FTP (cycling) |
+| **Z4+ HR** | Filters to records where heart rate is in zone 4 or above |
+| **Climbing** | Filters to records where gradient ≥ 2% |
+| **Downhill** | Filters to records where gradient ≤ −2% |
+
+Presets that require profile fields you haven't set are hidden automatically.
+
+**Invert filter:**
+
+Tick the **Invert filter** checkbox to flip the logic — records that would normally be greyed out become the highlighted ones. This is useful for viewing everything *except* a particular effort (e.g. "show me everything that isn't a sprint").
+
+**Clearing the filter:**
+
+Click **Clear all** in the panel footer, or click the × on each constraint individually. When no constraints are set, the badge disappears and all records are shown at full colour. Closing the panel (clicking outside it) does not clear the filter — the active filter persists while you work.
+
+> **Note:** The filter applies to the Charts tab time-series only. The delta plot and segment bar chart in Event Comparison always use full-course data so that split comparisons remain meaningful.
 
 ---
 
@@ -617,7 +668,7 @@ Your settings are saved automatically when you leave each field (press **Enter**
 |-------|-------------|
 | **Charts tab — Heart Rate chart** | Z1–Z5 background shading bands based on sport-appropriate maxHR (or LTHR estimate) |
 | **Charts tab — Power chart (running)** | Z1–Z5 CP zone shading bands (Stryd power only) |
-| **Charts tab — Power chart (cycling)** | Z1–Z5 FTP zone shading bands (Coggan model) |
+| **Charts tab — Power chart (cycling)** | Z1–Z7 FTP zone shading bands (Coggan 7-zone model) |
 | **Summary tab — Power rows** | % FTP (cycling) or % CP (running) column; w/kg column |
 | **Summary tab — Heart Rate row** | Zone badge (Z1–Z5) |
 | **Summary tab — Form Power ratio** | Stryd activities: Form Power as % of total power |
@@ -685,6 +736,9 @@ All overlays and columns are silently absent when the relevant profile field is 
 | Labels on second device are out of date | Sync has not triggered yet | Open the Sync panel — pulling happens automatically on load; refresh the page if needed |
 | Custom segments not appearing in Event Comparison | Files may be from a different course length | Segments are keyed by sport + distance (±100 m). Check that the loaded files match the course the segments were created for. |
 | Segment dialog did not appear after Shift+drag | Drag may have been too small | Try dragging a wider range (at least a few hundred metres). The dialog appears on mouse release. |
+| Filter button has a badge but charts look unchanged | Charts may still be loading or the filter is set to a range with no matching records | Check that the filter values correspond to data in the loaded file (e.g. a power min above the activity's max power will grey out everything) |
+| Gradient row is missing from the Filter panel | Activity has no altitude data | The gradient filter is automatically hidden for files that contain no altitude readings (e.g. some indoor recordings) |
+| Closing the Filter panel cleared my filter | The panel closing does not clear the filter — the badge on the button will still show the count | Use **Clear all** inside the panel to remove all constraints |
 | Sync panel shows "Setting up sync…" for a long time | Connectivity issue on first visit | Check your network; the sync identity is assigned locally first so labels still work offline |
 
 ---

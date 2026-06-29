@@ -33,6 +33,7 @@ This guide covers the technical internals of the Analyser application for contri
 3e. [Data Anomaly Detection](#3e-data-anomaly-detection)
 3f. [Athlete Profile](#3f-athlete-profile)
 3g. [Custom Event Segments](#3g-custom-event-segments)
+3h. [Record Filtering](#3h-record-filtering)
 4. [Responsive Layout](#4-responsive-layout)
 5. [FIT Parsing](#5-fit-parsing)
 6. [Testing](#6-testing)
@@ -67,9 +68,11 @@ src/
 │   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection, zone utilities, segment stats
 │   │                 # - anomalies.ts: detectAnomalies(), groupAnomalyEvents(), groupAnomaliesByChannel()
 │   │                 # - zones.ts: hrZone, hrZoneFromMaxHR, hrZoneFromLTHR, lthrToEstimatedMaxHR,
-│   │                 #   cpZone, ftpZone, ftpPct, cpPct, wPerKg,
-│   │                 #   hrZoneBoundaries, cpZoneBoundaries, ftpZoneBoundaries
+│   │                 #   cpZone, ftpZone (7-zone Coggan), ftpPct, cpPct, wPerKg,
+│   │                 #   hrZoneBoundaries, cpZoneBoundaries, ftpZoneBoundaries (7 bands)
 │   │                 #   All pure functions — no side effects. Re-exported from analytics/index.ts.
+│   │                 # - recordFilter.ts: applyRecordFilter(), deriveGradients(), filterRecords()
+│   │                 #   Pure functions for applying RecordFilter to ActivityRecord arrays (see §3h)
 │   │                 # - rss.ts: computeRSS(durationS, avgPower, cp) — Running Stress Score
 │   │                 #   Formula: (durationS × avgPower × IF²) / (CP × 3600), IF = avgPower / CP
 │   │                 #   Returns 0 when any input is zero or negative.
@@ -94,6 +97,8 @@ src/
 │   │   │             # - echarts-loader.ts: singleton loadECharts() — one dynamic import, cached for session
 │   │   │             # - chart-skeleton.css: shared shimmer skeleton styles used by all four chart components
 │   │   │             # - TimeSeriesChart.svelte: per-series stats row (min/avg/max, zoom-aware; pace inverted)
+│   │   │             #   activeRecordIndices prop (Map<activityId, Set<number>>): when provided, records
+│   │   │             #   not in the passing set render as grey 15%-opacity inactive series (see §3h)
 │   │   │             #   All line series use sampling: 'lttb' (Largest-Triangle-Three-Buckets) for
 │   │   │             #   automatic ECharts-side downsampling on large datasets (>2000 points warns)
 │   │   │             # - TimeSeriesChart.utils.ts: computeSeriesStats(), formatStatValue(), SeriesStats
@@ -110,6 +115,10 @@ src/
 │   ├── server/
 │   │   └── redis.ts  # Upstash Redis singleton (server-only)
 │   ├── stores/
+│   │   ├── filterStore.ts   # Record filter store (see §3h)
+│   │   │                     # - recordFilter: writable<RecordFilter>({})
+│   │   │                     # - activeFilterCount: derived — counts active channel constraints (0–5)
+│   │   │                     # - clearAllFilters(): resets recordFilter to {}
 │   │   ├── athleteProfile.ts # Athlete profile store + localStorage persistence (see §3f)
 │   │   │                     # - athleteProfile: writable<AthleteProfile>({})
 │   │   │                     # - setProfileField(key, value): updates store + persists; removes key if undefined/NaN
@@ -949,10 +958,10 @@ All functions are pure with no side effects. Every denominator function returns 
 | `ftpPct` | `(watts, ftp) → number` | `round((watts / ftp) * 100)`. Returns `0` when `ftp ≤ 0`. |
 | `cpPct` | `(watts, cp) → number` | `round((watts / cp) * 100)`. Returns `0` when `cp ≤ 0`. |
 | `wPerKg` | `(watts, weightKg) → number` | `round((watts / weightKg) * 10) / 10`. Returns `0` when `weightKg ≤ 0`. |
-| `ftpZone` | `(watts, ftp) → CpZone` | Coggan 5-zone FTP model (Z1 < 55%, Z2 55–75%, Z3 75–90%, Z4 90–105%, Z5 ≥ 105%) |
+| `ftpZone` | `(watts, ftp) → FtpZone` | Coggan 7-zone FTP model (Z1 < 55%, Z2 55–75%, Z3 75–90%, Z4 90–105%, Z5 105–120%, Z6 120–150%, Z7 ≥ 150%) |
 | `hrZoneBoundaries` | `(maxHR) → ZoneBand[]` | 5 contiguous `{ min, max, zone }` bands for ECharts `markArea` construction |
 | `cpZoneBoundaries` | `(cp) → ZoneBand[]` | 5 contiguous `{ min, max, zone }` bands for ECharts `markArea` construction (Stryd model) |
-| `ftpZoneBoundaries` | `(ftp) → ZoneBand[]` | 5 contiguous `{ min, max, zone }` bands for ECharts `markArea` construction (Coggan model) |
+| `ftpZoneBoundaries` | `(ftp) → ZoneBand[]` | 7 contiguous `{ min, max, zone }` bands for ECharts `markArea` construction (Coggan 7-zone model) |
 
 ### How the profile flows into the UI
 
@@ -1133,6 +1142,103 @@ When `customSegmentBands` are passed to the chart, each band edge becomes a drag
 4. `onDestroy` removes both window listeners and cleans up the `_brushGroupHandledMs` entry for the chart's group.
 
 `onSegmentResize(id, newStartDist, newEndDist)` is called with distances in metres; the Event page handler calls `resizeSegment()` and re-reads the store.
+
+---
+
+## 3h. Record Filtering
+
+PR #157 added a real-time record filter that lets users isolate segments of interest — threshold power efforts, climbing sections, high-cadence intervals — by constraining one or more channels. The filter applies to both the Compare and Event pages.
+
+### Filter store — `filterStore.ts`
+
+**Location:** `src/lib/stores/filterStore.ts`
+
+```ts
+interface ChannelRange {
+  min?: number;
+  max?: number;
+}
+
+interface RecordFilter {
+  speed?:     ChannelRange;  // km/h (or min/km for running pace)
+  power?:     ChannelRange;  // W
+  heartRate?: ChannelRange;  // bpm
+  cadence?:   ChannelRange;  // spm (running) or rpm (cycling)
+  gradient?:  ChannelRange;  // % grade derived from altitude+distance
+  inverted?:  boolean;       // when true, records that FAIL all rules are shown instead
+}
+```
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `recordFilter` | `Writable<RecordFilter>` | Global filter state; `{}` means no filter active |
+| `activeFilterCount` | `Derived<number>` | Count of channels with at least one bound set (0–5); drives the badge on the toggle button |
+| `clearAllFilters()` | `() => void` | Resets `recordFilter` to `{}` |
+
+### Filter engine — `recordFilter.ts`
+
+**Location:** `src/lib/analytics/recordFilter.ts`
+
+Three pure functions, zero side effects:
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `applyRecordFilter` | `(records, filter, gradients?) → Set<number>` | Returns the set of record indices that pass all active constraints. Missing values (`null`/`undefined`) pass by default. With `inverted: true`, the logic is flipped — the returned set contains indices that would normally fail. |
+| `deriveGradients` | `(records) → (number \| null)[]` | Derives % grade per record from consecutive altitude+distance deltas. Returns `null` where altitude is absent or distance did not change. O(n). |
+| `filterRecords` | `(records, passingIndices) → ActivityRecord[]` | Returns only the records whose index is in the passing set. Used where a filtered array is needed directly (e.g. MeanMax computation). |
+
+**Gradient passthrough for missing altitude:** If a record has no altitude, its gradient entry is `null` and it passes the gradient filter by default. This matches the behaviour for other channels with missing values.
+
+### `TimeSeriesChart` — split active/inactive rendering
+
+`TimeSeriesChart.svelte` accepts an optional `activeRecordIndices` prop:
+
+```ts
+activeRecordIndices?: Map<string, Set<number>>
+// key: activity.id — value: set of record indices that pass the filter
+```
+
+When provided, the chart splits each activity's data into two overlaid series:
+
+| Series | Records | Rendering |
+|--------|---------|-----------|
+| Active | Indices in `Set<number>` | Full colour, `z: 2` |
+| Inactive | All other indices | 15% opacity, grey (`#6b7280`), `z: -1` |
+
+The split uses the same `buildData()` function — active series fills in the record values for its indices and `null` elsewhere; inactive series does the inverse. ECharts connects segments across `null` gaps via `connectNulls: false` (default), which causes each contiguous run of active/inactive records to render as a separate segment with a gap at each transition.
+
+`DeltaChart` and `SegmentChart` on the Event page do NOT receive `activeRecordIndices` — the time-delta computation always uses full-course data to preserve meaningful split comparisons.
+
+**Reactivity note:** Reads inside closures passed to `flatMap` within `buildOption()` are not automatically tracked as Svelte 5 `$effect` dependencies. The chart rebuild effect explicitly declares `void activeRecordIndices;` in its dependency list to force re-evaluation when the filter changes.
+
+### `FilterPanel.svelte` component
+
+**Location:** `src/lib/components/ui/FilterPanel.svelte`
+
+A self-contained collapsible filter control rendered in the toolbar of both Compare and Event pages. It does not use `CollapsiblePanel` — it owns its own `expanded` state and renders its body as a `position: absolute` overlay so it cannot displace charts.
+
+Key props:
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `sport` | `string` | `'running'` or `'cycling'` — controls label text (`Pace` vs `Speed`) and cadence unit (`spm` vs `rpm`) |
+| `powerSource` | `'stryd' \| 'native' \| 'cycling' \| undefined` | Drives the power label (`Stryd Power`, `Running Power`, `Power`) |
+| `athleteProfile` | `AthleteProfile` | Used to build zone preset buttons and named presets |
+| `hasAltitude` | `boolean` | When `false`, the gradient row is hidden (indoor activities have no meaningful gradient) |
+
+**Named presets** — shown when the relevant profile field is set:
+
+| Preset | Condition | Filter applied |
+|--------|-----------|---------------|
+| Above CP | Running + CP set | Power ≥ CP value |
+| Z4+ FTP | Cycling + FTP set | Power ≥ 90% FTP |
+| Z4+ HR | maxHR or LTHR set | HR ≥ 80% maxHR (or ≥ 93% LTHR) |
+| Climbing | hasAltitude | Gradient ≥ 2% |
+| Downhill | hasAltitude | Gradient ≤ −2% |
+
+**Zone preset buttons** — rendered as `Z1`–`Z5` (HR, CP) or `Z1`–`Z7` (FTP) pill buttons below the relevant input row when the corresponding profile threshold is set. Clicking a zone button fills the min/max inputs with the exact zone boundaries and commits immediately.
+
+**Filter application** uses `oninput` events (not `onchange`) so charts update in real time as the user types. A `clickOutside` Svelte action closes the panel when focus moves elsewhere.
 
 ---
 

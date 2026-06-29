@@ -106,7 +106,7 @@
 <body>
 <h1 id="analyser--developer-guide">Analyser — Developer Guide</h1>
 <blockquote>
-<p><strong>Version:</strong> 1.9 · <strong>Last updated:</strong> June 2026</p>
+<p><strong>Version:</strong> 2.0 · <strong>Last updated:</strong> June 2026</p>
 </blockquote>
 <p>This guide covers the technical internals of the Analyser application for contributors and maintainers. It focuses on areas not already covered by inline code comments.</p>
 <hr>
@@ -137,7 +137,9 @@
 3c. <a href="#3c-chart-stats-row">Chart Stats Row</a>
 3d. <a href="#3d-activity-alignment--gps-anchor-and-indoor-detection">Activity Alignment — GPS Anchor</a>
 3e. <a href="#3e-data-anomaly-detection">Data Anomaly Detection</a>
-3f. <a href="#3f-athlete-profile">Athlete Profile</a></li>
+3f. <a href="#3f-athlete-profile">Athlete Profile</a>
+3g. <a href="#3g-custom-event-segments">Custom Event Segments</a>
+3h. <a href="#3h-record-filtering">Record Filtering</a></li>
 </ul>
 </li>
 <li><a href="#4-responsive-layout">Responsive Layout</a></li>
@@ -162,15 +164,19 @@ npm test           # vitest unit tests
 │   ├── align/        # Activity alignment (timestamp sync, distance interpolation)
 │   │                 # - distance.ts: interpolateToDistanceAxis, distanceStep(totalDistanceMetres)
 │   │                 #   distanceStep: ≤50 km → 10 m step; &gt;50 km → 20 m step (halves point count)
-│   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection, zone utilities
+│   ├── analytics/    # Smoothing, mean/max curves, summary statistics, anomaly detection, zone utilities, segment stats
 │   │                 # - anomalies.ts: detectAnomalies(), groupAnomalyEvents(), groupAnomaliesByChannel()
 │   │                 # - zones.ts: hrZone, hrZoneFromMaxHR, hrZoneFromLTHR, lthrToEstimatedMaxHR,
-│   │                 #   cpZone, ftpZone, ftpPct, cpPct, wPerKg,
-│   │                 #   hrZoneBoundaries, cpZoneBoundaries, ftpZoneBoundaries
+│   │                 #   cpZone, ftpZone (7-zone Coggan), ftpPct, cpPct, wPerKg,
+│   │                 #   hrZoneBoundaries, cpZoneBoundaries, ftpZoneBoundaries (7 bands)
 │   │                 #   All pure functions — no side effects. Re-exported from analytics/index.ts.
+│   │                 # - recordFilter.ts: applyRecordFilter(), deriveGradients(), filterRecords()
+│   │                 #   Pure functions for applying RecordFilter to ActivityRecord arrays (see §3h)
 │   │                 # - rss.ts: computeRSS(durationS, avgPower, cp) — Running Stress Score
 │   │                 #   Formula: (durationS × avgPower × IF²) / (CP × 3600), IF = avgPower / CP
 │   │                 #   Returns 0 when any input is zero or negative.
+│   │                 # - segmentStats.ts: computeSegmentStats(activity, segment, profile?) → SegmentStats
+│   │                 #   Computes time, avgPace, avgPower, maxPower, powerPct, avgHR, hrZones (see §3g)
 │   │                 # - stats.ts: mean(), stdDev() — population statistics ignoring null/NaN
 │   │                 # - downsample.ts: downsampleGps(points, maxPoints, epsilon) — GPS polyline
 │   │                 #   simplification; GPS_MAX_POINTS=500 hard cap; iterative RDP (explicit stack,
@@ -190,6 +196,8 @@ npm test           # vitest unit tests
 │   │   │             # - echarts-loader.ts: singleton loadECharts() — one dynamic import, cached for session
 │   │   │             # - chart-skeleton.css: shared shimmer skeleton styles used by all four chart components
 │   │   │             # - TimeSeriesChart.svelte: per-series stats row (min/avg/max, zoom-aware; pace inverted)
+│   │   │             #   activeRecordIndices prop (Map&lt;activityId, Set&lt;number&gt;&gt;): when provided, records
+│   │   │             #   not in the passing set render as grey 15%-opacity inactive series (see §3h)
 │   │   │             #   All line series use sampling: &#39;lttb&#39; (Largest-Triangle-Three-Buckets) for
 │   │   │             #   automatic ECharts-side downsampling on large datasets (&gt;2000 points warns)
 │   │   │             # - TimeSeriesChart.utils.ts: computeSeriesStats(), formatStatValue(), SeriesStats
@@ -206,13 +214,21 @@ npm test           # vitest unit tests
 │   ├── server/
 │   │   └── redis.ts  # Upstash Redis singleton (server-only)
 │   ├── stores/
+│   │   ├── filterStore.ts   # Record filter store (see §3h)
+│   │   │                     # - recordFilter: writable&lt;RecordFilter&gt;({})
+│   │   │                     # - activeFilterCount: derived — counts active channel constraints (0–5)
+│   │   │                     # - clearAllFilters(): resets recordFilter to {}
 │   │   ├── athleteProfile.ts # Athlete profile store + localStorage persistence (see §3f)
 │   │   │                     # - athleteProfile: writable&lt;AthleteProfile&gt;({})
 │   │   │                     # - setProfileField(key, value): updates store + persists; removes key if undefined/NaN
 │   │   │                     # - initAthleteProfile(): loads from localStorage; SSR-safe (typeof localStorage guard)
 │   │   │                     # - Storage key: &#39;analyser-athlete-profile&#39;; quota errors surface as toast warnings
+│   │   ├── customSegments.ts # Custom event segment CRUD + localStorage (see §3g)
+│   │   │                     # - Storage key: &#39;analyser-custom-segments&#39;; keyed by courseKey()
+│   │   │                     # - getSegments/addSegment/renameSegment/resizeSegment/removeSegment
+│   │   │                     # - getAllSegments/replaceAllSegments/setOnSegmentChange (sync hooks)
 │   │   ├── deviceLabels.ts  # Device label persistence (localStorage)
-│   │   ├── sync.ts          # Cross-device sync logic
+│   │   ├── sync.ts          # Cross-device sync logic (labels + segments)
 │   │   ├── session.ts       # Activity session state; activityColourMap assigns stable colours by activity.id
 │   │   ├── toast.ts         # Transient toast notification store (addToast, removeToast, auto-dismiss)
 │   │   └── viewport.ts      # Responsive breakpoint store
@@ -227,7 +243,8 @@ npm test           # vitest unit tests
 │   │                 # - formatting.ts: formatPace(decimalMinutes) → &quot;M:SS&quot; string — single source of truth for pace display
 │   │                 # - indoorWarnings.svelte.ts: createIndoorWarnings() composable
 │   │                 # - lapMarkers.ts: buildLapMarkers()
-│   │                 # - segments.ts: buildSegments()
+│   │                 # - segments.ts: buildSegments(activity, customSegments?) — auto-laps first,
+│   │                 #   then custom segments appended with custom: true flag and id (see §3g)
 │   │                 # - summaryContext.ts: buildCellContext(ch, avg, sport, profile) → CellContext
 │   │                 #   Derives % FTP / % CP label, w/kg, and HR zone for a summary table cell.
 │   │                 #   Returns null when no relevant profile field applies.
@@ -235,6 +252,7 @@ npm test           # vitest unit tests
 │   └── types.ts      # Domain types
 │                     # - Anomaly, AnomalyType, DetectionStrategy, AnomalyDetectionOptions
 │                     # - ChannelKey now includes &#39;position&#39; (GPS-only; no numeric series, badge-only via DeviceToggleBar GPS section)
+│                     # - CustomSegment { id: string; name: string; startDist: number; endDist: number } (metres)
 │                     # - GpsPointWithDistance: lat, lon, distance, recordIndex (O(1) metric lookup)
 │                     # - GpsPointWithMetric extends GpsPointWithDistance: metricValue
 └── routes/
@@ -343,19 +361,26 @@ export function loadECharts(): Promise&lt;EChartsModule&gt; {
   crypto.randomUUID() → uuid
   deriveShortCode(uuid) → shortCode
   localStorage: SYNC_ID_KEY, SYNC_CODE_KEY
-  PUT /api/labels/{uuid} → seed remote with current labels
+  PUT /api/labels/{uuid} → seed remote with current labels + segments
 
 Returning visit:
   Read uuid / shortCode from localStorage
-  GET /api/labels/{uuid} → pull remote labels → replaceAllLabels()
+  GET /api/labels/{uuid} → pull remote labels + segments
+    → replaceAllLabels(), replaceAllSegments() (if segments present)
 
 Label change (any visit):
   setOnLabelChange hook → pushLabels(uuid, shortCode) [fire and forget]
+    (push includes current segments alongside labels)
+
+Segment change (any visit):
+  setOnSegmentChange hook → pushLabels(uuid, shortCode) [fire and forget]
 
 Adopt external identity (QR / copy-link / short code):
   adoptSyncIdentity(uuid) → store uuid in localStorage → pullLabels(uuid)
+    (pull applies both labels and segments from remote)
 
 Reset identity:
+  DELETE /api/labels/{oldUuid} → remove old labels + segments [fire and forget]
   crypto.randomUUID() → new uuid
   localStorage cleared of old identity
   pushLabels(newUuid, newShortCode) → seed remote under new identity
@@ -404,7 +429,7 @@ Reset identity:
 <tr>
 <td><code>resetSyncIdentity()</code></td>
 <td><code>async</code></td>
-<td>Generate fresh UUID, push current labels under it.</td>
+<td>Fire-and-forget <code>DELETE</code> on old UUID, then generate fresh UUID and push current labels + segments under it.</td>
 </tr>
 <tr>
 <td><code>deriveShortCode(uuid)</code></td>
@@ -631,8 +656,9 @@ interface Toast {
 </tbody></table>
 <h3 id="37-api-routes">3.7 API Routes</h3>
 <p>See the full API reference in <a href="api-reference.md"><code>docs/api-reference.md</code></a>.</p>
-<p><strong><code>GET /api/labels/[uuid]</code></strong> — returns <code>{ labels }</code> or 404.</p>
-<p><strong><code>PUT /api/labels/[uuid]</code></strong> — expects <code>{ labels: Record&lt;string,string&gt;, shortCode: string }</code>. Writes both <code>labels:{uuid}</code> and <code>code:{shortCode}</code> to Redis with a 90-day TTL.</p>
+<p><strong><code>GET /api/labels/[uuid]</code></strong> — returns <code>{ labels, segments? }</code> or 404. The <code>segments</code> field is included when custom segments have been stored for that identity.</p>
+<p><strong><code>PUT /api/labels/[uuid]</code></strong> — expects <code>{ labels: Record&lt;string,string&gt;, shortCode: string, segments?: Record&lt;string, CustomSegment[]&gt; }</code>. Writes <code>labels:{uuid}</code>, <code>code:{shortCode}</code>, and (when provided) <code>segments:{uuid}</code> to Redis with a 90-day TTL.</p>
+<p><strong><code>DELETE /api/labels/[uuid]</code></strong> — deletes <code>labels:{uuid}</code> and <code>segments:{uuid}</code>. Called by <code>resetSyncIdentity()</code> as a fire-and-forget cleanup before establishing a new identity. The <code>code:{shortCode}</code> key is left to expire via TTL.</p>
 <p><strong><code>GET /api/labels/resolve/[code]</code></strong> — resolves short code to UUID. Rate-limited at 10 req/min/IP via Redis <code>INCR</code>/<code>EXPIRE</code> pipeline (globally enforced across all Vercel instances). Responds 429 with <code>Retry-After</code> header on limit exceeded; fails open if Redis is unavailable.</p>
 <p>All routes validate inputs against <code>UUID_REGEX</code> / <code>SHORT_CODE_REGEX</code> from <code>src/lib/validation.ts</code> and return structured JSON errors on 400/404/429/500.</p>
 <h3 id="38-syncpanel-component">3.8 SyncPanel Component</h3>
@@ -1271,8 +1297,8 @@ groupAnomalyEvents(activity.anomalies.filter(a =&gt; a.channel === &#39;heartRat
 </tr>
 <tr>
 <td><code>ftpZone</code></td>
-<td><code>(watts, ftp) → CpZone</code></td>
-<td>Coggan 5-zone FTP model (Z1 &lt; 55%, Z2 55–75%, Z3 75–90%, Z4 90–105%, Z5 ≥ 105%)</td>
+<td><code>(watts, ftp) → FtpZone</code></td>
+<td>Coggan 7-zone FTP model (Z1 &lt; 55%, Z2 55–75%, Z3 75–90%, Z4 90–105%, Z5 105–120%, Z6 120–150%, Z7 ≥ 150%)</td>
 </tr>
 <tr>
 <td><code>hrZoneBoundaries</code></td>
@@ -1287,7 +1313,7 @@ groupAnomalyEvents(activity.anomalies.filter(a =&gt; a.channel === &#39;heartRat
 <tr>
 <td><code>ftpZoneBoundaries</code></td>
 <td><code>(ftp) → ZoneBand[]</code></td>
-<td>5 contiguous <code>{ min, max, zone }</code> bands for ECharts <code>markArea</code> construction (Coggan model)</td>
+<td>7 contiguous <code>{ min, max, zone }</code> bands for ECharts <code>markArea</code> construction (Coggan 7-zone model)</td>
 </tr>
 </tbody></table>
 <h3 id="how-the-profile-flows-into-the-ui">How the profile flows into the UI</h3>
@@ -1316,6 +1342,320 @@ onMount(() =&gt; { mounted = true; });
 {#if mounted}&lt;AthleteProfilePanel /&gt;{/if}
 </code></pre>
 <p>This prevents an SSR hydration crash where the panel&#39;s <code>&lt;button&gt;</code> element was absent from server-rendered HTML, causing Svelte 5&#39;s <code>sibling()</code> to consume the wrong DOM node. The workaround causes the Profile toggle button to appear only after client hydration (brief FOUC on first load). Tracked in issue #151.</p>
+<hr>
+<h2 id="3g-custom-event-segments">3g. Custom Event Segments</h2>
+<p>PR #156 added user-defined course sections (&quot;custom segments&quot;) to the Event Comparison view. Users hold Shift and drag on any time-series chart to select a distance range, name the segment, and have it persist across sessions for the same course.</p>
+<h3 id="domain-type--customsegment">Domain type — `CustomSegment`</h3>
+<p><strong>Location:</strong> <code>src/lib/types.ts</code></p>
+<pre><code class="language-ts">interface CustomSegment {
+  id:        string;  // UUID generated at creation
+  name:      string;  // user-supplied label
+  startDist: number;  // metres from activity start
+  endDist:   number;  // metres from activity start
+}
+</code></pre>
+<h3 id="segment-store--customsegmentsts">Segment store — `customSegments.ts`</h3>
+<p><strong>Location:</strong> <code>src/lib/stores/customSegments.ts</code></p>
+<p>Segments are stored in <code>localStorage</code> under the key <code>&#39;analyser-custom-segments&#39;</code> as a <code>Record&lt;courseKey, CustomSegment[]&gt;</code>. An in-memory write-through cache (<code>_cache</code>) avoids repeated JSON parse on every read.</p>
+<h4 id="course-identity-key">Course identity key</h4>
+<pre><code class="language-ts">courseKey(activity: Activity): string
+// Format: `${sport}:${Math.round(totalDistance / 100)}`
+// Example: &#39;running:50&#39; for a 5.0 km parkrun
+</code></pre>
+<p>Rounding to the nearest 100 m tolerates GPS drift between sessions: a course recorded as 5.01 km and one as 4.98 km both resolve to <code>&#39;running:50&#39;</code>, sharing the same segment set.</p>
+<h4 id="public-api">Public API</h4>
+<table>
+<thead>
+<tr>
+<th>Export</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>courseKey(activity)</code></td>
+<td>Derive the stable course identity key</td>
+</tr>
+<tr>
+<td><code>getSegments(key)</code></td>
+<td>Return a shallow copy of all segments for a course (empty array if none)</td>
+</tr>
+<tr>
+<td><code>addSegment(key, name, startDist, endDist)</code></td>
+<td>Add a new segment; generates a UUID id. Fires <code>_onSegmentChange</code></td>
+</tr>
+<tr>
+<td><code>renameSegment(key, id, newName)</code></td>
+<td>Rename by id; no-op if id not found. Fires <code>_onSegmentChange</code></td>
+</tr>
+<tr>
+<td><code>resizeSegment(key, id, startDist, endDist)</code></td>
+<td>Update distance bounds by id; no-op if id not found. Fires <code>_onSegmentChange</code></td>
+</tr>
+<tr>
+<td><code>removeSegment(key, id)</code></td>
+<td>Remove by id; no-op if id not found. Fires <code>_onSegmentChange</code></td>
+</tr>
+<tr>
+<td><code>getAllSegments()</code></td>
+<td>Return a shallow copy of the full cache (for sync serialisation)</td>
+</tr>
+<tr>
+<td><code>replaceAllSegments(map)</code></td>
+<td>Bulk-overwrite cache and localStorage (sync pull — does NOT fire onChange)</td>
+</tr>
+<tr>
+<td><code>setOnSegmentChange(fn | null)</code></td>
+<td>Register/deregister the callback invoked after every user-initiated write</td>
+</tr>
+</tbody></table>
+<p><code>getSegments()</code> returns a copy (not the live array) so Svelte reactivity can detect changes when callers reassign their local variable from the return value.</p>
+<p><code>localStorage</code> quota errors surface as <code>&#39;warning&#39;</code> toasts via <code>addToast()</code>, matching the pattern used by <code>deviceLabels.ts</code> and <code>athleteProfile.ts</code>.</p>
+<h4 id="sync-integration">Sync integration</h4>
+<p><code>customSegments.ts</code> mirrors the <code>deviceLabels.ts</code> pattern: <code>setOnSegmentChange</code> lets <code>sync.ts</code> register a push callback during <code>initSync()</code>. After that, any user-initiated segment write (add/rename/resize/remove) automatically triggers a <code>pushLabels()</code> call that includes the full segment map alongside labels. On pull, <code>replaceAllSegments()</code> is called when the response contains a <code>segments</code> field.</p>
+<h3 id="segment-stats-engine--segmentstatsts">Segment stats engine — `segmentStats.ts`</h3>
+<p><strong>Location:</strong> <code>src/lib/analytics/segmentStats.ts</code></p>
+<p><code>computeSegmentStats(activity, segment, profile?)</code> returns a <code>SegmentStats</code> object for one activity over one segment:</p>
+<pre><code class="language-ts">interface SegmentStats {
+  time:        number;         // seconds
+  avgPace:     number | null;  // min/km
+  avgPower:    number | null;  // watts
+  maxPower:    number | null;  // watts
+  powerPct:    number | null;  // % CP (running) or % FTP (cycling); null when no profile threshold
+  powerLabel:  string;         // &#39;Stryd&#39; | &#39;Running Power&#39; | &#39;Power&#39;
+  avgHR:       number | null;  // bpm
+  hrZones:     number[] | null; // [z1%, z2%, z3%, z4%, z5%] — null when no HR threshold set
+}
+</code></pre>
+<p><strong>Time computation</strong> uses <code>timeAtDistance()</code> from <code>src/lib/compare/delta.ts</code> — linear interpolation on the distance axis, matching the same logic used by the delta chart. This ensures the segment time matches the delta plot value.</p>
+<p><strong>Power label</strong> is derived from <code>activity.powerSource</code> (<code>&#39;stryd&#39;</code> → <code>&#39;Stryd&#39;</code>; <code>&#39;native&#39;</code> → <code>&#39;Running Power&#39;</code>; otherwise <code>&#39;Power&#39;</code>).</p>
+<p><strong>HR zone distribution</strong> is computed only when <code>profile</code> is provided and at least one of <code>maxHrRunning</code>, <code>maxHrCycling</code>, or <code>lthr</code> is set. Each record in the segment is classified into a zone via <code>hrZone()</code> from <code>src/lib/analytics/zones.ts</code>, and the result is expressed as integer percentages summing to ≈100.</p>
+<h3 id="buildsegments--custom-segment-merging">`buildSegments()` — custom segment merging</h3>
+<p><strong>Location:</strong> <code>src/lib/utils/segments.ts</code></p>
+<p><code>buildSegments(activity, customSegments?)</code> accepts an optional <code>CustomSegment[]</code> second argument. Custom segments are appended <strong>after</strong> auto-lap or kilometre-split segments, each tagged with <code>custom: true</code> and <code>id</code>:</p>
+<pre><code class="language-ts">// Auto-lap result:
+{ label: &#39;Lap 1&#39;, startDist: 0, endDist: 1000 }
+
+// Custom segment result:
+{ label: &#39;The Hill&#39;, startDist: 1200, endDist: 2400, custom: true, id: &#39;abc-123&#39; }
+</code></pre>
+<p>The <code>custom</code> and <code>id</code> fields are used by:</p>
+<ul>
+<li><code>event/+page.svelte</code> to identify which segments to show resize handles for</li>
+<li><code>SegmentManager.svelte</code> to identify which segments can be renamed/deleted</li>
+</ul>
+<h3 id="segmentmanagersvelte-component">`SegmentManager.svelte` component</h3>
+<p><strong>Location:</strong> <code>src/lib/components/ui/SegmentManager.svelte</code></p>
+<p>A collapsible toolbar panel that lets users view, rename, delete, export, and import custom segments for the current course. It is shown only on the Event page when <code>currentCourseKey</code> is non-null (i.e. at least one activity is loaded).</p>
+<p>Key props:</p>
+<table>
+<thead>
+<tr>
+<th>Prop</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>courseKey</code></td>
+<td><code>string</code></td>
+<td>The active course identity key</td>
+</tr>
+<tr>
+<td><code>segments</code></td>
+<td><code>CustomSegment[]</code></td>
+<td>Current segment list (read-only display)</td>
+</tr>
+<tr>
+<td><code>onchange</code></td>
+<td><code>() =&gt; void</code></td>
+<td>Called after any mutation so the page re-reads from the store</td>
+</tr>
+</tbody></table>
+<p>Export writes a JSON file (<code>analyser-segments-&lt;date&gt;.json</code>) containing a <code>{ courseKey, segments }</code> envelope. Import validates that <code>startDist &lt; endDist</code> for every entry and rejects the file with a toast error if any segment is malformed.</p>
+<h3 id="timeserieschartsvelte--shiftdrag-and-resize">`TimeSeriesChart.svelte` — Shift+drag and resize</h3>
+<p><strong>Location:</strong> <code>src/lib/components/charts/TimeSeriesChart.svelte</code></p>
+<p>Two new interaction modes are added when the <code>resizeActive</code> prop is <code>true</code> (Event page only):</p>
+<h4 id="shiftdrag--segment-creation">Shift+drag — segment creation</h4>
+<p>When the user holds Shift, ECharts brush mode is enabled (<code>brushType: &#39;lineX&#39;</code>). On brush end, the selected x-axis range is converted to metres and emitted via the <code>onBrushSelect</code> prop. The Event page receives this and opens a name-prompt dialog.</p>
+<p>ECharts <code>connect()</code> links all chart instances in the <code>groupId</code> group. To prevent a brush selection on one chart from firing <code>brushEnd</code> on all connected charts, a module-level <code>_brushGroupHandledMs</code> map (keyed by <code>groupId</code>) deduplicates the event: only the first handler within the same millisecond advances; subsequent calls are no-ops.</p>
+<h4 id="resize-drag-handles">Resize drag handles</h4>
+<p>When <code>customSegmentBands</code> are passed to the chart, each band edge becomes a drag target:</p>
+<ol>
+<li>A ZRender <code>mousemove</code> handler checks proximity (&lt; 8 px) to any segment boundary and sets <code>cursor: col-resize</code>.</li>
+<li>A ZRender <code>mousedown</code> handler (when near a boundary) begins a drag: stores <code>{ segId, side, oppositeKm }</code>, disables <code>dataZoom inside</code>, and calls <code>e.stop()</code> to prevent ECharts from also handling the event.</li>
+<li>Window-level <code>mousemove</code> / <code>mouseup</code> handlers track the drag out-of-canvas and commit the resize via the <code>onSegmentResize</code> prop on <code>mouseup</code>.</li>
+<li><code>onDestroy</code> removes both window listeners and cleans up the <code>_brushGroupHandledMs</code> entry for the chart&#39;s group.</li>
+</ol>
+<p><code>onSegmentResize(id, newStartDist, newEndDist)</code> is called with distances in metres; the Event page handler calls <code>resizeSegment()</code> and re-reads the store.</p>
+<hr>
+<h2 id="3h-record-filtering">3h. Record Filtering</h2>
+<p>PR #157 added a real-time record filter that lets users isolate segments of interest — threshold power efforts, climbing sections, high-cadence intervals — by constraining one or more channels. The filter applies to both the Compare and Event pages.</p>
+<h3 id="filter-store--filterstorets">Filter store — `filterStore.ts`</h3>
+<p><strong>Location:</strong> <code>src/lib/stores/filterStore.ts</code></p>
+<pre><code class="language-ts">interface ChannelRange {
+  min?: number;
+  max?: number;
+}
+
+interface RecordFilter {
+  speed?:     ChannelRange;  // km/h (or min/km for running pace)
+  power?:     ChannelRange;  // W
+  heartRate?: ChannelRange;  // bpm
+  cadence?:   ChannelRange;  // spm (running) or rpm (cycling)
+  gradient?:  ChannelRange;  // % grade derived from altitude+distance
+  inverted?:  boolean;       // when true, records that FAIL all rules are shown instead
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Export</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>recordFilter</code></td>
+<td><code>Writable&lt;RecordFilter&gt;</code></td>
+<td>Global filter state; <code>{}</code> means no filter active</td>
+</tr>
+<tr>
+<td><code>activeFilterCount</code></td>
+<td><code>Derived&lt;number&gt;</code></td>
+<td>Count of channels with at least one bound set (0–5); drives the badge on the toggle button</td>
+</tr>
+<tr>
+<td><code>clearAllFilters()</code></td>
+<td><code>() =&gt; void</code></td>
+<td>Resets <code>recordFilter</code> to <code>{}</code></td>
+</tr>
+</tbody></table>
+<h3 id="filter-engine--recordfilterts">Filter engine — `recordFilter.ts`</h3>
+<p><strong>Location:</strong> <code>src/lib/analytics/recordFilter.ts</code></p>
+<p>Three pure functions, zero side effects:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Signature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>applyRecordFilter</code></td>
+<td><code>(records, filter, gradients?) → Set&lt;number&gt;</code></td>
+<td>Returns the set of record indices that pass all active constraints. Missing values (<code>null</code>/<code>undefined</code>) pass by default. With <code>inverted: true</code>, the logic is flipped — the returned set contains indices that would normally fail.</td>
+</tr>
+<tr>
+<td><code>deriveGradients</code></td>
+<td><code>(records) → (number | null)[]</code></td>
+<td>Derives % grade per record from consecutive altitude+distance deltas. Returns <code>null</code> where altitude is absent or distance did not change. O(n).</td>
+</tr>
+<tr>
+<td><code>filterRecords</code></td>
+<td><code>(records, passingIndices) → ActivityRecord[]</code></td>
+<td>Returns only the records whose index is in the passing set. Used where a filtered array is needed directly (e.g. MeanMax computation).</td>
+</tr>
+</tbody></table>
+<p><strong>Gradient passthrough for missing altitude:</strong> If a record has no altitude, its gradient entry is <code>null</code> and it passes the gradient filter by default. This matches the behaviour for other channels with missing values.</p>
+<h3 id="timeserieschart--split-activeinactive-rendering">`TimeSeriesChart` — split active/inactive rendering</h3>
+<p><code>TimeSeriesChart.svelte</code> accepts an optional <code>activeRecordIndices</code> prop:</p>
+<pre><code class="language-ts">activeRecordIndices?: Map&lt;string, Set&lt;number&gt;&gt;
+// key: activity.id — value: set of record indices that pass the filter
+</code></pre>
+<p>When provided, the chart splits each activity&#39;s data into two overlaid series:</p>
+<table>
+<thead>
+<tr>
+<th>Series</th>
+<th>Records</th>
+<th>Rendering</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Active</td>
+<td>Indices in <code>Set&lt;number&gt;</code></td>
+<td>Full colour, <code>z: 2</code></td>
+</tr>
+<tr>
+<td>Inactive</td>
+<td>All other indices</td>
+<td>15% opacity, grey (<code>#6b7280</code>), <code>z: -1</code></td>
+</tr>
+</tbody></table>
+<p>The split uses the same <code>buildData()</code> function — active series fills in the record values for its indices and <code>null</code> elsewhere; inactive series does the inverse. ECharts connects segments across <code>null</code> gaps via <code>connectNulls: false</code> (default), which causes each contiguous run of active/inactive records to render as a separate segment with a gap at each transition.</p>
+<p><code>DeltaChart</code> and <code>SegmentChart</code> on the Event page do NOT receive <code>activeRecordIndices</code> — the time-delta computation always uses full-course data to preserve meaningful split comparisons.</p>
+<p><strong>Reactivity note:</strong> Reads inside closures passed to <code>flatMap</code> within <code>buildOption()</code> are not automatically tracked as Svelte 5 <code>$effect</code> dependencies. The chart rebuild effect explicitly declares <code>void activeRecordIndices;</code> in its dependency list to force re-evaluation when the filter changes.</p>
+<h3 id="filterpanelsvelte-component">`FilterPanel.svelte` component</h3>
+<p><strong>Location:</strong> <code>src/lib/components/ui/FilterPanel.svelte</code></p>
+<p>A self-contained collapsible filter control rendered in the toolbar of both Compare and Event pages. It does not use <code>CollapsiblePanel</code> — it owns its own <code>expanded</code> state and renders its body as a <code>position: absolute</code> overlay so it cannot displace charts.</p>
+<p>Key props:</p>
+<table>
+<thead>
+<tr>
+<th>Prop</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sport</code></td>
+<td><code>string</code></td>
+<td><code>&#39;running&#39;</code> or <code>&#39;cycling&#39;</code> — controls label text (<code>Pace</code> vs <code>Speed</code>) and cadence unit (<code>spm</code> vs <code>rpm</code>)</td>
+</tr>
+<tr>
+<td><code>powerSource</code></td>
+<td><code>&#39;stryd&#39; | &#39;native&#39; | &#39;cycling&#39; | undefined</code></td>
+<td>Drives the power label (<code>Stryd Power</code>, <code>Running Power</code>, <code>Power</code>)</td>
+</tr>
+<tr>
+<td><code>athleteProfile</code></td>
+<td><code>AthleteProfile</code></td>
+<td>Used to build zone preset buttons and named presets</td>
+</tr>
+<tr>
+<td><code>hasAltitude</code></td>
+<td><code>boolean</code></td>
+<td>When <code>false</code>, the gradient row is hidden (indoor activities have no meaningful gradient)</td>
+</tr>
+</tbody></table>
+<p><strong>Named presets</strong> — shown when the relevant profile field is set:</p>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>Condition</th>
+<th>Filter applied</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Above CP</td>
+<td>Running + CP set</td>
+<td>Power ≥ CP value</td>
+</tr>
+<tr>
+<td>Z4+ FTP</td>
+<td>Cycling + FTP set</td>
+<td>Power ≥ 90% FTP</td>
+</tr>
+<tr>
+<td>Z4+ HR</td>
+<td>maxHR or LTHR set</td>
+<td>HR ≥ 80% maxHR (or ≥ 93% LTHR)</td>
+</tr>
+<tr>
+<td>Climbing</td>
+<td>hasAltitude</td>
+<td>Gradient ≥ 2%</td>
+</tr>
+<tr>
+<td>Downhill</td>
+<td>hasAltitude</td>
+<td>Gradient ≤ −2%</td>
+</tr>
+</tbody></table>
+<p><strong>Zone preset buttons</strong> — rendered as <code>Z1</code>–<code>Z5</code> (HR, CP) or <code>Z1</code>–<code>Z7</code> (FTP) pill buttons below the relevant input row when the corresponding profile threshold is set. Clicking a zone button fills the min/max inputs with the exact zone boundaries and commits immediately.</p>
+<p><strong>Filter application</strong> uses <code>oninput</code> events (not <code>onchange</code>) so charts update in real time as the user types. A <code>clickOutside</code> Svelte action closes the panel when focus moves elsewhere.</p>
 <hr>
 <h2 id="4-responsive-layout">4. Responsive Layout</h2>
 <p>The app is fully responsive across three viewport tiers. Breakpoints are defined in two places that must stay in sync:</p>
