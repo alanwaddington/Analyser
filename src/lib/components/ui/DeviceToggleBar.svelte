@@ -14,7 +14,9 @@
 		deviceStorageKey,
 		recordEdit,
 		undoLabelEdit,
+		redoLabelEdit,
 		canUndo,
+		canRedo,
 		getEditHistory,
 	} from '$lib/stores/deviceLabels';
 	import { buildAnomalyCounts } from './DeviceToggleBar.utils';
@@ -139,16 +141,18 @@
 	}
 
 	$effect(() => {
-		function handleUndo(e: KeyboardEvent) {
-			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && renamingDevice === null) {
-				if (canUndo()) {
-					e.preventDefault();
-					undoLabelEdit();
-				}
+		function handleKeydown(e: KeyboardEvent) {
+			if (renamingDevice !== null) return;
+			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+				if (canUndo()) { e.preventDefault(); undoLabelEdit(); }
+			} else if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
+				if (canRedo()) { e.preventDefault(); redoLabelEdit(); }
+			} else if (e.key === 'Escape' && hoveredKey !== null) {
+				hoveredKey = null;
 			}
 		}
-		document.addEventListener('keydown', handleUndo);
-		return () => document.removeEventListener('keydown', handleUndo);
+		document.addEventListener('keydown', handleKeydown);
+		return () => document.removeEventListener('keydown', handleKeydown);
 	});
 
 	function cancelRename() {
