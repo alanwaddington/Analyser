@@ -2,40 +2,39 @@ import FitParser from 'fit-file-parser';
 import type { ParseWorkerInput, ParseWorkerMessage, ToastMessage } from '../types';
 import { normalise } from './parser';
 
-self.onmessage = (e: MessageEvent<ParseWorkerInput>) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const workerSelf = self as any;
+
+function post(msg: ParseWorkerMessage): void {
+	workerSelf.postMessage(msg);
+}
+
+workerSelf.onmessage = (e: MessageEvent<ParseWorkerInput>) => {
 	const { buffer, filename, labels } = e.data;
 	const toasts: ToastMessage[] = [];
 
 	try {
-		(self as DedicatedWorkerGlobalScope).postMessage({ type: 'progress', stage: 'parsing' } satisfies ParseWorkerMessage);
+		post({ type: 'progress', stage: 'parsing' });
 
 		const parser = new FitParser({ force: true, speedUnit: 'km/h', lengthUnit: 'm', temperatureUnit: 'celsius', elapsedRecordField: true });
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		parser.parse(buffer, (error: any, data: any) => {
 			if (error) {
-				(self as DedicatedWorkerGlobalScope).postMessage({ type: 'error', message: String(error), toasts } satisfies ParseWorkerMessage);
+				post({ type: 'error', message: String(error), toasts });
 				return;
 			}
 			try {
 				const { activity, toasts: newToasts } = normalise(data, filename, labels, (stage) => {
-					(self as DedicatedWorkerGlobalScope).postMessage({ type: 'progress', stage } satisfies ParseWorkerMessage);
+					post({ type: 'progress', stage });
 				});
 				toasts.push(...newToasts);
-				(self as DedicatedWorkerGlobalScope).postMessage({ type: 'complete', activity, toasts } satisfies ParseWorkerMessage);
+				post({ type: 'complete', activity, toasts });
 			} catch (err) {
-				(self as DedicatedWorkerGlobalScope).postMessage({
-					type: 'error',
-					message: err instanceof Error ? err.message : String(err),
-					toasts,
-				} satisfies ParseWorkerMessage);
+				post({ type: 'error', message: err instanceof Error ? err.message : String(err), toasts });
 			}
 		});
 	} catch (err) {
-		(self as DedicatedWorkerGlobalScope).postMessage({
-			type: 'error',
-			message: err instanceof Error ? err.message : String(err),
-			toasts,
-		} satisfies ParseWorkerMessage);
+		post({ type: 'error', message: err instanceof Error ? err.message : String(err), toasts });
 	}
 };
