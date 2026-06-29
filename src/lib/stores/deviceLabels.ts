@@ -199,6 +199,12 @@ export function getEditHistory(key?: string): LabelEdit[] {
 export function canUndo(): boolean { return _editHistory.length > 0; }
 export function canRedo(): boolean { return _redoStack.length > 0; }
 
+/** True only when the most recent undoable edit belongs to the given device key. */
+export function canUndoFor(key: string): boolean {
+	if (_editHistory.length === 0) return false;
+	return _editHistory[_editHistory.length - 1].deviceKey === key;
+}
+
 /** Reset history and redo stack. Intended for tests and session teardown. */
 export function clearEditHistory(): void {
 	_editHistory = [];

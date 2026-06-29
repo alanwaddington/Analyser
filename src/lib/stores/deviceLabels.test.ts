@@ -594,3 +594,44 @@ describe('clearEditHistory', () => {
 		expect(canUndo()).toBe(false);
 	});
 });
+
+describe('canUndoFor', () => {
+	let canUndoFor: typeof import('./deviceLabels').canUndoFor;
+
+	beforeEach(async () => {
+		vi.resetModules();
+		const mod = await import('./deviceLabels');
+		({ canUndoFor } = mod);
+		// also pull these for setup
+		({ recordEdit, undoLabelEdit } = mod);
+	});
+
+	it('canUndoFor_noHistory_returnsFalse', () => {
+		expect(canUndoFor('ant:42')).toBe(false);
+	});
+
+	it('canUndoFor_mostRecentEditMatchesKey_returnsTrue', () => {
+		recordEdit('ant:42', '', 'HRM');
+		expect(canUndoFor('ant:42')).toBe(true);
+	});
+
+	it('canUndoFor_mostRecentEditDifferentKey_returnsFalse', () => {
+		recordEdit('ant:42', '', 'HRM');
+		recordEdit('ant:11', '', 'Power');
+		expect(canUndoFor('ant:42')).toBe(false);
+	});
+
+	it('canUndoFor_mostRecentEditDifferentKey_trueForThatKey', () => {
+		recordEdit('ant:42', '', 'HRM');
+		recordEdit('ant:11', '', 'Power');
+		expect(canUndoFor('ant:11')).toBe(true);
+	});
+
+	it('canUndoFor_afterUndoMovesToPreviousDevice', () => {
+		recordEdit('ant:42', '', 'HRM');
+		recordEdit('ant:11', '', 'Power');
+		undoLabelEdit();
+		expect(canUndoFor('ant:42')).toBe(true);
+		expect(canUndoFor('ant:11')).toBe(false);
+	});
+});

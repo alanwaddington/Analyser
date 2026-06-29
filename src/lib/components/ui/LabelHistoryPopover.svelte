@@ -28,7 +28,7 @@
 			<p class="empty">No rename history</p>
 		{:else}
 			<ul class="log">
-				{#each history as edit (edit.timestamp)}
+				{#each history as edit (`${edit.timestamp}:${edit.deviceKey}:${edit.to}`)}
 					<li class="entry">
 						<span class="ts">{relativeTime(edit.timestamp)}</span>
 						<span class="trail">
@@ -62,13 +62,13 @@
 		max-width: 240px;
 		min-width: 160px;
 
-		background-color: #0a1628;
+		background-color: var(--color-card);
 		background-image:
-			linear-gradient(rgba(59, 130, 246, 0.035) 1px, transparent 1px),
-			linear-gradient(90deg, rgba(59, 130, 246, 0.035) 1px, transparent 1px);
+			linear-gradient(color-mix(in srgb, var(--color-border) 25%, transparent) 1px, transparent 1px),
+			linear-gradient(90deg, color-mix(in srgb, var(--color-border) 25%, transparent) 1px, transparent 1px);
 		background-size: 8px 8px;
 
-		border: 1px solid #1e2d45;
+		border: 1px solid var(--color-border);
 		border-radius: 6px;
 		box-shadow:
 			0 0 0 1px rgba(59, 130, 246, 0.07),
@@ -97,14 +97,14 @@
 		justify-content: space-between;
 		gap: 8px;
 		padding: 6px 10px 5px;
-		border-bottom: 1px solid #1e2d45;
+		border-bottom: 1px solid var(--color-border);
 	}
 
 	.device-name {
 		font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
 		font-size: 0.7rem;
 		font-weight: 600;
-		color: #e2e8f0;
+		color: var(--color-text);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -130,7 +130,7 @@
 	.empty {
 		font-family: 'JetBrains Mono', ui-monospace, monospace;
 		font-size: 0.62rem;
-		color: #94a3b8;
+		color: var(--color-muted);
 		font-style: italic;
 		text-align: center;
 		padding: 6px 10px;
@@ -161,7 +161,7 @@
 	.ts {
 		font-family: 'JetBrains Mono', ui-monospace, monospace;
 		font-size: 0.53rem;
-		color: #64748b;
+		color: var(--color-muted);
 		letter-spacing: 0.02em;
 	}
 
@@ -175,7 +175,7 @@
 	}
 
 	.val {
-		color: #94a3b8;
+		color: var(--color-text);
 		max-width: 76px;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -183,7 +183,7 @@
 	}
 
 	.val.dim {
-		color: #64748b;
+		color: var(--color-muted);
 		font-style: italic;
 	}
 
@@ -198,7 +198,7 @@
 
 	.ftr {
 		padding: 4px 10px 6px;
-		border-top: 1px solid #1e2d45;
+		border-top: 1px solid var(--color-border);
 	}
 
 	.undo-btn {

@@ -7,6 +7,7 @@
 		groupStreamsByChannel,
 		isComparableGroup,
 	} from '$lib/utils/deviceChannels';
+	import type { LabelEdit } from '$lib/stores/deviceLabels';
 	import {
 		setDeviceLabel,
 		removeDeviceLabel,
@@ -17,6 +18,7 @@
 		redoLabelEdit,
 		canUndo,
 		canRedo,
+		canUndoFor,
 		getEditHistory,
 	} from '$lib/stores/deviceLabels';
 	import { buildAnomalyCounts } from './DeviceToggleBar.utils';
@@ -140,7 +142,7 @@
 		renamingChannelKey = null;
 	}
 
-	function applyEditToReactiveState(edit: import('$lib/stores/deviceLabels').LabelEdit, label: string) {
+	function applyEditToReactiveState(edit: LabelEdit, label: string) {
 		const cfs = streams.find(s => deviceStorageKey(s.stream.device) === edit.deviceKey);
 		if (!cfs) return;
 		if (label) {
@@ -262,7 +264,7 @@
 							history={getEditHistory(dKey ?? undefined)}
 							currentLabel={label}
 							deviceKey={dKey}
-							canUndoDevice={canUndo()}
+							canUndoDevice={dKey != null && canUndoFor(dKey)}
 							onundo={() => { const e = undoLabelEdit(); if (e) applyEditToReactiveState(e, e.from); hoveredKey = null; }}
 						/>
 					{/if}
@@ -338,7 +340,7 @@
 								history={getEditHistory(dKey ?? undefined)}
 								currentLabel={label}
 								deviceKey={dKey}
-								canUndoDevice={canUndo()}
+								canUndoDevice={dKey != null && canUndoFor(dKey)}
 								onundo={() => { const e = undoLabelEdit(); if (e) applyEditToReactiveState(e, e.from); hoveredKey = null; }}
 							/>
 						{/if}
