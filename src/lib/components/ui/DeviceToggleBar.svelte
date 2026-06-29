@@ -552,6 +552,18 @@
 		display: inline-flex;
 	}
 
+	/* Invisible bridge so mouseleave doesn't fire while crossing the gap
+	   between the pill bottom and the popover top (which is absolutely
+	   positioned below the pill-wrap's layout height). */
+	.pill-wrap::after {
+		content: '';
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		height: 10px;
+	}
+
 	.pill {
 		padding: 3px 10px;
 		border-radius: 999px;
