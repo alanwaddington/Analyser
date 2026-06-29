@@ -54,7 +54,7 @@
 <style>
 	.popover {
 		position: absolute;
-		bottom: calc(100% + 7px);
+		top: calc(100% + 7px);
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 200;
@@ -81,7 +81,7 @@
 	}
 
 	@keyframes rise {
-		from { opacity: 0; transform: translateX(-50%) translateY(5px); }
+		from { opacity: 0; transform: translateX(-50%) translateY(-5px); }
 		to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 	}
 
