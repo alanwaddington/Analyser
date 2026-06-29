@@ -27,7 +27,7 @@
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
-	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue, shouldUseFullFtpZones } from './TimeSeriesChart.utils.ts';
+	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
 	import { lowerBound } from '$lib/utils/binarySearch';
@@ -277,16 +277,14 @@
 		let ftpDataMax = 0;
 		if (channel === 'power' && athleteProfile?.ftp != null) {
 			const ftp = athleteProfile.ftp;
-			const cyclingData: [number, number | null][] = [];
 			for (const [i, data] of dataCache) {
 				const seriesSport = seriesInputs[i].activity.sport ?? sport ?? 'cycling';
 				if (seriesSport === 'running') continue;
 				for (const [, y] of data) {
 					if (y != null && y > ftpDataMax) ftpDataMax = y;
 				}
-				cyclingData.push(...data);
 			}
-			useFullFtpZones = shouldUseFullFtpZones(cyclingData, ftp);
+			useFullFtpZones = ftpDataMax > ftp * 1.20;
 			if (useFullFtpZones) zoneAxisMax = undefined;
 		}
 		const hasZoneBands = zoneAxisMax !== undefined || useFullFtpZones;
