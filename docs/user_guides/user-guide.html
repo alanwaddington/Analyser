@@ -246,6 +246,10 @@
 <p>When Analyser detects sensor anomalies (signal spikes, data dropouts, or GPS drift), a red <strong>⚠ N</strong> badge appears next to the affected channel label, where N is the number of anomaly events detected. Hover the badge to see a breakdown (e.g. &quot;2 spikes, 1 dropout&quot;). If GPS position anomalies are detected, a separate <strong>GPS ⚠ N</strong> section appears at the bottom of the bar. See <a href="#32-charts-tab">section 3.2</a> for anomaly markers on charts and <a href="#35-map-tab">section 3.5</a> for GPS drift circles on the map.</p>
 <p><strong>Renaming a device:</strong></p>
 <p>Double-click any device pill to rename it. Type the new label and press <strong>Enter</strong> to confirm, or <strong>Escape</strong> to cancel. Labels are saved locally in your browser and are restored automatically the next time you load a file from the same device — this works for all device types, including Garmin watches, Stryd pods, ANT+ sensors, and BLE devices.</p>
+<p><strong>Undoing a rename:</strong></p>
+<p>Press <strong>Ctrl+Z</strong> (Cmd+Z on macOS) at any time to undo the most recent device rename. Press <strong>Ctrl+Shift+Z</strong> (or <strong>Ctrl+Y</strong>) to redo. A brief notification confirms each undo or redo. The undo history is in-memory only — it is cleared when you refresh the page.</p>
+<p><strong>Rename history popover:</strong></p>
+<p>Hover over any device pill to see a compact history popover listing the last 5 renames for that device (old name → new name, with relative timestamps). If the most recent global rename was for this device, an <strong>↩ Undo last rename</strong> button appears at the bottom of the popover for mouse-only users.</p>
 <hr>
 <h3 id="32-charts-tab">3.2 Charts Tab</h3>
 <p>The Charts tab displays time-series data for every active channel.</p>
@@ -1021,12 +1025,28 @@
 <td>Reset zoom</td>
 </tr>
 <tr>
+<td><strong>Double-click</strong> a device pill</td>
+<td>Begin renaming that device</td>
+</tr>
+<tr>
 <td><strong>Enter</strong> (in rename input)</td>
 <td>Confirm device rename</td>
 </tr>
 <tr>
 <td><strong>Escape</strong> (in rename input)</td>
 <td>Cancel device rename</td>
+</tr>
+<tr>
+<td><strong>Ctrl+Z / Cmd+Z</strong></td>
+<td>Undo the most recent device rename</td>
+</tr>
+<tr>
+<td><strong>Ctrl+Shift+Z / Ctrl+Y</strong></td>
+<td>Redo the last undone rename</td>
+</tr>
+<tr>
+<td><strong>Escape</strong> (with history popover open)</td>
+<td>Close the rename history popover</td>
 </tr>
 <tr>
 <td><strong>Enter</strong> (in offset input)</td>
