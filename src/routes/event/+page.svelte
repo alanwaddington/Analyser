@@ -458,6 +458,7 @@
 					hoveredDistance={stripHoveredDistance ?? chartHoveredDistance}
 					onHoverDistance={(d) => { handleMapStripHoverDistance(d); handleMapHoverDistance(d); }}
 					onMetricChannelChange={(ch) => { mapMetricChannel = ch; }}
+					athleteProfile={$athleteProfile}
 				/>
 			</div>
 			{#if mapMetricChannel !== null && stripSeriesInputs.length > 0}
