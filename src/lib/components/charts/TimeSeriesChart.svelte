@@ -344,16 +344,26 @@
 			series: (() => {
 				const firstVisibleIdx = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
 
-				// Zone band colours — visible but unobtrusive on dark and light backgrounds
-				const ZONE_COLOURS: Record<number, string> = {
-					1: 'rgba(148,163,184,0.12)',
-					2: 'rgba(96,165,250,0.18)',
-					3: 'rgba(74,222,128,0.18)',
-					4: 'rgba(251,191,36,0.20)',
-					5: 'rgba(248,113,113,0.22)',
-					6: 'rgba(192,132,252,0.22)',
-					7: 'rgba(244,114,182,0.22)',
-				};
+				// Zone band colours — higher opacity in light mode where backgrounds are white.
+				const ZONE_COLOURS: Record<number, string> = $isDark
+					? {
+						1: 'rgba(148,163,184,0.12)',
+						2: 'rgba(96,165,250,0.18)',
+						3: 'rgba(74,222,128,0.18)',
+						4: 'rgba(251,191,36,0.20)',
+						5: 'rgba(248,113,113,0.22)',
+						6: 'rgba(192,132,252,0.22)',
+						7: 'rgba(244,114,182,0.22)',
+					}
+					: {
+						1: 'rgba(148,163,184,0.20)',
+						2: 'rgba(96,165,250,0.28)',
+						3: 'rgba(74,222,128,0.28)',
+						4: 'rgba(251,191,36,0.32)',
+						5: 'rgba(248,113,113,0.35)',
+						6: 'rgba(192,132,252,0.35)',
+						7: 'rgba(244,114,182,0.35)',
+					};
 
 				// Compute zone bands for a given series' sport — called per-series so
 				// each activity uses its own sport (running → CP, cycling → FTP).
@@ -373,10 +383,13 @@
 					} else if (channel === 'power' && seriesSport !== 'running' && athleteProfile?.ftp != null) {
 						zoneBands = ftpZoneBoundaries(athleteProfile.ftp);
 					}
+					// Cap the top zone at zoneAxisMax — ECharts cannot handle yAxis: Infinity
+					// and will silently drop the entire markArea.data array if it encounters it.
+					const axisCap = zoneAxisMax ?? 9999;
 					return zoneBands
 						? zoneBands.map(b => [
 							{ yAxis: b.min, itemStyle: { color: ZONE_COLOURS[b.zone] } },
-							{ yAxis: b.max === Infinity ? Infinity : b.max },
+							{ yAxis: b.max === Infinity ? axisCap : b.max },
 						  ])
 						: null;
 				}
