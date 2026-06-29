@@ -1721,7 +1721,73 @@ interface RecordFilter {
 <p><strong>Sidebar scroll layout:</strong> Inside <code>.sidebar</code>, the logo and mode-nav buttons are pinned at the top (outside any scroll container). A <code>.sidebar-scroll</code> wrapper (<code>flex: 1; overflow-y: auto; min-height: 0</code>) wraps the file-section and footer, making the sidebar scrollable when expanded panels (Athlete Profile, Sync) push content below the viewport edge. The file-section retains its own independent <code>overflow-y: auto</code> for long file lists. A thin 6px scrollbar is applied via <code>scrollbar-width: thin</code> (Firefox) and <code>::-webkit-scrollbar</code> (Chrome/Safari/Edge) using <code>--color-border</code>.</p>
 <hr>
 <h2 id="5-fit-parsing">5. FIT Parsing</h2>
-<p>FIT files are parsed by <code>fit-file-parser</code> running in a <strong>Web Worker</strong> to avoid blocking the UI thread. The worker is created in <code>src/lib/fit/parser.ts</code>.</p>
+<p>FIT files are parsed by <code>fit-file-parser</code> running in a <strong>Web Worker</strong> to avoid blocking the UI thread. The parsing pipeline is split across four modules in <code>src/lib/fit/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>parser.ts</code></td>
+<td><code>normalise(data, filename, labels, onStage?)</code> — pure Worker-safe function; accepts a labels snapshot and an optional stage callback; returns <code>{ activity: Activity, toasts: ToastMessage[] }</code></td>
+</tr>
+<tr>
+<td><code>parser.worker.ts</code></td>
+<td>Web Worker script; receives a <code>ParseWorkerInput</code>, runs <code>fit-file-parser</code> + <code>normalise()</code>, posts typed <code>ParseWorkerMessage</code> events back to the main thread</td>
+</tr>
+<tr>
+<td><code>parseInWorker.ts</code></td>
+<td>Main-thread wrapper; creates one Worker per file, wires up message handlers, returns a <code>ParseJob</code> with a cancellable promise</td>
+</tr>
+<tr>
+<td><code>parseFitFile.ts</code></td>
+<td>Legacy main-thread bridge; calls <code>normalise()</code> synchronously and dispatches toasts directly — preserved for backward compatibility</td>
+</tr>
+</tbody></table>
+<p><code>index.ts</code> is a pure barrel that re-exports all four public surfaces.</p>
+<p><strong>Worker message protocol</strong> — <code>ParseWorkerMessage</code> is a discriminated union:</p>
+<pre><code class="language-typescript">type ParseWorkerMessage =
+  | { type: &#39;progress&#39;; stage: ParseStage }
+  | { type: &#39;complete&#39;; activity: Activity; toasts: ToastMessage[] }
+  | { type: &#39;error&#39;; message: string; toasts: ToastMessage[] };
+
+type ParseStage = &#39;queued&#39; | &#39;parsing&#39; | &#39;normalising&#39; | &#39;detecting_anomalies&#39; | &#39;building_streams&#39;;
+</code></pre>
+<p><strong><code>parseInWorker(buffer, filename, labels, onStage?)</code></strong> — creates a Worker, transfers the <code>ArrayBuffer</code> (zero-copy), and returns:</p>
+<pre><code class="language-typescript">interface ParseJob {
+  promise: Promise&lt;{ activity: Activity; toasts: ToastMessage[] }&gt;;
+  cancel: () =&gt; void;  // terminates the Worker; rejects promise with ParseCancelledError
+}
+</code></pre>
+<p>One Worker is spawned per file and terminated immediately on completion, error, or cancel — no pool management. <code>ParseCancelledError</code> is a distinct error class so <code>DropZone.svelte</code> can catch cancels silently without showing an error toast.</p>
+<p><strong><code>normalise()</code> refactor (PR #115)</strong> — <code>normalise()</code> no longer imports from store modules, making it Worker-safe:</p>
+<ul>
+<li>Accepts <code>labels: Record&lt;string, string&gt;</code> (a snapshot of device labels passed at dispatch time) instead of calling <code>getAllLabels()</code> internally.</li>
+<li>Accepts an optional <code>onStage?: (stage: ParseStage) =&gt; void</code> callback for progress reporting.</li>
+<li>Returns <code>{ activity, toasts }</code> instead of calling <code>addToast()</code> directly — toasts are collected and dispatched by the main-thread caller after the Worker completes.</li>
+</ul>
+<p><strong><code>deviceKey()</code> utility</strong> (<code>src/lib/utils/deviceKey.ts</code>) — shared pure function used by both <code>parser.ts</code> and <code>deviceLabels.ts</code> to derive a stable label-store key for a device. Priority: <code>antDeviceNumber</code> → <code>serialNumber</code> → <code>manufacturer:product</code> → <code>antDeviceType</code> → <code>null</code>. Re-exported from <code>deviceLabels.ts</code> as <code>deviceStorageKey</code> for backward compatibility with existing callers.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant DZ as DropZone.svelte
+    participant PIW as parseInWorker.ts
+    participant W as parser.worker.ts
+    participant P as parser.ts
+
+    DZ-&gt;&gt;DZ: pendingFiles.set(key, { stage: &#39;queued&#39; })
+    DZ-&gt;&gt;PIW: parseInWorker(buffer, filename, labels, onStage)
+    PIW-&gt;&gt;W: new Worker() + postMessage({ buffer, filename, labels })
+    W-&gt;&gt;W: fit-file-parser.parse(buffer)
+    W--&gt;&gt;PIW: { type: &#39;progress&#39;, stage: &#39;parsing&#39; }
+    PIW--&gt;&gt;DZ: onStage(&#39;parsing&#39;)
+    W-&gt;&gt;P: normalise(data, filename, labels, onStage)
+    P--&gt;&gt;W: { activity, toasts }
+    W--&gt;&gt;PIW: { type: &#39;complete&#39;, activity, toasts }
+    PIW-&gt;&gt;W: worker.terminate()
+    PIW--&gt;&gt;DZ: promise resolves → addActivity() + dispatch toasts
+    DZ-&gt;&gt;DZ: pendingFiles.delete(key)
+</code></pre>
 <p>Key parsing details:</p>
 <ul>
 <li><code>STRING_DEVICE_TYPE</code> mapping converts <code>fit-file-parser</code>&#39;s snake_case string outputs (e.g. <code>&#39;heart_rate&#39;</code>) back to numeric ANT+ constants.</li>

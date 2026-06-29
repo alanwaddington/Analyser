@@ -1,29 +1,12 @@
 import FitParser from 'fit-file-parser';
-import type { Activity, ActivityRecord, Device, DeviceStream, Lap } from '../types';
+import type { Activity, ActivityRecord, Device, DeviceStream, Lap, ParseStage, ToastMessage } from '../types';
 import { ANT_DEVICE_TYPE } from '../types';
 import type { ChannelKey } from '../types';
-import { applyLabels } from '../stores/deviceLabels';
-import { addToast } from '../stores/toast';
 import { findAnchor } from '../align/anchor';
 import { detectAnomalies } from '../analytics/anomalies';
+import { deviceKey } from '../utils/deviceKey';
 
 export const DISTANCE_EPSILON_M = 0.5;
-
-export function parseFitFile(buffer: ArrayBuffer, filename: string): Promise<Activity> {
-	return new Promise((resolve, reject) => {
-		const parser = new FitParser({ force: true, speedUnit: 'km/h', lengthUnit: 'm', temperatureUnit: 'celsius', elapsedRecordField: true });
-
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		parser.parse(buffer, (error: any, data: any) => {
-			if (error) return reject(new Error(String(error)));
-			try {
-				resolve(normalise(data as FitData, filename));
-			} catch (e) {
-				reject(e);
-			}
-		});
-	});
-}
 
 // ---- raw FIT types (minimal, extend as needed) ----
 
@@ -379,7 +362,21 @@ export function ensureSortedByElapsed(records: ActivityRecord[]): boolean {
 	return true;
 }
 
-function normalise(data: FitData, filename: string): Activity {
+/**
+ * Normalise raw FIT data into an Activity. Worker-safe: no store imports.
+ * @param labels  Device label snapshot from getAllLabels() — applied inline.
+ * @param onStage Optional callback called as parsing progresses through stages.
+ * @returns       The normalised Activity and any warning toasts to dispatch.
+ */
+export function normalise(
+	data: FitData,
+	filename: string,
+	labels: Record<string, string>,
+	onStage?: (stage: ParseStage) => void,
+): { activity: Activity; toasts: ToastMessage[] } {
+	onStage?.('normalising');
+
+	const toasts: ToastMessage[] = [];
 	const session = data.sessions?.[0] ?? {};
 	// fit-file-parser puts sport on data.sports[0], not data.sessions[0].
 	// Fall back to session.sport for files that do populate it.
@@ -396,11 +393,11 @@ function normalise(data: FitData, filename: string): Activity {
 	if (records.length < rawRecords.length) {
 		const count = rawRecords.length - records.length;
 		console.warn(`[parser] "${filename}": ${count} record(s) with negative elapsed time removed`);
-		addToast(`"${filename}": ${count} record(s) with negative elapsed time were removed.`, 'warning');
+		toasts.push({ message: `"${filename}": ${count} record(s) with negative elapsed time were removed.`, level: 'warning' });
 	}
 	if (ensureSortedByElapsed(records)) {
 		console.warn(`[parser] "${filename}": records were out of order — sorted by elapsedSeconds`);
-		addToast(`"${filename}": records were out of order and have been sorted automatically.`, 'warning');
+		toasts.push({ message: `"${filename}": records were out of order and have been sorted automatically.`, level: 'warning' });
 	}
 
 	if (sport === 'running') {
@@ -410,6 +407,7 @@ function normalise(data: FitData, filename: string): Activity {
 		removeCyclingPace(records);
 	}
 
+	onStage?.('detecting_anomalies');
 	const anomalies = detectAnomalies(records);
 
 	const laps: Lap[] = buildLaps(data.laps ?? [], records);
@@ -425,7 +423,14 @@ function normalise(data: FitData, filename: string): Activity {
 		seenDeviceIndices.add(idx);
 		return true;
 	});
-	const devices: Device[] = applyLabels(uniqueDeviceInfos.map(normaliseDeviceInfo));
+	// Apply labels inline using the passed snapshot — no localStorage access needed.
+	const devices: Device[] = uniqueDeviceInfos.map(normaliseDeviceInfo).map(d => {
+		const key = deviceKey(d);
+		const label = key != null ? labels[key] : undefined;
+		return label ? { ...d, label } : d;
+	});
+
+	onStage?.('building_streams');
 	const availableChannels = channelsPresentInRecords(records);
 	const deviceStreams = buildDeviceStreams(devices, records);
 	const hasPower = records.some(r => r.power != null);
@@ -445,7 +450,7 @@ function normalise(data: FitData, filename: string): Activity {
 		timerStartTime, firstWorkoutStepTime, startTime, isIndoor,
 	} as Activity);
 
-	return {
+	const activity: Activity = {
 		id: crypto.randomUUID(),
 		filename,
 		sport,
@@ -468,6 +473,8 @@ function normalise(data: FitData, filename: string): Activity {
 		availableChannels,
 		anomalies,
 	};
+
+	return { activity, toasts };
 }
 
 export function buildLaps(fitLaps: FitLap[], records: ActivityRecord[]): Lap[] {

@@ -52,7 +52,9 @@ Open Analyser in your browser. You are greeted with the landing page, which cont
 - **Drag and drop** one or more `.fit` files onto the drop zone, or
 - Click **Choose files** to open the system file picker.
 
-You can load **up to 6 files** at once. Once the files are parsed, you are taken directly to the **Device Comparison** view.
+You can load **up to 6 files** at once.
+
+While each file is being processed, a **progress card** appears showing the current stage (Parse → Normalise → Detect → Build) and an estimated time remaining. Parsing runs in the background — the UI stays fully responsive. You can click **✕** on any card to cancel that file. Once all files are parsed they appear in the sidebar and you are taken directly to the **Device Comparison** view.
 
 > **Supported format:** `.fit` (Flexible and Interoperable Data Transfer — the standard format exported by Garmin watches, Wahoo computers, and most ANT+ devices). Files from `.tcx` and `.gpx` sources are not currently supported.
 

@@ -232,6 +232,13 @@ function embedImages(markdown: string, screenshotsDir: string): string {
 // ---------------------------------------------------------------------------
 
 function wslCopyToWindows(tmpPath: string, destPath: string): void {
+	// On macOS / native Linux, copy directly without WSL/PowerShell.
+	if (process.platform !== 'win32' && !process.env.WSL_DISTRO_NAME) {
+		fs.copyFileSync(tmpPath, destPath);
+		fs.unlinkSync(tmpPath);
+		return;
+	}
+
 	const winDest = destPath.replace('/mnt/c/', 'C:\\').replace(/\//g, '\\');
 	const tmpFilename = path.basename(tmpPath);
 	const wslSrc = `\\\\wsl.localhost\\Ubuntu\\tmp\\${tmpFilename}`;

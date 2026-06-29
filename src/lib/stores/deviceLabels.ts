@@ -1,5 +1,6 @@
 import type { Device } from '$lib/types';
 import { addToast } from './toast';
+import { deviceKey } from '../utils/deviceKey';
 
 const STORAGE_KEY = 'analyser-device-labels';
 
@@ -12,25 +13,8 @@ let _cache: Map<string, string> | null = null;
 // Defaults to null (no-op) until sync is initialised.
 let _onLabelChange: (() => void) | null = null;
 
-/**
- * Derive a stable localStorage key for a device.
- * Priority: antDeviceNumber → serialNumber → manufacturer:product → antDeviceType → null
- * Keys are namespaced to prevent collisions between different identifier types.
- *
- * The `type:` fallback is intentionally last — it is stable only when a user has
- * a single device of that ANT+ type. Two devices of the same type with no other
- * identifiers would share the key, but that situation only arises for extremely
- * minimal FIT device_info entries (no serial, no manufacturer, no device number).
- */
-export function deviceStorageKey(device: Device): string | null {
-	if (device.antDeviceNumber != null) return `ant:${device.antDeviceNumber}`;
-	if (device.serialNumber != null)    return `serial:${device.serialNumber}`;
-	const m = device.manufacturer?.trim();
-	const p = device.product?.trim();
-	if (m || p) return `device:${m ?? ''}:${p ?? ''}`;
-	if (device.antDeviceType != null)   return `type:${device.antDeviceType}`;
-	return null;
-}
+/** Stable localStorage key for a device. Re-exported from utils/deviceKey for callers that import from this module. */
+export { deviceKey as deviceStorageKey } from '../utils/deviceKey';
 
 function getCache(): Map<string, string> {
 	if (_cache !== null) return _cache;
@@ -129,7 +113,7 @@ export function replaceAllLabels(labels: Record<string, string>): void {
  * Pure function — reads from cache without side effects.
  */
 export function resolveLabel(device: Device): string | undefined {
-	const key = deviceStorageKey(device);
+	const key = deviceKey(device);
 	if (key == null) return undefined;
 	const stored = getCache().get(key);
 	return stored || undefined;
