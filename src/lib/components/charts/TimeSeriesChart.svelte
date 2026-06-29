@@ -24,6 +24,7 @@
 	import type { Activity, ChannelKey, Anomaly, AthleteProfile } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import { hrZoneBoundaries, cpZoneBoundaries, ftpZoneBoundaries, lthrToEstimatedMaxHR } from '$lib/analytics/zones';
+	import { zoneChartColour } from '$lib/components/map/colourScale';
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
@@ -370,26 +371,8 @@
 			series: (() => {
 				const firstVisibleIdx = seriesInputs.findIndex((_, i) => !hiddenSeries.has(i));
 
-				// Zone band colours — higher opacity in light mode where backgrounds are white.
-				const ZONE_COLOURS: Record<number, string> = $isDark
-					? {
-						1: 'rgba(148,163,184,0.12)',
-						2: 'rgba(96,165,250,0.18)',
-						3: 'rgba(74,222,128,0.18)',
-						4: 'rgba(251,191,36,0.20)',
-						5: 'rgba(248,113,113,0.22)',
-						6: 'rgba(192,132,252,0.22)',
-						7: 'rgba(244,114,182,0.22)',
-					}
-					: {
-						1: 'rgba(148,163,184,0.20)',
-						2: 'rgba(96,165,250,0.28)',
-						3: 'rgba(74,222,128,0.28)',
-						4: 'rgba(251,191,36,0.32)',
-						5: 'rgba(248,113,113,0.35)',
-						6: 'rgba(192,132,252,0.35)',
-						7: 'rgba(244,114,182,0.35)',
-					};
+				// Zone band colours — from shared palette; higher opacity in light mode.
+				const dark = $isDark;
 
 				// Compute zone bands for a given series' sport — called per-series so
 				// each activity uses its own sport (running → CP, cycling → FTP).
@@ -414,7 +397,7 @@
 					const axisCap = computeZoneAxisCap(useFullFtpZones, ftpDataMax, zoneAxisMax);
 					return zoneBands
 						? zoneBands.map(b => [
-							{ yAxis: b.min, itemStyle: { color: ZONE_COLOURS[b.zone] } },
+							{ yAxis: b.min, itemStyle: { color: zoneChartColour(b.zone, dark) } },
 							{ yAxis: b.max === Infinity ? axisCap : b.max },
 						  ])
 						: null;
