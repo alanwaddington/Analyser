@@ -140,13 +140,35 @@
 		renamingChannelKey = null;
 	}
 
+	function applyEditToReactiveState(edit: import('$lib/stores/deviceLabels').LabelEdit, label: string) {
+		const cfs = streams.find(s => deviceStorageKey(s.stream.device) === edit.deviceKey);
+		if (!cfs) return;
+		if (label) {
+			renamedLabels = new Map(renamedLabels).set(cfs.key, label);
+			cfs.stream.device.label = label;
+		} else {
+			const next = new Map(renamedLabels);
+			next.delete(cfs.key);
+			renamedLabels = next;
+			cfs.stream.device.label = undefined;
+		}
+	}
+
 	$effect(() => {
 		function handleKeydown(e: KeyboardEvent) {
 			if (renamingDevice !== null) return;
 			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-				if (canUndo()) { e.preventDefault(); undoLabelEdit(); }
+				if (canUndo()) {
+					e.preventDefault();
+					const edit = undoLabelEdit();
+					if (edit) applyEditToReactiveState(edit, edit.from);
+				}
 			} else if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
-				if (canRedo()) { e.preventDefault(); redoLabelEdit(); }
+				if (canRedo()) {
+					e.preventDefault();
+					const edit = redoLabelEdit();
+					if (edit) applyEditToReactiveState(edit, edit.to);
+				}
 			} else if (e.key === 'Escape' && hoveredKey !== null) {
 				hoveredKey = null;
 			}
@@ -241,7 +263,7 @@
 							currentLabel={label}
 							deviceKey={dKey}
 							canUndoDevice={canUndo()}
-							onundo={() => { undoLabelEdit(); hoveredKey = null; }}
+							onundo={() => { const e = undoLabelEdit(); if (e) applyEditToReactiveState(e, e.from); hoveredKey = null; }}
 						/>
 					{/if}
 				</div>
@@ -317,7 +339,7 @@
 								currentLabel={label}
 								deviceKey={dKey}
 								canUndoDevice={canUndo()}
-								onundo={() => { undoLabelEdit(); hoveredKey = null; }}
+								onundo={() => { const e = undoLabelEdit(); if (e) applyEditToReactiveState(e, e.from); hoveredKey = null; }}
 							/>
 						{/if}
 					</div>

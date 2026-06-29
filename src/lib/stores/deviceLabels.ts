@@ -153,10 +153,13 @@ export function recordEdit(key: string, from: string, to: string): void {
 	_redoStack = [];
 }
 
-/** Undo the most recent label edit. Fires a toast and moves the edit to the redo stack. */
-export function undoLabelEdit(): void {
+/**
+ * Undo the most recent label edit. Fires a toast and moves the edit to the redo stack.
+ * Returns the undone edit so callers can update reactive UI state.
+ */
+export function undoLabelEdit(): LabelEdit | undefined {
 	const edit = _editHistory.pop();
-	if (!edit) return;
+	if (!edit) return undefined;
 	_redoStack.push(edit);
 	if (edit.from) {
 		setDeviceLabel(edit.deviceKey, edit.from);
@@ -164,18 +167,23 @@ export function undoLabelEdit(): void {
 		removeDeviceLabel(edit.deviceKey);
 	}
 	addToast('Label change undone', 'info');
+	return edit;
 }
 
-/** Redo the most recently undone label edit. Moves the edit back onto the history stack. */
-export function redoLabelEdit(): void {
+/**
+ * Redo the most recently undone label edit. Moves the edit back onto the history stack.
+ * Returns the redone edit so callers can update reactive UI state.
+ */
+export function redoLabelEdit(): LabelEdit | undefined {
 	const edit = _redoStack.pop();
-	if (!edit) return;
+	if (!edit) return undefined;
 	_editHistory.push(edit);
 	if (edit.to) {
 		setDeviceLabel(edit.deviceKey, edit.to);
 	} else {
 		removeDeviceLabel(edit.deviceKey);
 	}
+	return edit;
 }
 
 /**
