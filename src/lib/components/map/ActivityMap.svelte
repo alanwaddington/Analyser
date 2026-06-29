@@ -214,7 +214,7 @@
 	let driftMarkers: import('leaflet').CircleMarker[] = [];
 	let resizeObserver: ResizeObserver | undefined;
 	let mapInitialised = false;
-	let legendContainerEl: HTMLDivElement | undefined;
+	let legendContainerEl = $state<HTMLDivElement | undefined>(undefined);
 
 	function updatePickerPosition() {
 		if (!container) return;
