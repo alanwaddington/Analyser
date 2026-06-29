@@ -15,9 +15,11 @@
 		recordEdit,
 		undoLabelEdit,
 		canUndo,
+		getEditHistory,
 	} from '$lib/stores/deviceLabels';
 	import { buildAnomalyCounts } from './DeviceToggleBar.utils';
 	import type { AnomalyCount } from './DeviceToggleBar.utils';
+	import LabelHistoryPopover from './LabelHistoryPopover.svelte';
 
 	let { streams, multiFile = false, anomalyCounts = undefined }: {
 		streams: CrossFileStream[];
@@ -65,6 +67,9 @@
 	// (not device storage key) because CrossFileStream.key is unique per pill.
 	// Bounded in practice by MAX_FILES × devices_per_file (≤ ~60 entries).
 	let renamedLabels = $state(new Map<string, string>());
+
+	// Which pill is currently hovered — drives the history popover
+	let hoveredKey = $state<string | null>(null);
 
 	// File groups for multi-file mode: ordered list derived from stream order
 	const fileGroups = $derived.by(() => {
@@ -195,6 +200,7 @@
 	{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}
 	{@const isActive = $activeDeviceIndices.has(cfs.key)}
 	{@const isExpanded = expandedDevices.has(cfs.key)}
+	{@const dKey = deviceStorageKey(cfs.stream.device)}
 	<div class="multi-device">
 		<div class="multi-row">
 			{#if renaming === cfs.key}
@@ -211,14 +217,30 @@
 					aria-label="Rename device"
 				/>
 			{:else}
-				<button
-					class="pill"
-					class:active={isActive}
-					onclick={() => toggleDevice(cfs.key)}
-					ondblclick={() => startRename(cfs.key, label)}
-					aria-pressed={isActive}
-					title="Double-click to rename"
-				>{label}</button>
+				<div
+					class="pill-wrap"
+					role="group"
+					onmouseenter={() => hoveredKey = cfs.key}
+					onmouseleave={() => hoveredKey = null}
+				>
+					<button
+						class="pill"
+						class:active={isActive}
+						onclick={() => toggleDevice(cfs.key)}
+						ondblclick={() => startRename(cfs.key, label)}
+						aria-pressed={isActive}
+						title="Double-click to rename"
+					>{label}</button>
+					{#if hoveredKey === cfs.key}
+						<LabelHistoryPopover
+							history={getEditHistory(dKey ?? undefined)}
+							currentLabel={label}
+							deviceKey={dKey}
+							canUndoDevice={canUndo()}
+							onundo={() => { undoLabelEdit(); hoveredKey = null; }}
+						/>
+					{/if}
+				</div>
 			{/if}
 			<button
 				class="expand-btn"
@@ -256,6 +278,7 @@
 			{#each group.streams as cfs (cfs.key)}
 				{@const label = renamed.get(cfs.key) ?? deriveDeviceLabel(cfs.stream.device, cfs.stream, cfs.activity)}
 				{@const isActive = $activeDeviceIndices.has(cfs.key)}
+				{@const dKey = deviceStorageKey(cfs.stream.device)}
 				{#if renaming === cfs.key && renamingCh === group.channelKey}
 					<input
 						class="rename-input"
@@ -270,14 +293,30 @@
 						aria-label="Rename device"
 					/>
 				{:else}
-					<button
-						class="pill"
-						class:active={isActive}
-						onclick={() => toggleDevice(cfs.key)}
-						ondblclick={() => startRename(cfs.key, label, group.channelKey)}
-						aria-pressed={isActive}
-						title="Double-click to rename"
-					>{label}</button>
+					<div
+						class="pill-wrap"
+						role="group"
+						onmouseenter={() => hoveredKey = cfs.key}
+						onmouseleave={() => hoveredKey = null}
+					>
+						<button
+							class="pill"
+							class:active={isActive}
+							onclick={() => toggleDevice(cfs.key)}
+							ondblclick={() => startRename(cfs.key, label, group.channelKey)}
+							aria-pressed={isActive}
+							title="Double-click to rename"
+						>{label}</button>
+						{#if hoveredKey === cfs.key}
+							<LabelHistoryPopover
+								history={getEditHistory(dKey ?? undefined)}
+								currentLabel={label}
+								deviceKey={dKey}
+								canUndoDevice={canUndo()}
+								onundo={() => { undoLabelEdit(); hoveredKey = null; }}
+							/>
+						{/if}
+					</div>
 				{/if}
 			{/each}
 		</div>
@@ -469,6 +508,11 @@
 	}
 
 	/* ── Pills ───────────────────────────────────────────────────── */
+
+	.pill-wrap {
+		position: relative;
+		display: inline-flex;
+	}
 
 	.pill {
 		padding: 3px 10px;
