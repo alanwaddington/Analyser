@@ -74,6 +74,10 @@
 
 	// Which pill is currently hovered — drives the history popover
 	let hoveredKey = $state<string | null>(null);
+	// Reactive counter bumped whenever _editHistory mutates (undo/redo/record).
+	// Svelte can't track the plain module-level array, so this counter is read
+	// in popover prop expressions to force re-evaluation after each history change.
+	let historyTick = $state(0);
 	let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function openHover(key: string) {
@@ -135,12 +139,14 @@
 			const to   = trimmed;
 			if (trimmed) {
 				recordEdit(key, from, to);
+				historyTick++;
 				setDeviceLabel(key, trimmed);
 				cfs.stream.device.label = trimmed;
 				// Update reactive map so the pill re-renders immediately
 				renamedLabels = new Map(renamedLabels).set(cfs.key, trimmed);
 			} else {
 				recordEdit(key, from, '');
+				historyTick++;
 				removeDeviceLabel(key);
 				cfs.stream.device.label = undefined;
 				const next = new Map(renamedLabels);
@@ -173,13 +179,13 @@
 				if (canUndo()) {
 					e.preventDefault();
 					const edit = undoLabelEdit();
-					if (edit) applyEditToReactiveState(edit, edit.from);
+					if (edit) { applyEditToReactiveState(edit, edit.from); historyTick++; }
 				}
-			} else if ((e.ctrlKey || e.metaKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
+			} else if ((e.ctrlKey || e.metaKey) && ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key.toLowerCase() === 'y')) {
 				if (canRedo()) {
 					e.preventDefault();
 					const edit = redoLabelEdit();
-					if (edit) applyEditToReactiveState(edit, edit.to);
+					if (edit) { applyEditToReactiveState(edit, edit.to); historyTick++; }
 				}
 			} else if (e.key === 'Escape' && hoveredKey !== null) {
 				hoveredKey = null;
@@ -271,11 +277,11 @@
 					>{label}</button>
 					{#if hoveredKey === cfs.key}
 						<LabelHistoryPopover
-							history={getEditHistory(dKey ?? undefined)}
+							history={historyTick >= 0 ? getEditHistory(dKey ?? undefined) : []}
 							currentLabel={label}
 							deviceKey={dKey}
-							canUndoDevice={dKey != null && canUndoFor(dKey)}
-							onundo={() => { const e = undoLabelEdit(); if (e) applyEditToReactiveState(e, e.from); hoveredKey = null; }}
+							canUndoDevice={historyTick >= 0 && dKey != null && canUndoFor(dKey)}
+							onundo={() => { const e = undoLabelEdit(); if (e) { applyEditToReactiveState(e, e.from); historyTick++; } hoveredKey = null; }}
 						/>
 					{/if}
 				</div>
@@ -334,8 +340,8 @@
 					<div
 						class="pill-wrap"
 						role="group"
-						onmouseenter={() => hoveredKey = cfs.key}
-						onmouseleave={() => hoveredKey = null}
+						onmouseenter={() => openHover(cfs.key)}
+						onmouseleave={scheduleCloseHover}
 					>
 						<button
 							class="pill"
@@ -347,11 +353,11 @@
 						>{label}</button>
 						{#if hoveredKey === cfs.key}
 							<LabelHistoryPopover
-								history={getEditHistory(dKey ?? undefined)}
+								history={historyTick >= 0 ? getEditHistory(dKey ?? undefined) : []}
 								currentLabel={label}
 								deviceKey={dKey}
-								canUndoDevice={dKey != null && canUndoFor(dKey)}
-								onundo={() => { const e = undoLabelEdit(); if (e) applyEditToReactiveState(e, e.from); hoveredKey = null; }}
+								canUndoDevice={historyTick >= 0 && dKey != null && canUndoFor(dKey)}
+								onundo={() => { const e = undoLabelEdit(); if (e) { applyEditToReactiveState(e, e.from); historyTick++; } hoveredKey = null; }}
 							/>
 						{/if}
 					</div>
