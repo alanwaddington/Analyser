@@ -1,19 +1,83 @@
 <script lang="ts">
 	import { get } from 'svelte/store';
-	import { parseFitFile } from '$lib/fit/parser';
+	import { parseInWorker, ParseCancelledError } from '$lib/fit';
+	import { getAllLabels } from '$lib/stores/deviceLabels';
 	import { activities, addActivity, clearActivities } from '$lib/stores/session';
 	import { addToast } from '$lib/stores/toast';
 	import { MAX_FILES } from '$lib/types';
+	import type { ParseStage } from '$lib/types';
 
 	let { compact = false, singleFile = false }: { compact?: boolean; singleFile?: boolean } = $props();
+
+	interface PendingFile {
+		filename: string;
+		stage: ParseStage;
+		fileSize: number;
+		startedAt: number;
+		cancel: () => void;
+	}
 
 	let dragover = $state(false);
 	let warning = $state('');
 	let error = $state('');
 	let inputEl: HTMLInputElement = $state(null!);
+	let pendingFiles = $state<Map<string, PendingFile>>(new Map());
 
 	// In singleFile mode the input accepts one file at a time
 	const multiple = $derived(!singleFile);
+
+	function dispatchFile(file: File): void {
+		const key = `${file.name}-${file.size}-${Date.now()}`;
+		const pending: PendingFile = {
+			filename: file.name,
+			stage: 'queued',
+			fileSize: file.size,
+			startedAt: Date.now(),
+			cancel: () => {},
+		};
+		pendingFiles = new Map(pendingFiles).set(key, pending);
+
+		const removePending = () => {
+			const next = new Map(pendingFiles);
+			next.delete(key);
+			pendingFiles = next;
+		};
+
+		const updateStage = (stage: ParseStage) => {
+			const entry = pendingFiles.get(key);
+			if (entry) {
+				pendingFiles = new Map(pendingFiles).set(key, { ...entry, stage });
+			}
+		};
+
+		file.arrayBuffer().then(buffer => {
+			const labels = getAllLabels();
+			const job = parseInWorker(buffer, file.name, labels, updateStage);
+
+			// Store cancel function so the UI can call it
+			const entry = pendingFiles.get(key);
+			if (entry) {
+				pendingFiles = new Map(pendingFiles).set(key, { ...entry, stage: 'parsing', cancel: job.cancel });
+			}
+
+			job.promise
+				.then(({ activity, toasts }) => {
+					addActivity(activity);
+					toasts.forEach(t => addToast(t.message, t.level));
+					removePending();
+				})
+				.catch((e: Error) => {
+					if (e instanceof ParseCancelledError) {
+						removePending();
+						return;
+					}
+					const msg = `${file.name}: ${e.message}`;
+					error = error ? `${error}; ${msg}` : msg;
+					addToast(msg, 'error');
+					removePending();
+				});
+		});
+	}
 
 	async function handleFiles(files: FileList | File[]) {
 		warning = '';
@@ -25,45 +89,27 @@
 		if (singleFile) {
 			// Replace mode: clear existing activities then load only the first file
 			clearActivities();
-			try {
-				const buffer = await fitFiles[0].arrayBuffer();
-				const activity = await parseFitFile(buffer, fitFiles[0].name);
-				addActivity(activity);
-			} catch (e) {
-				const msg = `${fitFiles[0].name}: ${e instanceof Error ? e.message : 'parse failed'}`;
-				error = msg;
-				addToast(msg, 'error');
-			}
+			dispatchFile(fitFiles[0]);
 			return;
 		}
 
-		if (get(activities).length >= MAX_FILES) {
+		const currentCount = get(activities).length + pendingFiles.size;
+		if (currentCount >= MAX_FILES) {
 			warning = `Maximum ${MAX_FILES} files — remove one before adding another`;
 			return;
 		}
 
-		const errors: string[] = [];
 		let skipped = 0;
 		for (const file of fitFiles) {
-			if (get(activities).length >= MAX_FILES) {
+			const count = get(activities).length + pendingFiles.size;
+			if (count >= MAX_FILES) {
 				skipped++;
 				continue;
 			}
-			try {
-				const buffer = await file.arrayBuffer();
-				const activity = await parseFitFile(buffer, file.name);
-				addActivity(activity);
-			} catch (e) {
-				const msg = `${file.name}: ${e instanceof Error ? e.message : 'parse failed'}`;
-				errors.push(msg);
-				addToast(msg, 'error');
-			}
+			dispatchFile(file);
 		}
 		if (skipped > 0) {
 			warning = `Maximum ${MAX_FILES} files — ${skipped} file(s) not loaded`;
-		}
-		if (errors.length > 0) {
-			error = errors.join('; ');
 		}
 	}
 
@@ -113,6 +159,18 @@
 		<p class="secondary">.fit supported</p>
 		<span class="browse-btn">Browse files</span>
 	</label>
+{/if}
+
+{#if pendingFiles.size > 0}
+	<ul class="pending-list">
+		{#each [...pendingFiles.entries()] as [key, pending] (key)}
+			<li class="pending-item">
+				<span class="pending-name">{pending.filename}</span>
+				<span class="pending-stage">{pending.stage}</span>
+				<button class="pending-cancel" onclick={() => pending.cancel()}>✕</button>
+			</li>
+		{/each}
+	</ul>
 {/if}
 
 {#if warning}
@@ -205,6 +263,49 @@
 	}
 
 	.error {
+		color: #ef4444;
+	}
+
+	.pending-list {
+		list-style: none;
+		margin: 0.4rem 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.pending-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8rem;
+		color: var(--color-muted);
+	}
+
+	.pending-name {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.pending-stage {
+		text-transform: capitalize;
+		font-size: 0.75rem;
+	}
+
+	.pending-cancel {
+		background: none;
+		border: none;
+		cursor: pointer;
+		color: var(--color-muted);
+		padding: 0 0.25rem;
+		font-size: 0.75rem;
+		line-height: 1;
+	}
+
+	.pending-cancel:hover {
 		color: #ef4444;
 	}
 </style>
