@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
-	import type { Activity, ChannelKey } from '$lib/types';
+	import { onMount, onDestroy, untrack } from 'svelte';
+	import type { Activity, AthleteProfile, ChannelKey } from '$lib/types';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import { xAxisMode, smoothing } from '$lib/stores/session';
 	import {
@@ -15,7 +15,16 @@
 	import type { GpsPointWithMetric } from '$lib/types';
 	import { extractChannel } from '$lib/components/charts/TimeSeriesChart.utils';
 	import { smooth } from '$lib/analytics/smooth';
-	import { valueToColour, formatMetricValue } from './colourScale.ts';
+	import {
+		valueToColour,
+		formatMetricValue,
+		getZoneBoundaries,
+		valueToZone,
+		zoneToColour,
+		formatZoneBoundary,
+		powerSourceLabel,
+	} from './colourScale.ts';
+	import type { ZoneBand } from '$lib/analytics/zones';
 
 	let {
 		activities,
@@ -25,6 +34,7 @@
 		onHoverDistance = undefined,
 		availableChannels = [],
 		onMetricChannelChange = undefined,
+		athleteProfile = undefined,
 	}: {
 		activities: Activity[];
 		colourMap?: Map<string, number>;
@@ -34,32 +44,177 @@
 		onHoverDistance?: (distanceMetres: number | null) => void;
 		/** Channels with data in at least one loaded activity, for the metric selector */
 		availableChannels?: ChannelKey[];
-		/** Emits the selected metric channel whenever it changes (or null when deselected) */
+		/** Emits the first activity's selected channel whenever it changes (or null) */
 		onMetricChannelChange?: (channel: ChannelKey | null) => void;
+		/** Athlete profile for zone-based colouring */
+		athleteProfile?: AthleteProfile;
 	} = $props();
 
+	// ── Per-file metric configuration ─────────────────────────────────────────
+	interface PerFileMetricConfig {
+		channel: ChannelKey | null;
+		zoneMode: boolean;
+	}
+
+	// Plain object keyed by activityId — object property mutations are more
+	// reliably tracked by Svelte 5's proxy than Map.set() in jsdom.
+	let perFileConfig = $state<Record<string, PerFileMetricConfig>>({});
+
+	// Sync perFileConfig when activities change: remove stale, add new with defaults
+	$effect(() => {
+		const currentIds = new Set(activities.map(a => a.id));
+		untrack(() => {
+			for (const id of Object.keys(perFileConfig)) {
+				if (!currentIds.has(id)) delete perFileConfig[id];
+			}
+			for (const a of activities) {
+				if (!(a.id in perFileConfig)) {
+					perFileConfig[a.id] = { channel: null, zoneMode: false };
+				}
+			}
+		});
+	});
+
+	function configFor(id: string): PerFileMetricConfig {
+		return perFileConfig[id] ?? { channel: null, zoneMode: false };
+	}
+
+	/**
+	 * In single-file mode the `availableChannels` prop is authoritative (parent derives the
+	 * union, which equals the single file's channels). In multi-file mode we filter to each
+	 * activity's own channels so files only show channels they actually have data for.
+	 */
+	function fileChannels(activity: Activity): ChannelKey[] {
+		if (activities.length <= 1) return availableChannels;
+		return availableChannels.filter(ch => (activity.availableChannels as Set<ChannelKey>).has(ch));
+	}
+
+	/** Display label for a channel in the picker list */
+	function channelPickerLabel(ch: ChannelKey, activity: Activity): string {
+		if (ch === 'power') {
+			return powerSourceLabel(activity.powerSource, getPowerManufacturer(activity));
+		}
+		return CHANNEL_META[ch].label;
+	}
+
+	/** Find the manufacturer of the power-contributing device for source label */
+	function getPowerManufacturer(activity: Activity): string | undefined {
+		const stream = activity.deviceStreams.find(s => s.channels.includes('power'));
+		return typeof stream?.device.manufacturer === 'string' ? stream.device.manufacturer : undefined;
+	}
+
+	/** Returns true when zone boundaries exist for this activity's channel and profile */
+	function canUseZones(activityId: string): boolean {
+		const config = perFileConfig[activityId];
+		const activity = activities.find(a => a.id === activityId);
+		if (!config?.channel || !activity || !athleteProfile) return false;
+		return getZoneBoundaries(config.channel, activity.sport ?? '', athleteProfile) !== null;
+	}
+
+	function disabledZoneTitle(activityId: string): string {
+		const config = perFileConfig[activityId];
+		if (!athleteProfile) return 'Set athlete profile thresholds to enable zone colours';
+		if (config?.channel === 'heartRate') return 'Set maxHR or LTHR in Athlete Profile to enable zone colours';
+		if (config?.channel === 'power') {
+			const activity = activities.find(a => a.id === activityId);
+			return activity?.sport === 'running'
+				? 'Set Critical Power (CP) in Athlete Profile to enable zone colours'
+				: 'Set FTP in Athlete Profile to enable zone colours';
+		}
+		return 'Set athlete profile thresholds to enable zone colours';
+	}
+
+	function selectChannel(activityId: string, ch: ChannelKey | null) {
+		perFileConfig[activityId] = { channel: ch, zoneMode: false };
+	}
+
+	function setZoneMode(activityId: string, zoneMode: boolean) {
+		const config = perFileConfig[activityId];
+		if (!config) return;
+		// Flash opacity on picker container (mode-switching animation)
+		if (pickerEl) {
+			pickerEl.classList.add('mode-switching');
+			setTimeout(() => pickerEl?.classList.remove('mode-switching'), 150);
+		}
+		perFileConfig[activityId] = { ...config, zoneMode };
+	}
+
+	// ── GPS cache ─────────────────────────────────────────────────────────────
 	const gpsCache = $derived(activities.map(a => downsampleGps(extractGpsPoints(a), GPS_MAX_POINTS)));
 
+	// ── Per-file metric computation ───────────────────────────────────────────
+	interface ActivityMetricResult {
+		channel: ChannelKey;
+		zoneMode: boolean;
+		smoothedValues: (number | null)[];
+		metricGpsPoints: GpsPointWithMetric[];
+		globalRange: { min: number; max: number } | null;
+		zoneBands: ZoneBand[] | null;
+	}
+
+	const perFileComputation = $derived.by(() => {
+		const result: Record<string, ActivityMetricResult> = {};
+		for (let i = 0; i < activities.length; i++) {
+			const activity = activities[i];
+			const config = perFileConfig[activity.id];
+			if (!config?.channel) continue;
+			const ch = config.channel;
+			const raw = extractChannel(activity.records, ch);
+			const smoothed = smooth(raw, $smoothing);
+			if (!smoothed.some(v => v !== null)) continue;
+			const metricGpsPoints = metricValuesForGpsPoints(gpsCache[i], smoothed);
+			const globalRange = computeMetricRange([metricGpsPoints]);
+			const zoneBands = (config.zoneMode && athleteProfile)
+				? getZoneBoundaries(ch, activity.sport ?? '', athleteProfile)
+				: null;
+			result[activity.id] = {
+				channel: ch,
+				zoneMode: config.zoneMode && zoneBands !== null,
+				smoothedValues: smoothed,
+				metricGpsPoints,
+				globalRange,
+				zoneBands,
+			};
+		}
+		return result;
+	});
+
+	// Emit first activity's channel to parent (for strip chart below map).
+	// Read perFileConfig directly (not via $derived) so $effect tracks it correctly.
+	$effect(() => {
+		const ch = activities.length > 0 ? (perFileConfig[activities[0].id]?.channel ?? null) : null;
+		onMetricChannelChange?.(ch);
+	});
+
+	// Reset channels that disappear when a file is removed or availableChannels change
+	$effect(() => {
+		const channels = new Set(availableChannels);
+		untrack(() => {
+			for (const [id, config] of Object.entries(perFileConfig)) {
+				if (config.channel && !channels.has(config.channel)) {
+					perFileConfig[id] = { channel: null, zoneMode: false };
+				}
+			}
+		});
+	});
+
+	// ── Picker state ──────────────────────────────────────────────────────────
+	let openPickerFor = $state<string | null>(null);
+	let pickerVisible = $state(false);
+	let pickerTop     = $state(10);
+	let pickerRight   = $state(10);
+	let pickerEl = $state<HTMLDivElement | undefined>(undefined);
+
+	// ── Leaflet state ─────────────────────────────────────────────────────────
 	let container: HTMLDivElement;
 	let L = $state<typeof import('leaflet') | undefined>(undefined);
 	let map = $state<import('leaflet').Map | undefined>(undefined);
-	// All rendered layers — cleared and rebuilt on each polyline effect run
 	let layers: import('leaflet').Layer[] = [];
 	let markers: (import('leaflet').CircleMarker | null)[] = [];
 	let driftMarkers: import('leaflet').CircleMarker[] = [];
 	let resizeObserver: ResizeObserver | undefined;
 	let mapInitialised = false;
-
-	// Metric colouring state
-	let metricChannel = $state<ChannelKey | null>(null);
-
-	// Colour-by picker — rendered as a position:fixed Svelte overlay so it is
-	// never clipped by any overflow:hidden ancestor in the page layout.
-	let pickerOpen    = $state(false);
-	let pickerVisible = $state(false);   // false when map tab is hidden (display:none)
-	let pickerTop     = $state(10);      // viewport px, updated by updatePickerPosition()
-	let pickerRight   = $state(10);      // viewport px (distance from right edge)
-	let pickerEl = $state<HTMLDivElement | undefined>(undefined);
+	let legendContainerEl = $state<HTMLDivElement | undefined>(undefined);
 
 	function updatePickerPosition() {
 		if (!container) return;
@@ -70,46 +225,6 @@
 		pickerVisible = true;
 	}
 
-	// DOM refs for the Leaflet legend control (still Leaflet-managed)
-	let legendControlEl: HTMLDivElement | undefined;
-	let legendLabelEl: HTMLDivElement | undefined;
-	let legendMinEl: HTMLSpanElement | undefined;
-	let legendMaxEl: HTMLSpanElement | undefined;
-
-	// ── Shared metric computation ────────────────────────────────────────────
-	// Computed once and consumed by both the legend and polyline effects,
-	// avoiding duplicate smooth() + metricValuesForGpsPoints() work.
-	interface ActivityMetricData {
-		smoothedValues: (number | null)[] | null; // null = activity has no data for this channel
-		metricGpsPoints: GpsPointWithMetric[];    // empty when smoothedValues is null
-	}
-	interface MetricComputation {
-		channel: ChannelKey;
-		perActivity: ActivityMetricData[];
-		globalRange: { min: number; max: number } | null;
-	}
-
-	const metricComputation = $derived.by<MetricComputation | null>(() => {
-		if (!metricChannel) return null;
-		const ch = metricChannel;
-
-		const perActivity: ActivityMetricData[] = activities.map((activity, idx) => {
-			const raw = extractChannel(activity.records, ch);
-			const smoothedVals = smooth(raw, $smoothing);
-			if (!smoothedVals.some(v => v !== null)) {
-				return { smoothedValues: null, metricGpsPoints: [] };
-			}
-			return {
-				smoothedValues: smoothedVals,
-				metricGpsPoints: metricValuesForGpsPoints(gpsCache[idx], smoothedVals),
-			};
-		});
-
-		const globalRange = computeMetricRange(perActivity.map(d => d.metricGpsPoints));
-
-		return { channel: ch, perActivity, globalRange };
-	});
-
 	function initLeafletMap() {
 		if (mapInitialised || !L || !container) return;
 		mapInitialised = true;
@@ -117,80 +232,46 @@
 		map = L.map(container);
 
 		// ── Tile layer switcher ──────────────────────────────────────────────
-		// Build a base layers record from TILE_PROVIDERS and register via
-		// L.control.layers. The first provider is added to the map as default.
 		const baseLayers: Record<string, import('leaflet').TileLayer> = {};
 		for (const provider of TILE_PROVIDERS) {
 			baseLayers[provider.name] = L.tileLayer(provider.url, {
 				attribution: provider.attribution,
 				maxNativeZoom: provider.maxNativeZoom,
-				// No maxZoom restriction — layer stays selectable at any zoom level.
-				// Tiles are upscaled by Leaflet beyond maxNativeZoom rather than
-				// the layer being disabled in the control.
 			});
 		}
-		// Add default (first) layer to map
 		baseLayers[TILE_PROVIDERS[0].name].addTo(map);
-		// Register all layers in the native Leaflet control at topleft.
-		// collapsed: false keeps the panel permanently open so all layer names are
-		// always visible — no hover required for discoverability.
 		L.control.layers(baseLayers, {}, { position: 'topleft', collapsed: false }).addTo(map);
 
-		// ── Colour scale legend control (bottom-right) ───────────────────────
+		// ── Legend control (bottom-right) ────────────────────────────────────
 		const LegendControl = L.Control.extend({
 			onAdd() {
 				const div = L!.DomUtil.create('div', 'metric-legend-control hidden') as HTMLDivElement;
 				L!.DomEvent.disableClickPropagation(div);
-				legendControlEl = div;
-
-				const labelEl = L!.DomUtil.create('div', 'metric-legend-label', div) as HTMLDivElement;
-				legendLabelEl = labelEl;
-
-				L!.DomUtil.create('div', 'metric-legend-bar', div);
-
-				const valuesEl = L!.DomUtil.create('div', 'metric-legend-values', div);
-				const minEl = L!.DomUtil.create('span', 'metric-legend-min', valuesEl) as HTMLSpanElement;
-				const maxEl = L!.DomUtil.create('span', 'metric-legend-max', valuesEl) as HTMLSpanElement;
-				legendMinEl = minEl;
-				legendMaxEl = maxEl;
-
+				legendContainerEl = div;
 				return div;
 			},
 		});
-
 		new LegendControl({ position: 'bottomright' }).addTo(map);
+
 		updatePickerPosition();
 	}
 
 	onMount(async () => {
 		L = await import('leaflet');
 		await import('leaflet/dist/leaflet.css');
-
-		// Initialise Leaflet only when the container has real dimensions.
-		// The map panel lives permanently in the DOM but its parent has
-		// display:none when another tab is active — calling L.map() on a
-		// zero-size container produces "Initialize failed: invalid dom."
-		// The ResizeObserver fires as soon as the tab becomes visible and
-		// provides the first non-zero layout, at which point we init.
-		// Guard against unmount during the async Leaflet import
 		if (!container) return;
 
 		resizeObserver = new ResizeObserver(() => {
 			if (!container) return;
 			const r = container.getBoundingClientRect();
-			if (!mapInitialised && r.width > 0 && r.height > 0) {
-				initLeafletMap();
-			}
+			if (!mapInitialised && r.width > 0 && r.height > 0) initLeafletMap();
 			map?.invalidateSize();
 			updatePickerPosition();
 		});
 		resizeObserver.observe(container);
 
-		// If the Map tab is already active on mount, initialise immediately.
 		const initRect = container.getBoundingClientRect();
-		if (initRect.width > 0 && initRect.height > 0) {
-			initLeafletMap();
-		}
+		if (initRect.width > 0 && initRect.height > 0) initLeafletMap();
 	});
 
 	onDestroy(() => {
@@ -198,70 +279,101 @@
 		map?.remove();
 	});
 
-	// ── Reset metricChannel if the chosen channel disappears (e.g. different file loaded)
+	// ── Close picker on pointerdown outside ──────────────────────────────────
 	$effect(() => {
-		if (metricChannel && !availableChannels.includes(metricChannel)) {
-			metricChannel = null;
-		}
-	});
-
-	// ── Emit metricChannel to parent whenever it changes ────────────────────
-	$effect(() => {
-		onMetricChannelChange?.(metricChannel);
-	});
-
-	// ── Close picker on pointerdown outside it (only wired while open) ───────
-	$effect(() => {
-		if (!pickerOpen) return;
+		if (!openPickerFor) return;
 		const handleOutside = (e: PointerEvent) => {
 			if (pickerEl && !pickerEl.contains(e.target as Node)) {
-				pickerOpen = false;
+				openPickerFor = null;
 			}
 		};
 		document.addEventListener('pointerdown', handleOutside, { capture: true });
 		return () => document.removeEventListener('pointerdown', handleOutside, { capture: true });
 	});
 
-	// ── Update legend content from shared metricComputation ─────────────────
+	// ── Legend update (reads perFileComputation) ──────────────────────────────
 	$effect(() => {
-		if (!legendControlEl || !legendLabelEl || !legendMinEl || !legendMaxEl) return;
+		if (!legendContainerEl) return;
 
-		if (!metricComputation?.globalRange) {
-			legendControlEl.classList.add('hidden');
+		// Collect active legends (activities with a channel and data range)
+		const activeLegends = activities
+			.map(a => ({ activity: a, result: perFileComputation[a.id] }))
+			.filter(({ result }) => result?.globalRange != null);
+
+		if (activeLegends.length === 0) {
+			legendContainerEl.classList.add('hidden');
 			return;
 		}
 
-		const { channel, globalRange } = metricComputation;
-		const meta = CHANNEL_META[channel];
+		legendContainerEl.classList.remove('hidden');
+		legendContainerEl.innerHTML = '';
 
-		legendControlEl.classList.remove('hidden');
-		legendLabelEl.textContent = `${meta.label} · ${meta.unit}`;
-		legendMinEl.textContent = formatMetricValue(globalRange.min, channel);
-		legendMaxEl.textContent = formatMetricValue(globalRange.max, channel);
+		const multiFile = activities.length > 1;
+
+		for (const { activity, result } of activeLegends) {
+			const entryEl = document.createElement('div');
+			entryEl.className = 'metric-legend-entry';
+
+			// Label
+			const labelEl = document.createElement('div');
+			labelEl.className = 'metric-legend-label';
+			const meta = CHANNEL_META[result!.channel];
+			const prefix = multiFile ? `${activity.filename} · ` : '';
+			labelEl.textContent = `${prefix}${meta.label} · ${meta.unit}`;
+			entryEl.appendChild(labelEl);
+
+			if (result!.zoneMode && result!.zoneBands) {
+				// Zone legend: coloured swatches with boundary labels
+				const zonesEl = document.createElement('div');
+				zonesEl.className = 'metric-legend-zones';
+				for (const band of result!.zoneBands) {
+					const rowEl = document.createElement('div');
+					rowEl.className = 'metric-legend-zone-row';
+					const swatchEl = document.createElement('span');
+					swatchEl.className = 'metric-legend-zone-swatch';
+					swatchEl.style.backgroundColor = zoneToColour(band.zone);
+					const textEl = document.createElement('span');
+					textEl.className = 'metric-legend-zone-text';
+					textEl.textContent = formatZoneBoundary(band, result!.channel);
+					rowEl.appendChild(swatchEl);
+					rowEl.appendChild(textEl);
+					zonesEl.appendChild(rowEl);
+				}
+				entryEl.appendChild(zonesEl);
+			} else {
+				// Gradient legend: colour bar + min/max values
+				const barEl = document.createElement('div');
+				barEl.className = 'metric-legend-bar';
+				entryEl.appendChild(barEl);
+				const valuesEl = document.createElement('div');
+				valuesEl.className = 'metric-legend-values';
+				const minEl = document.createElement('span');
+				minEl.textContent = formatMetricValue(result!.globalRange!.min, result!.channel);
+				const maxEl = document.createElement('span');
+				maxEl.textContent = formatMetricValue(result!.globalRange!.max, result!.channel);
+				valuesEl.appendChild(minEl);
+				valuesEl.appendChild(maxEl);
+				entryEl.appendChild(valuesEl);
+			}
+
+			legendContainerEl.appendChild(entryEl);
+		}
 	});
 
 	// ── Polyline rendering ───────────────────────────────────────────────────
 	$effect(() => {
 		if (!map || !L) return;
 
-		void activities;       // re-render when activities change (even when metricChannel is null)
-		void referenceIndex;   // re-render when reference activity changes
-		void metricComputation; // re-render when channel, smoothing, or activity data changes
+		void activities;
+		void referenceIndex;
+		void perFileComputation;
 
-		// Remove all existing layers and drift markers
 		for (const layer of layers) layer.remove();
 		layers = [];
 		for (const dm of driftMarkers) dm.remove();
 		driftMarkers = [];
 
 		const allPoints: import('leaflet').LatLng[] = [];
-
-		const channel = metricComputation?.channel ?? null;
-		const globalRange = metricComputation?.globalRange ?? null;
-
-		// Shared Canvas renderer for all metric-coloured segments
-		// Canvas batches all segments into one <canvas> element — critical for performance
-		const canvasRenderer = channel && globalRange ? L.canvas({ padding: 0.5 }) : null;
 
 		for (let i = 0; i < activities.length; i++) {
 			const activity = activities[i];
@@ -273,11 +385,10 @@
 			allPoints.push(...latLngs);
 
 			const isRef = referenceIndex !== undefined && i === referenceIndex;
-			const actData = metricComputation?.perActivity[i] ?? null;
-			const useMetric = channel && actData?.smoothedValues && globalRange;
+			const actResult = perFileComputation[activity.id];
 
-			if (!useMetric) {
-				// ── Flat colour polyline (default / fallback) ────────────────────
+			if (!actResult || !actResult.globalRange) {
+				// ── Flat colour polyline ─────────────────────────────────────────
 				const polyline = L.polyline(latLngs, {
 					color: colour,
 					weight: 2.5,
@@ -292,9 +403,7 @@
 					const dist = distanceAtPoint(gpsPoints, e.latlng.lat, e.latlng.lng);
 					if (dist !== null) {
 						onHoverDistance?.(dist);
-						polyline.setTooltipContent(
-							`${activity.filename} · ${(dist / 1000).toFixed(2)} km`,
-						);
+						polyline.setTooltipContent(`${activity.filename} · ${(dist / 1000).toFixed(2)} km`);
 					}
 				});
 
@@ -307,35 +416,30 @@
 				layers.push(polyline);
 			} else {
 				// ── Metric-coloured segmented polylines ──────────────────────────
-				// Pre-computed in metricComputation — no duplicate extraction here
-				const metricGpsPoints = actData!.metricGpsPoints;
+				const canvasRenderer = L.canvas({ padding: 0.5 });
 				const group = L.featureGroup();
 
-				for (let j = 0; j + 1 < metricGpsPoints.length; j++) {
-					const ptA = metricGpsPoints[j];
-					const ptB = metricGpsPoints[j + 1];
-
+				for (let j = 0; j + 1 < actResult.metricGpsPoints.length; j++) {
+					const ptA = actResult.metricGpsPoints[j];
+					const ptB = actResult.metricGpsPoints[j + 1];
 					const valA = ptA.metricValue;
 					const valB = ptB.metricValue;
-
-					// Skip segments where both endpoints have no data
 					if (valA === null && valB === null) continue;
 
-					// Use the average of the two endpoint values for a smooth colour transition
-					const val =
-						valA !== null && valB !== null
-							? (valA + valB) / 2
-							: (valA ?? valB)!;
+					const val = valA !== null && valB !== null ? (valA + valB) / 2 : (valA ?? valB)!;
 
-					// No invert needed: the default gradient (blue at min, red at max) already
-					// maps fast pace (low min/km) → blue and slow pace (high min/km) → red,
-					// which is the correct behaviour for all effort-based channels including pace.
-					const segColour = valueToColour(val, globalRange.min, globalRange.max);
+					let segColour: string;
+					if (actResult.zoneMode && athleteProfile) {
+						const zone = valueToZone(val, actResult.channel, activity.sport ?? '', athleteProfile);
+						segColour = zone !== null ? zoneToColour(zone) : colour;
+					} else {
+						segColour = valueToColour(val, actResult.globalRange.min, actResult.globalRange.max);
+					}
 
 					L.polyline([L.latLng(ptA.lat, ptA.lon), L.latLng(ptB.lat, ptB.lon)], {
 						color: segColour,
 						weight: 3,
-						renderer: canvasRenderer!,
+						renderer: canvasRenderer,
 						interactive: true,
 					}).addTo(group);
 				}
@@ -347,12 +451,21 @@
 					const dist = distanceAtPoint(gpsPoints, e.latlng.lat, e.latlng.lng);
 					if (dist !== null) {
 						onHoverDistance?.(dist);
-						const metricVal = nearestMetricValue(metricGpsPoints, dist);
+						const metricVal = nearestMetricValue(actResult.metricGpsPoints, dist);
 						const distStr = `${(dist / 1000).toFixed(2)} km`;
-						const metricStr =
-							metricVal !== null
-								? ` · ${formatMetricValue(metricVal, channel)} ${CHANNEL_META[channel].unit}`
-								: '';
+						let metricStr = '';
+						if (metricVal !== null) {
+							const valStr = formatMetricValue(metricVal, actResult.channel);
+							const unit = CHANNEL_META[actResult.channel].unit;
+							if (actResult.zoneMode && athleteProfile) {
+								const zone = valueToZone(metricVal, actResult.channel, activity.sport ?? '', athleteProfile);
+								metricStr = zone !== null
+									? ` · ${valStr} ${unit} Z${zone}`
+									: ` · ${valStr} ${unit}`;
+							} else {
+								metricStr = ` · ${valStr} ${unit}`;
+							}
+						}
 						group.setTooltipContent(`${activity.filename} · ${distStr}${metricStr}`);
 					}
 				});
@@ -365,9 +478,7 @@
 				group.addTo(map);
 				layers.push(group);
 
-				// Reference dashed overlay (SVG polyline on top of canvas segments).
-				// Uses the activity's flat file colour so the dashes are visible over the heatmap,
-				// matching how the reference is styled in the flat-colour path.
+				// Reference dashed overlay on top of zone/gradient canvas segments
 				if (isRef) {
 					const dashOverlay = L.polyline(latLngs, {
 						color: colour,
@@ -382,24 +493,21 @@
 			}
 		}
 
-		// GPS drift anomaly markers — red circles at each drift event position
+		// GPS drift anomaly markers
 		for (let i = 0; i < activities.length; i++) {
 			const activity = activities[i];
 			const driftAnomalies = activity.anomalies.filter(a => a.type === 'gps-drift');
 			for (const anomaly of driftAnomalies) {
 				const record = activity.records[anomaly.recordIndex];
 				if (!record?.position) continue;
-				const dm = L.circleMarker(
-					L.latLng(record.position.lat, record.position.lon),
-					{
-						radius: 5,
-						color: '#ef4444',
-						fillColor: '#ef4444',
-						fillOpacity: 0.8,
-						weight: 1.5,
-						interactive: true,
-					}
-				);
+				const dm = L.circleMarker(L.latLng(record.position.lat, record.position.lon), {
+					radius: 5,
+					color: '#ef4444',
+					fillColor: '#ef4444',
+					fillOpacity: 0.8,
+					weight: 1.5,
+					interactive: true,
+				});
 				dm.bindTooltip('GPS drift detected', { sticky: false, opacity: 0.9 });
 				dm.addTo(map);
 				driftMarkers.push(dm);
@@ -415,7 +523,7 @@
 		markers = activities.map(() => null);
 	});
 
-	// ── Chart→map hover sync: render circle markers ──────────────────────────
+	// ── Chart→map hover sync ──────────────────────────────────────────────────
 	$effect(() => {
 		if (!map || !L) return;
 
@@ -454,36 +562,27 @@
 		}
 	});
 
-	/**
-	 * Returns the metric value at the GPS point nearest to `targetDist`.
-	 * Uses binary search (O(log n)) since metricGpsPoints is sorted by distance.
-	 * Used for tooltip content when metric colouring is active.
-	 */
+	/** Returns the metric value at the GPS point nearest to targetDist (binary search). */
 	function nearestMetricValue(points: GpsPointWithMetric[], targetDist: number): number | null {
 		if (points.length === 0) return null;
-
-		// Binary search for first point with distance >= targetDist
 		let lo = 0;
 		let hi = points.length - 1;
-
 		while (lo < hi) {
 			const mid = (lo + hi) >> 1;
 			if (points[mid].distance < targetDist) lo = mid + 1;
 			else hi = mid;
 		}
-
-		// All points are before targetDist → nearest is the last point
 		if (points[lo].distance < targetDist) return points[lo].metricValue;
-
-		// lo is first point >= targetDist; compare with predecessor if one exists
 		if (lo > 0) {
-			const distToLo   = points[lo].distance - targetDist;      // >= 0
-			const distToPrev = targetDist - points[lo - 1].distance;  // >= 0
+			const distToLo   = points[lo].distance - targetDist;
+			const distToPrev = targetDist - points[lo - 1].distance;
 			if (distToPrev <= distToLo) return points[lo - 1].metricValue;
 		}
-
 		return points[lo].metricValue;
 	}
+
+	// Chevron SVG shared between picker triggers
+	const CHEVRON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 </script>
 
 <div
@@ -493,54 +592,164 @@
 	aria-label="GPS route map"
 ></div>
 
-<!-- Colour-by picker — position:fixed overlay so it is never clipped by
-     any overflow:hidden ancestor (map-wrap, map-panel, tab-content, etc.).
-     Coordinates are kept in sync with the map container via ResizeObserver. -->
+<!-- Colour-by picker — position:fixed overlay, never clipped by overflow:hidden ancestors -->
 {#if availableChannels.length > 0 && pickerVisible}
 <div
 	class="colour-picker"
+	class:colour-picker--multi={activities.length > 1}
 	bind:this={pickerEl}
 	style:top="{pickerTop}px"
 	style:right="{pickerRight}px"
 >
-	<span class="picker-label">Colour by</span>
-	<div class="picker-wrapper">
-		<button
-			class="picker-trigger"
-			type="button"
-			onclick={() => pickerOpen = !pickerOpen}
+	{#if activities.length <= 1}
+		<!-- ── Single-file mode ──────────────────────────────────────────── -->
+		{@const activity = activities[0]}
+		{@const actId = activity?.id ?? ''}
+		{@const config = configFor(actId)}
+		{@const canZone = canUseZones(actId)}
+		<span class="picker-label">Colour by</span>
+		<div class="picker-wrapper">
+			<button
+				class="picker-trigger"
+				type="button"
+				onclick={() => openPickerFor = openPickerFor === actId ? null : actId}
+			>
+				<span class="picker-value">
+					{config.channel ? channelPickerLabel(config.channel, activity) : 'None'}
+				</span>
+				<svg class="picker-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+					<path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</button>
+			{#if openPickerFor === actId}
+			<ul class="picker-list" role="listbox">
+				<li
+					role="option"
+					tabindex="0"
+					aria-selected={config.channel === null}
+					class:selected={config.channel === null}
+					onclick={() => { selectChannel(actId, null); openPickerFor = null; }}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { selectChannel(actId, null); openPickerFor = null; } }}
+				>None</li>
+				{#each fileChannels(activity) as ch}
+				<li
+					role="option"
+					tabindex="0"
+					aria-selected={config.channel === ch}
+					class:selected={config.channel === ch}
+					onclick={() => { selectChannel(actId, ch); openPickerFor = null; }}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { selectChannel(actId, ch); openPickerFor = null; } }}
+				>{channelPickerLabel(ch, activity)}</li>
+				{/each}
+			</ul>
+			{/if}
+		</div>
+		{#if config.channel === 'heartRate' || config.channel === 'power'}
+		<div
+			class="zone-toggle"
+			class:zone-toggle--disabled={!canZone}
+			title={!canZone ? disabledZoneTitle(actId) : undefined}
+			role="group"
+			aria-label="Colour scale mode"
 		>
-			<span class="picker-value">
-				{metricChannel ? CHANNEL_META[metricChannel].label : 'None'}
-			</span>
-			<!-- chevron arrow -->
-			<svg class="picker-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
-				<path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-			</svg>
-		</button>
-		{#if pickerOpen}
-		<ul class="picker-list" role="listbox">
-			<li
-				role="option"
-				tabindex="0"
-				aria-selected={metricChannel === null}
-				class:selected={metricChannel === null}
-				onclick={() => { metricChannel = null; pickerOpen = false; }}
-				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { metricChannel = null; pickerOpen = false; } }}
-			>None</li>
-			{#each availableChannels as ch}
-			<li
-				role="option"
-				tabindex="0"
-				aria-selected={metricChannel === ch}
-				class:selected={metricChannel === ch}
-				onclick={() => { metricChannel = ch; pickerOpen = false; }}
-				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { metricChannel = ch; pickerOpen = false; } }}
-			>{CHANNEL_META[ch].label}</li>
-			{/each}
-		</ul>
+			<button
+				class="zone-toggle__seg"
+				type="button"
+				aria-pressed={!config.zoneMode}
+				onclick={() => setZoneMode(actId, false)}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') setZoneMode(actId, false); }}
+				disabled={!canZone}
+			>Gradient</button>
+			<button
+				class="zone-toggle__seg"
+				type="button"
+				aria-pressed={config.zoneMode}
+				onclick={() => setZoneMode(actId, true)}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') setZoneMode(actId, true); }}
+				disabled={!canZone}
+			>Zones</button>
+		</div>
 		{/if}
-	</div>
+	{:else}
+		<!-- ── Multi-file mode ───────────────────────────────────────────── -->
+		<div class="picker-header">Colour by</div>
+		{#each activities as activity, i}
+		{@const actId = activity.id}
+		{@const config = configFor(actId)}
+		{@const canZone = canUseZones(actId)}
+		{@const fileColour = FILE_COLOURS[(colourMap.get(actId) ?? i) % FILE_COLOURS.length]}
+		<div class="file-row">
+			<span
+				class="file-dot"
+				style="background-color: {fileColour}; --dot-colour: {fileColour}"
+				aria-hidden="true"
+			></span>
+			<span class="file-name" title={activity.filename}>{activity.filename}</span>
+			<div class="picker-wrapper">
+				<button
+					class="picker-trigger"
+					type="button"
+					onclick={() => openPickerFor = openPickerFor === actId ? null : actId}
+				>
+					<span class="picker-value">
+						{config.channel ? channelPickerLabel(config.channel, activity) : 'None'}
+					</span>
+					<svg class="picker-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+						<path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+					</svg>
+				</button>
+				{#if openPickerFor === actId}
+				<ul class="picker-list" role="listbox">
+					<li
+						role="option"
+						tabindex="0"
+						aria-selected={config.channel === null}
+						class:selected={config.channel === null}
+						onclick={() => { selectChannel(actId, null); openPickerFor = null; }}
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { selectChannel(actId, null); openPickerFor = null; } }}
+					>None</li>
+					{#each fileChannels(activity) as ch}
+					<li
+						role="option"
+						tabindex="0"
+						aria-selected={config.channel === ch}
+						class:selected={config.channel === ch}
+						onclick={() => { selectChannel(actId, ch); openPickerFor = null; }}
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { selectChannel(actId, ch); openPickerFor = null; } }}
+					>{channelPickerLabel(ch, activity)}</li>
+					{/each}
+				</ul>
+				{/if}
+			</div>
+			{#if config.channel === 'heartRate' || config.channel === 'power'}
+			<div
+				class="zone-toggle"
+				class:zone-toggle--disabled={!canZone}
+				title={!canZone ? disabledZoneTitle(actId) : undefined}
+				role="group"
+				aria-label="Colour scale mode"
+			>
+				<button
+					class="zone-toggle__seg"
+					type="button"
+					aria-pressed={!config.zoneMode}
+					onclick={() => setZoneMode(actId, false)}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') setZoneMode(actId, false); }}
+					disabled={!canZone}
+				>Gradient</button>
+				<button
+					class="zone-toggle__seg"
+					type="button"
+					aria-pressed={config.zoneMode}
+					onclick={() => setZoneMode(actId, true)}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') setZoneMode(actId, true); }}
+					disabled={!canZone}
+				>Zones</button>
+			</div>
+			{/if}
+		</div>
+		{/each}
+	{/if}
 </div>
 {/if}
 
@@ -560,14 +769,9 @@
 	}
 
 	/* ── Colour-by picker overlay (position:fixed Svelte element) ──────── */
-
-	/* The picker floats above the map as a fixed-position element whose
-	   top/right are set inline by updatePickerPosition(). It is never a
-	   child of the Leaflet container and is unaffected by overflow:hidden
-	   on any ancestor in the page layout. */
 	.colour-picker {
 		position: fixed;
-		z-index: 1001;          /* above Leaflet controls (1000) */
+		z-index: 1001;
 		display: flex;
 		align-items: center;
 		gap: 7px;
@@ -581,8 +785,88 @@
 		font-family: inherit;
 		pointer-events: auto;
 		white-space: nowrap;
+		max-width: 340px;
+		transition: opacity 0.15s ease;
 	}
 
+	/* Applied via classList.add() in JS — needs :global to suppress Svelte's unused-selector warning */
+	:global(.colour-picker.mode-switching) {
+		opacity: 0.7;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.colour-picker { transition: none; }
+		:global(.colour-picker.mode-switching) {
+			transition: none;
+			opacity: 1;
+		}
+	}
+
+	/* Multi-file: flex-column to stack file rows */
+	.colour-picker--multi {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 5px;
+		padding: 8px 10px;
+	}
+
+	/* ── Picker header (multi-file "Colour by" label) ────────────────────── */
+	.picker-header {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: var(--color-muted, #9ca3af);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		user-select: none;
+		cursor: default;
+		padding-bottom: 5px;
+		border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+		margin-bottom: 1px;
+	}
+
+	/* ── File rows (multi-file) ──────────────────────────────────────────── */
+	.file-row {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 26px;
+	}
+
+	/* Colour dot — 8px circle with subtle glow */
+	.file-dot {
+		flex-shrink: 0;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		box-shadow: 0 0 4px 0 var(--dot-colour, currentColor);
+	}
+
+	/* Filename — truncated */
+	.file-name {
+		flex-shrink: 0;
+		max-width: 120px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.72rem;
+		font-weight: 500;
+		color: var(--color-text, #f1f5f9);
+		font-family: ui-monospace, 'Cascadia Code', 'SF Mono', monospace;
+		letter-spacing: -0.01em;
+	}
+
+	/* Dropdown wrapper grows to fill row space */
+	.file-row .picker-wrapper {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.file-row .picker-trigger {
+		width: 100%;
+		min-width: 90px;
+	}
+
+	/* ── Single-file: original picker-label ─────────────────────────────── */
 	.picker-label {
 		font-size: 0.7rem;
 		font-weight: 500;
@@ -637,9 +921,6 @@
 		color: var(--color-muted, #9ca3af);
 	}
 
-	/* Dropdown list — position:absolute relative to .picker-wrapper.
-	   Since .colour-picker is position:fixed, the list is also effectively
-	   viewport-positioned and will never be clipped by overflow:hidden. */
 	.picker-list {
 		position: absolute;
 		top: calc(100% + 4px);
@@ -678,13 +959,95 @@
 		background-color: rgba(59, 130, 246, 0.1);
 	}
 
-	/* ── Colour scale legend (still a Leaflet control) ───────────────── */
+	/* ── Zone toggle (pill with two segments) ────────────────────────────── */
+	.zone-toggle {
+		display: inline-flex;
+		align-items: center;
+		flex-shrink: 0;
+		height: 26px;
+		border-radius: 5px;
+		border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
+		background: color-mix(in srgb, var(--color-card, #1e1e2e) 60%, transparent);
+		overflow: hidden;
+		outline: none;
+	}
+
+	.zone-toggle__seg {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 8px;
+		height: 100%;
+		font-size: 0.72rem;
+		font-weight: 500;
+		font-family: inherit;
+		cursor: pointer;
+		border: none;
+		background: transparent;
+		color: var(--color-muted, #9ca3af);
+		white-space: nowrap;
+		line-height: 1;
+		outline: none;
+		transition: background-color 0.15s ease, color 0.15s ease;
+	}
+
+	/* Hairline separator between the two segments */
+	.zone-toggle__seg:first-child {
+		border-right: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+	}
+
+	.zone-toggle__seg:not(:disabled):hover {
+		color: var(--color-text, #f1f5f9);
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	/* Active segment */
+	.zone-toggle__seg[aria-pressed="true"]:not(:disabled) {
+		background: #3b82f6;
+		color: #ffffff;
+	}
+
+	/* Active first segment: give right-hand segment its separator back */
+	.zone-toggle__seg[aria-pressed="true"]:not(:disabled):first-child {
+		border-right-color: rgba(255, 255, 255, 0.15);
+	}
+
+	/* Focus-visible ring */
+	.zone-toggle__seg:focus-visible {
+		box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.6);
+	}
+
+	/* Disabled state */
+	.zone-toggle--disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.zone-toggle--disabled .zone-toggle__seg {
+		cursor: not-allowed;
+		pointer-events: none;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.zone-toggle__seg {
+			transition: none;
+		}
+	}
+
+	/* ── Colour scale legend (Leaflet control, bottom-right) ─────────────── */
 	:global(.metric-legend-control) {
-		width: 160px;
+		min-width: 160px;
 	}
 
 	:global(.metric-legend-control.hidden) {
 		display: none;
+	}
+
+	/* Multi-file: stack entries with gap */
+	:global(.metric-legend-entry + .metric-legend-entry) {
+		margin-top: 8px;
+		padding-top: 8px;
+		border-top: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
 	:global(.metric-legend-label) {
@@ -697,6 +1060,7 @@
 		text-overflow: ellipsis;
 	}
 
+	/* Gradient legend */
 	:global(.metric-legend-bar) {
 		height: 9px;
 		border-radius: 5px;
@@ -712,13 +1076,34 @@
 		color: var(--color-text, #f1f5f9);
 	}
 
-	:global(.metric-legend-min),
-	:global(.metric-legend-max) {
-		line-height: 1.3;
+	/* Zone legend */
+	:global(.metric-legend-zones) {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+
+	:global(.metric-legend-zone-row) {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	:global(.metric-legend-zone-swatch) {
+		flex-shrink: 0;
+		width: 10px;
+		height: 10px;
+		border-radius: 2px;
+	}
+
+	:global(.metric-legend-zone-text) {
+		font-size: 0.68rem;
+		font-family: ui-monospace, 'Cascadia Code', monospace;
+		color: var(--color-text, #f1f5f9);
+		white-space: nowrap;
 	}
 
 	/* ── Leaflet layers control — always-expanded panel ────────────────── */
-	/* collapsed: false is set in JS, so the toggle button never renders.   */
 	:global(.leaflet-control-layers) {
 		background: color-mix(in srgb, var(--color-card, #1e1e2e) 88%, transparent);
 		backdrop-filter: blur(6px);
@@ -746,7 +1131,6 @@
 		user-select: none;
 	}
 
-	/* ── Layer list ─────────────────────────────────────────────────────── */
 	:global(.leaflet-control-layers-list) {
 		margin: 0;
 	}
@@ -780,7 +1164,6 @@
 		flex-shrink: 0;
 	}
 
-	/* No overlay layers used — hide the separator */
 	:global(.leaflet-control-layers-separator) {
 		display: none;
 	}
