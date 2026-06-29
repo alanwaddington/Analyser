@@ -220,3 +220,21 @@ export interface GpsPointWithDistance {
 export interface GpsPointWithMetric extends GpsPointWithDistance {
 	metricValue: number | null;
 }
+
+export type ParseStage = 'queued' | 'parsing' | 'normalising' | 'detecting_anomalies' | 'building_streams';
+
+export interface ToastMessage {
+	message: string;
+	level: 'info' | 'warning' | 'error';
+}
+
+export type ParseWorkerMessage =
+	| { type: 'progress'; stage: ParseStage }
+	| { type: 'complete'; activity: Activity; toasts: ToastMessage[] }
+	| { type: 'error'; message: string; toasts: ToastMessage[] };
+
+export interface ParseWorkerInput {
+	buffer: ArrayBuffer;
+	filename: string;
+	labels: Record<string, string>;
+}

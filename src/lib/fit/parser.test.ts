@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, channelsPresentInRecords, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps, filterNegativeElapsed, ensureSortedByElapsed, DISTANCE_EPSILON_M, detectPowerSource } from './parser.ts';
+import { normaliseRecord, normaliseDeviceInfo, buildDeviceStreams, channelsPresentInRecords, applyRunningCadenceDoubling, removeCyclingPace, findFirstGpsFixIndex, findFirstGpsMovementIndex, extractTimerStartTime, findFirstIndoorMovementIndex, extractFirstWorkoutStepTime, classifyIndoor, buildLaps, filterNegativeElapsed, ensureSortedByElapsed, DISTANCE_EPSILON_M, detectPowerSource, normalise } from './parser.ts';
 import type { Device, ActivityRecord } from '$lib/types';
 import { ANT_DEVICE_TYPE } from '$lib/types';
 
@@ -884,5 +884,98 @@ describe('channelsPresentInRecords', () => {
 		const records = [makeRecord({ heartRate: 140 }), makeRecord()];
 		const result = channelsPresentInRecords(records);
 		expect(result.has('heartRate')).toBe(true);
+	});
+});
+
+// ---- normalise() — Worker-safe refactor ----
+
+function makeMinimalFitData(recordOverrides: object[] = []) {
+	const ts = new Date('2025-01-01T10:00:00Z');
+	return {
+		sessions: [{ start_time: ts, total_distance: 100, total_elapsed_time: 10 }],
+		records: recordOverrides.length > 0 ? recordOverrides : [
+			{ timestamp: ts, elapsed_time: 1, distance: 100 },
+		],
+	};
+}
+
+describe('normalise — Worker-safe refactor', () => {
+	it('normalise_goodData_returnsActivityAndEmptyToasts', () => {
+		const data = makeMinimalFitData();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { activity, toasts } = normalise(data as any, 'test.fit', {});
+		expect(activity.filename).toBe('test.fit');
+		expect(toasts).toHaveLength(0);
+	});
+
+	it('normalise_negativeElapsedRecords_returnsWarningToastAndRemovesRecords', () => {
+		const ts = new Date('2025-01-01T10:00:00Z');
+		const data = makeMinimalFitData([
+			{ timestamp: ts, elapsed_time: -1, distance: 0 },
+			{ timestamp: ts, elapsed_time: 1, distance: 100 },
+		]);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { activity, toasts } = normalise(data as any, 'myrun.fit', {});
+		expect(activity.records).toHaveLength(1);
+		expect(toasts.length).toBeGreaterThan(0);
+		expect(toasts[0].level).toBe('warning');
+		expect(toasts[0].message).toContain('negative elapsed time');
+		expect(toasts[0].message).toContain('myrun.fit');
+	});
+
+	it('normalise_outOfOrderRecords_returnsWarningToastAndSortsRecords', () => {
+		const ts = new Date('2025-01-01T10:00:00Z');
+		const data = makeMinimalFitData([
+			{ timestamp: ts, elapsed_time: 5, distance: 50 },
+			{ timestamp: ts, elapsed_time: 1, distance: 10 },
+			{ timestamp: ts, elapsed_time: 10, distance: 100 },
+		]);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { activity, toasts } = normalise(data as any, 'test.fit', {});
+		expect(activity.records[0].elapsedSeconds).toBe(1);
+		expect(toasts.some(t => t.message.includes('out of order'))).toBe(true);
+		expect(toasts.some(t => t.level === 'warning')).toBe(true);
+	});
+
+	it('normalise_withLabels_appliesLabelToDeviceByAntDeviceNumber', () => {
+		const ts = new Date('2025-01-01T10:00:00Z');
+		const data = {
+			sessions: [{ start_time: ts, total_distance: 100, total_elapsed_time: 10 }],
+			records: [{ timestamp: ts, elapsed_time: 1, distance: 100, heart_rate: 140 }],
+			device_infos: [{ device_index: 1, ant_device_number: 12345 }],
+		};
+		const labels: Record<string, string> = { 'ant:12345': 'My HRM' };
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { activity } = normalise(data as any, 'test.fit', labels);
+		const device = activity.devices.find(d => d.antDeviceNumber === 12345);
+		expect(device?.label).toBe('My HRM');
+	});
+
+	it('normalise_emptyLabels_devicesHaveNoLabel', () => {
+		const ts = new Date('2025-01-01T10:00:00Z');
+		const data = {
+			sessions: [{ start_time: ts, total_distance: 100, total_elapsed_time: 10 }],
+			records: [{ timestamp: ts, elapsed_time: 1, distance: 100 }],
+			device_infos: [{ device_index: 0, ant_device_number: 99 }],
+		};
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const { activity } = normalise(data as any, 'test.fit', {});
+		expect(activity.devices[0].label).toBeUndefined();
+	});
+
+	it('normalise_onStageCallback_receivesExpectedStages', () => {
+		const stages: string[] = [];
+		const data = makeMinimalFitData();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		normalise(data as any, 'test.fit', {}, (stage) => stages.push(stage));
+		expect(stages).toContain('normalising');
+		expect(stages).toContain('detecting_anomalies');
+		expect(stages).toContain('building_streams');
+	});
+
+	it('normalise_noOnStageCallback_doesNotThrow', () => {
+		const data = makeMinimalFitData();
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		expect(() => normalise(data as any, 'test.fit', {})).not.toThrow();
 	});
 });
