@@ -113,6 +113,34 @@
 		}
 	}
 
+	const PARSE_BYTES_PER_MS = 5000;
+
+	let now = $state(Date.now());
+
+	$effect(() => {
+		if (pendingFiles.size === 0) return;
+		const id = setInterval(() => { now = Date.now(); }, 500);
+		return () => clearInterval(id);
+	});
+
+	function stageLabel(stage: ParseStage): string {
+		const labels: Record<ParseStage, string> = {
+			queued: 'Queued',
+			parsing: 'Parsing…',
+			normalising: 'Normalising…',
+			detecting_anomalies: 'Detecting anomalies…',
+			building_streams: 'Building streams…',
+		};
+		return labels[stage] ?? stage;
+	}
+
+	function estimateRemainingSeconds(fileSize: number, startedAt: number): number | null {
+		const totalMs = fileSize / PARSE_BYTES_PER_MS;
+		const elapsedMs = now - startedAt;
+		const remainingS = (totalMs - elapsedMs) / 1000;
+		return remainingS >= 1 ? Math.round(remainingS) : null;
+	}
+
 	function onDragOver(e: DragEvent) {
 		e.preventDefault();
 		dragover = true;
@@ -162,15 +190,27 @@
 {/if}
 
 {#if pendingFiles.size > 0}
-	<ul class="pending-list">
+	<div class="pending-list" class:compact>
 		{#each [...pendingFiles.entries()] as [key, pending] (key)}
-			<li class="pending-item">
-				<span class="pending-name">{pending.filename}</span>
-				<span class="pending-stage">{pending.stage}</span>
-				<button class="pending-cancel" onclick={() => pending.cancel()}>✕</button>
-			</li>
+			{@const remaining = estimateRemainingSeconds(pending.fileSize, pending.startedAt)}
+			<div class="pending-row">
+				<span class="spinner" aria-hidden="true"></span>
+				<span class="pending-name" title={pending.filename}>{pending.filename}</span>
+				{#if !compact}
+					<span class="pending-stage">{stageLabel(pending.stage)}</span>
+					{#if remaining !== null}
+						<span class="pending-time">~{remaining}s</span>
+					{/if}
+				{/if}
+				<button
+					class="pending-cancel"
+					onclick={() => pending.cancel()}
+					aria-label="Cancel parsing {pending.filename}"
+					title="Cancel"
+				>✕</button>
+			</div>
 		{/each}
-	</ul>
+	</div>
 {/if}
 
 {#if warning}
@@ -266,46 +306,91 @@
 		color: #ef4444;
 	}
 
-	.pending-list {
-		list-style: none;
-		margin: 0.4rem 0 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
+	/* ---- parse progress ---- */
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 
-	.pending-item {
+	.pending-list {
+		margin: 0.5rem 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.pending-row {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.8rem;
-		color: var(--color-muted);
+		gap: 0.45rem;
+		padding: 0.35rem 0.5rem;
+		background: var(--color-card, var(--color-sidebar));
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+		min-width: 0;
+	}
+
+	.spinner {
+		flex-shrink: 0;
+		width: 13px;
+		height: 13px;
+		border: 2px solid var(--color-border);
+		border-top-color: #38bdf8;
+		border-radius: 50%;
+		animation: spin 0.75s linear infinite;
 	}
 
 	.pending-name {
 		flex: 1;
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		font-size: 0.8rem;
+		color: var(--color-text);
 	}
 
 	.pending-stage {
-		text-transform: capitalize;
-		font-size: 0.75rem;
+		flex-shrink: 0;
+		font-size: 0.72rem;
+		color: var(--color-muted);
+		white-space: nowrap;
+	}
+
+	.pending-time {
+		flex-shrink: 0;
+		font-size: 0.72rem;
+		color: #38bdf8;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.pending-cancel {
+		flex-shrink: 0;
 		background: none;
 		border: none;
 		cursor: pointer;
 		color: var(--color-muted);
-		padding: 0 0.25rem;
-		font-size: 0.75rem;
+		padding: 0 0.15rem;
+		font-size: 0.7rem;
 		line-height: 1;
+		border-radius: 3px;
+		transition: color 0.1s, background 0.1s;
 	}
 
 	.pending-cancel:hover {
 		color: #ef4444;
+		background: rgba(239, 68, 68, 0.08);
+	}
+
+	.pending-list.compact .pending-row {
+		padding: 0.2rem 0.35rem;
+		background: transparent;
+		border: none;
+		border-radius: 0;
+	}
+
+	.pending-list.compact .pending-name {
+		font-size: 0.75rem;
 	}
 </style>
