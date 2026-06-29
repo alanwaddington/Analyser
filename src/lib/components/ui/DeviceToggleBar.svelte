@@ -7,7 +7,15 @@
 		groupStreamsByChannel,
 		isComparableGroup,
 	} from '$lib/utils/deviceChannels';
-	import { setDeviceLabel, removeDeviceLabel, deviceStorageKey } from '$lib/stores/deviceLabels';
+	import {
+		setDeviceLabel,
+		removeDeviceLabel,
+		getDeviceLabel,
+		deviceStorageKey,
+		recordEdit,
+		undoLabelEdit,
+		canUndo,
+	} from '$lib/stores/deviceLabels';
 	import { buildAnomalyCounts } from './DeviceToggleBar.utils';
 	import type { AnomalyCount } from './DeviceToggleBar.utils';
 
@@ -103,21 +111,40 @@
 		if (renamingDevice !== cfs.key) return;
 		const trimmed = renameValue.trim();
 		const key = deviceStorageKey(cfs.stream.device);
-		if (trimmed && key != null) {
-			setDeviceLabel(key, trimmed);
-			cfs.stream.device.label = trimmed;
-			// Update reactive map so the pill re-renders immediately
-			renamedLabels = new Map(renamedLabels).set(cfs.key, trimmed);
-		} else if (!trimmed && key != null) {
-			removeDeviceLabel(key);
-			cfs.stream.device.label = undefined;
-			const next = new Map(renamedLabels);
-			next.delete(cfs.key);
-			renamedLabels = next;
+		if (key != null) {
+			const from = getDeviceLabel(key) ?? '';
+			const to   = trimmed;
+			if (trimmed) {
+				recordEdit(key, from, to);
+				setDeviceLabel(key, trimmed);
+				cfs.stream.device.label = trimmed;
+				// Update reactive map so the pill re-renders immediately
+				renamedLabels = new Map(renamedLabels).set(cfs.key, trimmed);
+			} else {
+				recordEdit(key, from, '');
+				removeDeviceLabel(key);
+				cfs.stream.device.label = undefined;
+				const next = new Map(renamedLabels);
+				next.delete(cfs.key);
+				renamedLabels = next;
+			}
 		}
 		renamingDevice = null;
 		renamingChannelKey = null;
 	}
+
+	$effect(() => {
+		function handleUndo(e: KeyboardEvent) {
+			if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && renamingDevice === null) {
+				if (canUndo()) {
+					e.preventDefault();
+					undoLabelEdit();
+				}
+			}
+		}
+		document.addEventListener('keydown', handleUndo);
+		return () => document.removeEventListener('keydown', handleUndo);
+	});
 
 	function cancelRename() {
 		renamingDevice = null;
