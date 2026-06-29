@@ -53,6 +53,7 @@
 		customSegmentBands = [],
 		onSegmentCreate = undefined,
 		onSegmentResize = undefined,
+		activeRecordIndices = undefined,
 	}: {
 		channel: ChannelKey;
 		seriesInputs: SeriesInput[];
