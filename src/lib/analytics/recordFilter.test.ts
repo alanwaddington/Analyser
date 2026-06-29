@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { applyRecordFilter, deriveGradients, filterRecords } from './recordFilter.ts';
 import type { ActivityRecord } from '$lib/types';
-import type { RecordFilter } from '$lib/stores/filterStore.ts';
+import type { RecordFilter } from '$lib/stores/filterStore';
 
 // ---------------------------------------------------------------------------
 // Helpers

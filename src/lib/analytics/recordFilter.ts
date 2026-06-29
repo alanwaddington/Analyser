@@ -1,5 +1,5 @@
 import type { ActivityRecord } from '$lib/types';
-import type { RecordFilter } from '$lib/stores/filterStore.ts';
+import type { RecordFilter } from '$lib/stores/filterStore';
 
 function passesRange(value: number | undefined, min: number | undefined, max: number | undefined): boolean {
 	if (value == null) return true; // missing value passes by default
