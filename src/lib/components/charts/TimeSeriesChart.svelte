@@ -808,6 +808,7 @@
 		void athleteProfile;
 		void sport;
 		void customSegmentBands;
+		void activeRecordIndices;
 		zoomRange = undefined;
 		chart?.setOption(buildOption(), { notMerge: true });
 	});
