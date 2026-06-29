@@ -130,7 +130,7 @@
 	.empty {
 		font-family: 'JetBrains Mono', ui-monospace, monospace;
 		font-size: 0.62rem;
-		color: #334155;
+		color: #94a3b8;
 		font-style: italic;
 		text-align: center;
 		padding: 6px 10px;
@@ -161,7 +161,7 @@
 	.ts {
 		font-family: 'JetBrains Mono', ui-monospace, monospace;
 		font-size: 0.53rem;
-		color: #334155;
+		color: #64748b;
 		letter-spacing: 0.02em;
 	}
 
@@ -183,7 +183,7 @@
 	}
 
 	.val.dim {
-		color: #334155;
+		color: #64748b;
 		font-style: italic;
 	}
 
