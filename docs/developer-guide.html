@@ -209,8 +209,19 @@ npm test           # vitest unit tests
 │   │   │             # - StripChart.utils.ts: shouldShowGradient(), GRADIENT_COLOUR_TOKEN
 │   │   │             # - png-btn.css: shared PNG download button styles
 │   │   ├── map/      # Leaflet map + ActivityMap.component.test.ts (jsdom)
+│   │   │             # - ActivityMap.svelte: athleteProfile prop; perFileConfig $state (Record&lt;activityId,
+│   │   │             #   {channel, zoneMode}&gt;) drives per-file metric selection and zone/gradient toggle.
+│   │   │             #   perFileComputation $derived.by computes smoothed values, GPS metric points,
+│   │   │             #   globalRange, and zoneBands per activity. Polyline Canvas renderer uses
+│   │   │             #   zoneToColour(valueToZone(...)) in zone mode; valueToColour() in gradient mode.
 │   │   │             # - ActivityMap.utils.ts: extractGpsPoints, metricValuesForGpsPoints(gpsPoints,
 │   │   │             #   smoothedValues) — maps downsampled GPS points to metric values via recordIndex
+│   │   │             # - colourScale.ts: ZONE_BASE_RGB (7 RGB tuples), zoneToColour(zone) → opaque hex,
+│   │   │             #   zoneChartColour(zone, isDark) → rgba for chart bands (TimeSeriesChart imports this),
+│   │   │             #   getZoneBoundaries(channel, sport, profile) → ZoneBand[] | null,
+│   │   │             #   valueToZone(value, channel, sport, profile) → zone number | null,
+│   │   │             #   formatZoneBoundary(band, channel) → &quot;Z2: 108–126 bpm&quot;,
+│   │   │             #   powerSourceLabel(powerSource, manufacturer) → display label for power channel
 │   │                 # - DeviceToggleBar.utils.ts: buildAnomalyCounts(activities) → Map&lt;ChannelKey, AnomalyCount&gt;
 │   │                 #   aggregates event-level anomaly counts across all activities for badge rendering
 │   │   └── ui/       # Layout components, controls, SyncPanel
@@ -942,7 +953,15 @@ UPSTASH_REDIS_REST_TOKEN=your-token-here
 </tr>
 </tbody></table>
 <h3 id="activitymap--onmetricchannelchange-callback">`ActivityMap` — `onMetricChannelChange` callback</h3>
-<p><code>ActivityMap.svelte</code> accepts an optional <code>onMetricChannelChange?: (channel: ChannelKey | null) =&gt; void</code> prop. It fires via a <code>$effect</code> whenever the internal <code>metricChannel</code> state changes (on picker selection and on file change/reset). Existing callers that do not pass this prop are unaffected.</p>
+<p><code>ActivityMap.svelte</code> accepts an optional <code>onMetricChannelChange?: (channel: ChannelKey | null) =&gt; void</code> prop. It fires via a <code>$effect</code> whenever the first loaded activity&#39;s selected channel changes (read from the internal <code>perFileConfig</code> plain-object <code>$state</code>). In multi-file mode only the first file&#39;s channel is emitted — the strip chart below the map always reflects the primary file. Existing callers that do not pass this prop are unaffected.</p>
+<h3 id="activitymap--athleteprofile-prop">`ActivityMap` — `athleteProfile` prop</h3>
+<p><code>ActivityMap.svelte</code> accepts an optional <code>athleteProfile?: AthleteProfile</code> prop, passed from both <code>/compare</code> and <code>/event</code> pages. It is used to:</p>
+<ul>
+<li>determine whether zone mode is available for the selected channel (<code>getZoneBoundaries()</code> returns non-null)</li>
+<li>compute zone boundaries and colours for the polyline renderer</li>
+<li>populate zone-boundary labels in the legend control</li>
+<li>look up zone number for the hover tooltip (e.g. &quot;162 bpm Z4&quot;)</li>
+</ul>
 <hr>
 <h2 id="3b-data-export">3b. Data Export</h2>
 <p>PR #83 added Excel workbook and per-chart PNG downloads. PR #111 added CSV export and extracted shared column utilities into <code>columns.ts</code>.</p>

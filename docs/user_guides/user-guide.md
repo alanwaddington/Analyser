@@ -295,7 +295,16 @@ If Analyser detects GPS position anomalies (points where the GPS signal jumped t
 
 **Metric colouring:**
 
-Use the **Colour by** dropdown in the **top-right** of the map to shade the route by a metric such as pace, heart rate, or power. The colour gradient runs from blue (low values) to red (high values). A legend appears in the bottom-right showing the value range.
+Use the **Colour by** dropdown in the **top-right** of the map to shade the route by a metric such as pace, heart rate, or power. A legend appears in the bottom-right corner showing the value range or zone boundaries.
+
+- **Gradient mode** (default) — a continuous blue-to-red colour ramp scaled to the min/max values recorded in the activity. The legend shows the minimum and maximum values.
+- **Zone mode** — discrete zone colours matching the chart zone palette. A **Gradient | Zones** toggle appears beside the dropdown when heart rate or power is selected and the relevant athlete profile threshold is set (maxHR or LTHR for heart rate; Critical Power for running power; FTP for cycling power). The legend shows each zone's colour swatch and boundary range (e.g. "Z1: <111 bpm", "Z2: 111–130 bpm"). Zone mode is greyed out with an explanatory tooltip when no threshold is configured.
+
+**Power source labels:** When a file contains Stryd running power, the dropdown entry reads **Stryd Power** rather than generic "Power". Files with native watch running power show **[Manufacturer] Running Power** (e.g. "Garmin Running Power"). Cycling power files show **Power**.
+
+**Hover tooltip:** Hovering over a metric-coloured segment shows the distance, metric value, and unit. In zone mode the active zone number is appended (e.g. "2.34 km · 162 bpm Z4").
+
+**Multi-file mode:** When two or more files are loaded, the **Colour by** picker expands to show one row per file, each labelled with the filename and a colour dot. Each file can have an independent metric and mode selection. Legends stack vertically in the bottom-right, one per file that has a metric selected.
 
 **Metric strip chart:**
 
