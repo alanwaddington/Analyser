@@ -101,6 +101,18 @@ export function computeSeriesStats(
 	};
 }
 
+/**
+ * Returns true when cycling power data exceeds 120% of FTP, indicating Z6/Z7 are
+ * in use and the chart should display all 7 Coggan zones instead of clipping at Z5.
+ */
+export function shouldUseFullFtpZones(data: [number, number | null][], ftp: number): boolean {
+	const threshold = ftp * 1.20;
+	for (const [, y] of data) {
+		if (y != null && y > threshold) return true;
+	}
+	return false;
+}
+
 /** Computes the x-axis value for an anomaly marker in the given axis mode. */
 export function anomalyXValue(
 	anomaly: Anomaly,

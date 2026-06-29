@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { paceFormat, formatStatValue, computeSeriesStats } from './TimeSeriesChart.utils.ts';
+import { paceFormat, formatStatValue, computeSeriesStats, shouldUseFullFtpZones } from './TimeSeriesChart.utils.ts';
 
 describe('paceFormat', () => {
 	it('paceFormat_wholeMinutes_returnsDoubleZeroSeconds', () => {
@@ -151,5 +151,68 @@ describe('computeSeriesStats', () => {
 		const result = computeSeriesStats(mixedData, 'heartRate', 'HRM', '#f97316');
 		expect(result!.count).toBe(2);
 		expect(result!.avgRaw).toBe(200);
+	});
+});
+
+describe('shouldUseFullFtpZones', () => {
+	const ftp = 200;
+
+	it('shouldUseFullFtpZones_allDataBelowThreshold_returnsFalse', () => {
+		const data: [number, number | null][] = [
+			[0, 100],
+			[1, 180],
+			[2, 239], // 119.5% FTP — just below
+		];
+		expect(shouldUseFullFtpZones(data, ftp)).toBe(false);
+	});
+
+	it('shouldUseFullFtpZones_dataExactlyAtThreshold_returnsFalse', () => {
+		// threshold is strictly greater than 120%
+		const data: [number, number | null][] = [[0, 240]]; // exactly 120% FTP
+		expect(shouldUseFullFtpZones(data, ftp)).toBe(false);
+	});
+
+	it('shouldUseFullFtpZones_onePointAboveThreshold_returnsTrue', () => {
+		const data: [number, number | null][] = [
+			[0, 100],
+			[1, 241], // 120.5% FTP — just above
+		];
+		expect(shouldUseFullFtpZones(data, ftp)).toBe(true);
+	});
+
+	it('shouldUseFullFtpZones_dataInZ7Range_returnsTrue', () => {
+		const data: [number, number | null][] = [
+			[0, 300], // 150% FTP
+			[1, 400],
+		];
+		expect(shouldUseFullFtpZones(data, ftp)).toBe(true);
+	});
+
+	it('shouldUseFullFtpZones_emptyData_returnsFalse', () => {
+		expect(shouldUseFullFtpZones([], ftp)).toBe(false);
+	});
+
+	it('shouldUseFullFtpZones_allNullValues_returnsFalse', () => {
+		const data: [number, number | null][] = [
+			[0, null],
+			[1, null],
+		];
+		expect(shouldUseFullFtpZones(data, ftp)).toBe(false);
+	});
+
+	it('shouldUseFullFtpZones_nullsAndValueBelow_returnsFalse', () => {
+		const data: [number, number | null][] = [
+			[0, null],
+			[1, 150],
+		];
+		expect(shouldUseFullFtpZones(data, ftp)).toBe(false);
+	});
+
+	it('shouldUseFullFtpZones_nullsAndValueAbove_returnsTrue', () => {
+		const data: [number, number | null][] = [
+			[0, null],
+			[1, 250], // 125% FTP
+		];
+		expect(shouldUseFullFtpZones(data, ftp)).toBe(true);
 	});
 });
