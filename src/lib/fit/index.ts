@@ -2,6 +2,8 @@
 // Wraps fit-file-parser and converts raw messages into the Activity domain type
 
 export { normalise } from './parser';
+export { parseInWorker, ParseCancelledError } from './parseInWorker';
+export type { ParseJob } from './parseInWorker';
 
 import FitParser from 'fit-file-parser';
 import type { Activity } from '../types';
