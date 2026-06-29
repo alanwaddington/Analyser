@@ -103,11 +103,11 @@
 
 	function commit() {
 		recordFilter.set({
-			...(speedMin || speedMax ? { speed: { min: parseNum(speedMin), max: parseNum(speedMax) } } : {}),
-			...(powerMin || powerMax ? { power: { min: parseNum(powerMin), max: parseNum(powerMax) } } : {}),
-			...(hrMin || hrMax ? { heartRate: { min: parseNum(hrMin), max: parseNum(hrMax) } } : {}),
-			...(cadenceMin || cadenceMax ? { cadence: { min: parseNum(cadenceMin), max: parseNum(cadenceMax) } } : {}),
-			...(gradientMin || gradientMax ? { gradient: { min: parseNum(gradientMin), max: parseNum(gradientMax) } } : {}),
+			...(speedMin !== '' || speedMax !== '' ? { speed: { min: parseNum(speedMin), max: parseNum(speedMax) } } : {}),
+			...(powerMin !== '' || powerMax !== '' ? { power: { min: parseNum(powerMin), max: parseNum(powerMax) } } : {}),
+			...(hrMin !== '' || hrMax !== '' ? { heartRate: { min: parseNum(hrMin), max: parseNum(hrMax) } } : {}),
+			...(cadenceMin !== '' || cadenceMax !== '' ? { cadence: { min: parseNum(cadenceMin), max: parseNum(cadenceMax) } } : {}),
+			...(gradientMin !== '' || gradientMax !== '' ? { gradient: { min: parseNum(gradientMin), max: parseNum(gradientMax) } } : {}),
 			...(inverted ? { inverted: true } : {}),
 		});
 	}
@@ -128,9 +128,17 @@
 	const hasHr = $derived(hrMin !== '' || hrMax !== '');
 	const hasCadence = $derived(cadenceMin !== '' || cadenceMax !== '');
 	const hasGradient = $derived(gradientMin !== '' || gradientMax !== '');
+
+	function clickOutside(node: HTMLElement) {
+		function handle(e: MouseEvent) {
+			if (expanded && !node.contains(e.target as Node)) expanded = false;
+		}
+		document.addEventListener('click', handle, true);
+		return { destroy() { document.removeEventListener('click', handle, true); } };
+	}
 </script>
 
-<div class="filter-wrap">
+<div class="filter-wrap" use:clickOutside>
 	<button
 		class="filter-toggle"
 		class:filter-toggle--active={$activeFilterCount > 0}
@@ -326,7 +334,7 @@
 						type="checkbox"
 						class="invert-check"
 						bind:checked={inverted}
-						onchange={handleInvert}
+						oninput={handleInvert}
 					/>
 					Invert filter
 				</label>

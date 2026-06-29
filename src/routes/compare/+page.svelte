@@ -301,7 +301,16 @@
 
 	/** Primary sport and power source for FilterPanel hints/zone presets. */
 	const primarySport = $derived($activities[0]?.sport ?? '');
-	const primaryPowerSource = $derived($activities[0]?.powerSource);
+	const primaryPowerSource = $derived.by(() => {
+		const priority: Record<string, number> = { stryd: 3, native: 2, cycling: 1 };
+		let best: typeof $activities[0]['powerSource'] = undefined;
+		let bestP = 0;
+		for (const a of $activities) {
+			const p = priority[a.powerSource ?? ''] ?? 0;
+			if (p > bestP) { bestP = p; best = a.powerSource; }
+		}
+		return best;
+	});
 
 	/**
 	 * Gradient arrays for each activity, computed lazily only when the gradient filter has

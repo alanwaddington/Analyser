@@ -6,7 +6,7 @@ export type CpZone = 1 | 2 | 3 | 4 | 5;
 export interface ZoneBand {
 	min: number;
 	max: number;
-	zone: number;
+	zone: FtpZone;
 }
 
 // HR zone from % of maxHR (5-zone model)
