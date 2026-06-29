@@ -27,7 +27,7 @@
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
-	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue } from './TimeSeriesChart.utils.ts';
+	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue, selectFtpBands, computeZoneAxisCap } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
 	import { lowerBound } from '$lib/utils/binarySearch';
@@ -273,6 +273,8 @@
 		}
 
 		// Adaptive FTP zone mode: if any cycling power series exceeds 120% FTP, show all 7 zones.
+		// ftpDataMax stays 0 when no cycling series exist — safe because useFullFtpZones is then
+		// false, so computeZoneAxisCap never uses the 7-zone branch (which would ceil(0 * 1.2) = 0).
 		let useFullFtpZones = false;
 		let ftpDataMax = 0;
 		if (channel === 'power' && athleteProfile?.ftp != null) {
@@ -405,19 +407,11 @@
 					} else if (channel === 'power' && seriesSport === 'running' && athleteProfile?.cp != null) {
 						zoneBands = cpZoneBoundaries(athleteProfile.cp);
 					} else if (channel === 'power' && seriesSport !== 'running' && athleteProfile?.ftp != null) {
-						zoneBands = ftpZoneBoundaries(athleteProfile.ftp);
-						// In 5-zone mode, clip to Z1–Z5 so Z6/Z7 bands don't render above the axis cap.
-						if (!useFullFtpZones && zoneBands) {
-							const asc = [...zoneBands].sort((a, b) => a.zone - b.zone);
-							zoneBands = asc.slice(0, 5);
-						}
+						zoneBands = selectFtpBands(ftpZoneBoundaries(athleteProfile.ftp), useFullFtpZones);
 					}
 					// Cap the top zone to avoid ECharts silently dropping markArea data on Infinity.
-					// 7-zone mode: cap at dataMax × 1.2 so Z7 is visible but bounded.
-					// 5-zone mode (HR, CP, FTP-below-Z6): cap at zoneAxisMax (the fixed axis ceiling).
-					const axisCap = useFullFtpZones
-						? Math.ceil(ftpDataMax * 1.2)
-						: (zoneAxisMax ?? 9999);
+					// 7-zone mode: ceil(dataMax × 1.2); 5-zone / HR / CP: fixed zone ceiling.
+					const axisCap = computeZoneAxisCap(useFullFtpZones, ftpDataMax, zoneAxisMax);
 					return zoneBands
 						? zoneBands.map(b => [
 							{ yAxis: b.min, itemStyle: { color: ZONE_COLOURS[b.zone] } },

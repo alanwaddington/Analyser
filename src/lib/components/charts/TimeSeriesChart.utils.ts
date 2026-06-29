@@ -102,6 +102,26 @@ export function computeSeriesStats(
 }
 
 /**
+ * Sorts FTP zone bands by zone number and returns all 7 in 7-zone mode, or the
+ * first 5 in 5-zone mode. Does not mutate the input array.
+ */
+export function selectFtpBands<T extends { zone: number }>(bands: T[], useFullFtpZones: boolean): T[] {
+	const sorted = [...bands].sort((a, b) => a.zone - b.zone);
+	return useFullFtpZones ? sorted : sorted.slice(0, 5);
+}
+
+/**
+ * Returns the ECharts-safe axisCap value for the top zone's markArea band.
+ * In 7-zone mode: ceil(dataMax × 1.2) so Z7 is bounded but never Infinity.
+ * In 5-zone mode: zoneAxisMax (the fixed zone-driven ceiling), falling back to 9999.
+ */
+export function computeZoneAxisCap(useFullFtpZones: boolean, ftpDataMax: number, zoneAxisMax: number | undefined): number {
+	return useFullFtpZones
+		? Math.ceil(ftpDataMax * 1.2)
+		: (zoneAxisMax ?? 9999);
+}
+
+/**
  * Returns true when cycling power data exceeds 120% of FTP, indicating Z6/Z7 are
  * in use and the chart should display all 7 Coggan zones instead of clipping at Z5.
  */

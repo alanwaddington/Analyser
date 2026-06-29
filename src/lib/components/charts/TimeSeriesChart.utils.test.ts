@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { paceFormat, formatStatValue, computeSeriesStats, shouldUseFullFtpZones } from './TimeSeriesChart.utils.ts';
+import { paceFormat, formatStatValue, computeSeriesStats, shouldUseFullFtpZones, selectFtpBands, computeZoneAxisCap } from './TimeSeriesChart.utils.ts';
 
 describe('paceFormat', () => {
 	it('paceFormat_wholeMinutes_returnsDoubleZeroSeconds', () => {
@@ -214,5 +214,79 @@ describe('shouldUseFullFtpZones', () => {
 			[1, 250], // 125% FTP
 		];
 		expect(shouldUseFullFtpZones(data, ftp)).toBe(true);
+	});
+});
+
+describe('selectFtpBands', () => {
+	const sevenBands = [
+		{ min: 0, max: 110, zone: 1 },
+		{ min: 110, max: 150, zone: 2 },
+		{ min: 150, max: 180, zone: 3 },
+		{ min: 180, max: 210, zone: 4 },
+		{ min: 210, max: 240, zone: 5 },
+		{ min: 240, max: 300, zone: 6 },
+		{ min: 300, max: Infinity, zone: 7 },
+	];
+
+	// Intentionally shuffled to verify sorting
+	const shuffled = [sevenBands[6], sevenBands[2], sevenBands[0], sevenBands[4], sevenBands[1], sevenBands[5], sevenBands[3]];
+
+	it('selectFtpBands_5zoneMode_returnsFirst5BandsSortedByZone', () => {
+		const result = selectFtpBands(sevenBands, false);
+		expect(result).toHaveLength(5);
+		expect(result.map(b => b.zone)).toEqual([1, 2, 3, 4, 5]);
+	});
+
+	it('selectFtpBands_5zoneMode_sortsBeforeSlicing', () => {
+		const result = selectFtpBands(shuffled, false);
+		expect(result).toHaveLength(5);
+		expect(result.map(b => b.zone)).toEqual([1, 2, 3, 4, 5]);
+	});
+
+	it('selectFtpBands_7zoneMode_returnsAllBands', () => {
+		const result = selectFtpBands(sevenBands, true);
+		expect(result).toHaveLength(7);
+	});
+
+	it('selectFtpBands_7zoneMode_doesNotMutateInput', () => {
+		const input = [...sevenBands];
+		selectFtpBands(input, true);
+		expect(input).toHaveLength(7);
+	});
+
+	it('selectFtpBands_5zoneMode_doesNotMutateInput', () => {
+		const input = [...sevenBands];
+		selectFtpBands(input, false);
+		expect(input).toHaveLength(7);
+	});
+});
+
+describe('computeZoneAxisCap', () => {
+	it('computeZoneAxisCap_5zoneMode_returnsZoneAxisMax', () => {
+		expect(computeZoneAxisCap(false, 0, 300)).toBe(300);
+	});
+
+	it('computeZoneAxisCap_5zoneMode_fallsBackTo9999WhenZoneAxisMaxUndefined', () => {
+		expect(computeZoneAxisCap(false, 0, undefined)).toBe(9999);
+	});
+
+	it('computeZoneAxisCap_7zoneMode_returnsCeilOfDataMaxTimes1Point2', () => {
+		expect(computeZoneAxisCap(true, 208, undefined)).toBe(Math.ceil(208 * 1.2));
+	});
+
+	it('computeZoneAxisCap_7zoneMode_ceilRoundsUp', () => {
+		// 300 * 1.2 = 360.0 — exact, no rounding needed
+		expect(computeZoneAxisCap(true, 300, undefined)).toBe(360);
+	});
+
+	it('computeZoneAxisCap_7zoneMode_neverReturnsInfinity', () => {
+		// Even with unusual inputs the result should be finite
+		const result = computeZoneAxisCap(true, 500, undefined);
+		expect(isFinite(result)).toBe(true);
+	});
+
+	it('computeZoneAxisCap_7zoneMode_ignoresZoneAxisMaxArg', () => {
+		// In 7-zone mode the fixed axis cap is irrelevant
+		expect(computeZoneAxisCap(true, 250, 264)).toBe(Math.ceil(250 * 1.2));
 	});
 });
