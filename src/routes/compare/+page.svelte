@@ -31,6 +31,9 @@
 	import type { ExportFormat } from '$lib/export/columns';
 	import { untrack } from 'svelte';
 	import { createIndoorWarnings } from '$lib/utils/indoorWarnings.svelte';
+	import { recordFilter, activeFilterCount } from '$lib/stores/filterStore';
+	import { applyRecordFilter, deriveGradients, filterRecords } from '$lib/analytics/recordFilter';
+	import FilterPanel from '$lib/components/ui/FilterPanel.svelte';
 	import '../map-panel.css';
 	import '../export-btn.css';
 	import '../indoor-warning.css';
@@ -290,6 +293,44 @@
 		if (!mapMetricChannel) return [];
 		return buildSeriesForChannel(mapMetricChannel);
 	});
+
+	// ── Record filter ─────────────────────────────────────────────────────────
+
+	/** Whether any loaded activity has altitude data (needed to show gradient filter control). */
+	const hasAltitude = $derived($activities.some(a => a.records.some(r => r.altitude != null)));
+
+	/** Primary sport and power source for FilterPanel hints/zone presets. */
+	const primarySport = $derived($activities[0]?.sport ?? '');
+	const primaryPowerSource = $derived($activities[0]?.powerSource);
+
+	/**
+	 * Gradient arrays for each activity, computed lazily only when the gradient filter has
+	 * at least one bound set. Stored as a plain Map (not $state) since it's re-derived each
+	 * time via $derived.by.
+	 */
+	const gradientCache = $derived.by<Map<string, (number | null)[]>>(() => {
+		if ($recordFilter.gradient?.min == null && $recordFilter.gradient?.max == null) {
+			return new Map();
+		}
+		return new Map($activities.map(a => [a.id, deriveGradients(a.records)]));
+	});
+
+	/** Passing record index sets for each activity, keyed by activity.id. */
+	const activeRecordIndices = $derived.by<Map<string, Set<number>>>(() => {
+		void $recordFilter;
+		return new Map(
+			$activities.map(a => [
+				a.id,
+				applyRecordFilter(a.records, $recordFilter, gradientCache.get(a.id)),
+			])
+		);
+	});
+
+	/** Filtered records per activity (for summary stats). */
+	function filteredRecords(activityId: string, records: typeof $activities[0]['records']) {
+		const passing = activeRecordIndices.get(activityId);
+		return passing ? filterRecords(records, passing) : records;
+	}
 </script>
 
 <div class="page">
@@ -413,6 +454,15 @@
 				</div>
 			</CollapsiblePanel>
 
+			<CollapsiblePanel title="Filter{$activeFilterCount > 0 ? ` (${$activeFilterCount})` : ''}">
+				<FilterPanel
+					sport={primarySport}
+					powerSource={primaryPowerSource}
+					athleteProfile={$athleteProfile}
+					{hasAltitude}
+				/>
+			</CollapsiblePanel>
+
 			{#if indoor.hasMixedIndoorOutdoor && !indoor.mixedWarningDismissed}
 				<div class="location-warning" role="alert" aria-live="polite">
 					<span class="warning-icon" aria-hidden="true">⚠</span>
@@ -457,6 +507,7 @@
 									externalHoverDistance={chartIdx === 0 ? mapHoveredDistance : undefined}
 									athleteProfile={$athleteProfile}
 									sport={$activities[0]?.sport ?? ''}
+									activeRecordIndices={$activeFilterCount > 0 ? activeRecordIndices : undefined}
 								/>
 							</div>
 						{/if}
@@ -509,6 +560,12 @@
 				{#if activeCrossFileStreams.length === 0}
 					<p class="empty">Toggle devices above to see their statistics.</p>
 				{:else}
+					{#if $activeFilterCount > 0}
+						<div class="filter-indicator" role="status">
+							<span class="filter-indicator-icon" aria-hidden="true">⧖</span>
+							Filtered — statistics based on {$activeFilterCount} active filter{$activeFilterCount === 1 ? '' : 's'}
+						</div>
+					{/if}
 					<table class="summary-table">
 						<thead>
 							<tr>
@@ -544,9 +601,10 @@
 								<tr class:row-alt={rowIdx % 2 === 1}>
 									<td class="cell-label">{CHANNEL_META[ch].label}</td>
 									{#each activeCrossFileStreams as cfs}
-										{@const s = summarise(extractChannel(cfs.activity.records, ch))}
+										{@const recs = filteredRecords(cfs.activity.id, cfs.activity.records)}
+										{@const s = summarise(extractChannel(recs, ch))}
 										{@const ctx = s ? buildCellContext(ch, s.avg, cfs.activity.sport, $athleteProfile) : null}
-										{@const powerS = ch === 'formPower' ? summarise(extractChannel(cfs.activity.records, 'power')) : null}
+										{@const powerS = ch === 'formPower' ? summarise(extractChannel(recs, 'power')) : null}
 										{@const fpRatio = s && powerS && powerS.avg > 0 ? Math.round(s.avg / powerS.avg * 100) : null}
 										<td class="cell-stat">
 											{#if s}
@@ -571,7 +629,8 @@
 								<tr class:row-alt={activeChannels.length % 2 === 1}>
 									<td class="cell-label" title="Running Stress Score — analogous to TSS for cycling">RSS</td>
 									{#each activeCrossFileStreams as cfs}
-										{@const pStats = summarise(extractChannel(cfs.activity.records, 'power'))}
+										{@const rssRecs = filteredRecords(cfs.activity.id, cfs.activity.records)}
+										{@const pStats = summarise(extractChannel(rssRecs, 'power'))}
 										{@const rssVal = pStats && cfs.activity.sport === 'running' && $athleteProfile.cp
 											? computeRSS(cfs.activity.totalElapsedTime, pStats.avg, $athleteProfile.cp)
 											: null}
@@ -864,6 +923,25 @@
 		.card--meanmax {
 			height: 220px;
 		}
+	}
+
+	/* ── Filter indicator ───────────────────────────────────────────── */
+
+	.filter-indicator {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 10px;
+		margin-bottom: 10px;
+		font-size: 0.75rem;
+		color: #38bdf8;
+		background: rgba(56,189,248,0.08);
+		border: 1px solid rgba(56,189,248,0.25);
+		border-radius: 6px;
+	}
+
+	.filter-indicator-icon {
+		font-style: normal;
 	}
 
 	/* ── Summary table ──────────────────────────────────────────────── */
