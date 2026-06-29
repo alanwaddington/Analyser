@@ -74,6 +74,16 @@
 
 	// Which pill is currently hovered — drives the history popover
 	let hoveredKey = $state<string | null>(null);
+	let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function openHover(key: string) {
+		if (hoverCloseTimer !== null) { clearTimeout(hoverCloseTimer); hoverCloseTimer = null; }
+		hoveredKey = key;
+	}
+
+	function scheduleCloseHover() {
+		hoverCloseTimer = setTimeout(() => { hoveredKey = null; hoverCloseTimer = null; }, 200);
+	}
 
 	// File groups for multi-file mode: ordered list derived from stream order
 	const fileGroups = $derived.by(() => {
@@ -248,8 +258,8 @@
 				<div
 					class="pill-wrap"
 					role="group"
-					onmouseenter={() => hoveredKey = cfs.key}
-					onmouseleave={() => hoveredKey = null}
+					onmouseenter={() => openHover(cfs.key)}
+					onmouseleave={scheduleCloseHover}
 				>
 					<button
 						class="pill"
