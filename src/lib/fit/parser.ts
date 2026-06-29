@@ -4,19 +4,9 @@ import { ANT_DEVICE_TYPE } from '../types';
 import type { ChannelKey } from '../types';
 import { findAnchor } from '../align/anchor';
 import { detectAnomalies } from '../analytics/anomalies';
+import { deviceKey } from '../utils/deviceKey';
 
 export const DISTANCE_EPSILON_M = 0.5;
-
-/** Compute a stable label-store key for a device (mirrors deviceLabels.deviceStorageKey). */
-function labelKey(device: Device): string | null {
-	if (device.antDeviceNumber != null) return `ant:${device.antDeviceNumber}`;
-	if (device.serialNumber != null) return `serial:${device.serialNumber}`;
-	const m = device.manufacturer?.trim();
-	const p = device.product?.trim();
-	if (m || p) return `device:${m ?? ''}:${p ?? ''}`;
-	if (device.antDeviceType != null) return `type:${device.antDeviceType}`;
-	return null;
-}
 
 // ---- raw FIT types (minimal, extend as needed) ----
 
@@ -435,7 +425,7 @@ export function normalise(
 	});
 	// Apply labels inline using the passed snapshot — no localStorage access needed.
 	const devices: Device[] = uniqueDeviceInfos.map(normaliseDeviceInfo).map(d => {
-		const key = labelKey(d);
+		const key = deviceKey(d);
 		const label = key != null ? labels[key] : undefined;
 		return label ? { ...d, label } : d;
 	});

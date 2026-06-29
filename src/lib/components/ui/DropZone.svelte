@@ -27,7 +27,7 @@
 	const multiple = $derived(!singleFile);
 
 	function dispatchFile(file: File): void {
-		const key = `${file.name}-${file.size}-${Date.now()}`;
+		const key = crypto.randomUUID();
 		const pending: PendingFile = {
 			filename: file.name,
 			stage: 'queued',
@@ -113,7 +113,7 @@
 		}
 	}
 
-	const PARSE_BYTES_PER_MS = 5000;
+	const PARSE_BYTES_PER_MS = 1000; // ~1 MB/s conservative estimate across device types
 
 	let now = $state(Date.now());
 
@@ -650,5 +650,12 @@
 		font-size: 0.72rem;
 		color: var(--color-muted);
 		font-style: italic;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.scan-overlay::after { animation: none; }
+		.track-node-active   { animation: none; }
+		.pipeline-card       { animation: none; }
+		.compact-spinner     { animation: none; }
 	}
 </style>
