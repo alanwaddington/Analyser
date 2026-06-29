@@ -30,6 +30,7 @@
 	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
+	import { lowerBound } from '$lib/utils/binarySearch';
 	import { downloadPng, localDateString } from '$lib/export/download';
 	import { addToast } from '$lib/stores/toast';
 	import './png-btn.css';
@@ -76,6 +77,12 @@
 		onSegmentCreate?: ((name: string, startDist: number, endDist: number) => void) | undefined;
 		/** Called when user drags a segment boundary handle to resize an existing segment. */
 		onSegmentResize?: ((id: string, newStartDist: number, newEndDist: number) => void) | undefined;
+		/**
+		 * When set, record indices that PASS the active filter, keyed by activity.id.
+		 * Active records render at full opacity; inactive records render greyed.
+		 * When absent or the activity has no entry, all records are treated as active.
+		 */
+		activeRecordIndices?: Map<string, Set<number>>;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -123,14 +130,20 @@
 	let resizeObserver: ResizeObserver | undefined;
 
 	const seriesStats = $derived.by<SeriesStats[]>(() => {
-		void $smoothing; void $xAxisMode; void forceDistanceAxis; void zoomRange;
+		void $smoothing; void $xAxisMode; void forceDistanceAxis; void zoomRange; void activeRecordIndices;
 		return seriesInputs
 			.filter((_, i) => !hiddenSeries.has(i))
 			.map((s) => {
 				const data = buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
 				const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
 				const label = s.label ?? s.activity.filename;
-				return computeSeriesStats(data, channel, label, colour, zoomRange);
+				const passingSet = activeRecordIndices?.get(s.activity.id);
+				let filteredData = data;
+				if (passingSet) {
+					const mask = buildActiveMask(s.activity, passingSet, data.length, s.distanceOffset ?? 0);
+					filteredData = data.map(([x, y], j) => [x, mask[j] ? y : null] as [number, number | null]);
+				}
+				return computeSeriesStats(filteredData, channel, label, colour, zoomRange);
 			})
 			.filter((s): s is SeriesStats => s !== null);
 	});
@@ -166,6 +179,29 @@
 		const smoothed = smooth(raw, $smoothing);
 		const xValues = buildXValues(activity.records, axisMode);
 		return xValues.map((x, i) => [x + timeOffset, smoothed[i]]);
+	}
+
+	/** Returns a boolean array (length = data.length) indicating which points are active.
+	 *  Time mode: mask[i] = records[i] is in passingSet.
+	 *  Distance mode: mask[j] = the record nearest axis point j is in passingSet.
+	 */
+	function buildActiveMask(
+		activity: Activity,
+		passingSet: Set<number>,
+		dataLength: number,
+		distanceOffset: number,
+	): boolean[] {
+		const axisMode = effectiveAxisMode($xAxisMode, forceDistanceAxis);
+		if (axisMode === 'time') {
+			return Array.from({ length: dataLength }, (_, i) => passingSet.has(i));
+		}
+		const recs = activity.records;
+		const step = distanceStep(activity.totalDistance);
+		return Array.from({ length: dataLength }, (_, j) => {
+			const targetDist = j * step + distanceOffset;
+			const idx = Math.min(lowerBound(recs, (r) => r.distance, targetDist), recs.length - 1);
+			return passingSet.has(idx);
+		});
 	}
 
 	function buildOption(): EChartsOption {
@@ -270,7 +306,7 @@
 						? `${Math.round(x ?? 0)}s`
 						: `${(x ?? 0).toFixed(2)} km`;
 					const rows = items
-						.filter(p => p.seriesName !== '__alt__' && p.value[1] != null)
+						.filter(p => p.seriesName !== '__alt__' && !p.seriesName.startsWith('__inactive_') && p.value[1] != null)
 						.map(p => {
 							const v = p.value[1] as number;
 							const formatted = channel === 'pace' ? paceFormat(v) + ' /km' : v.toFixed(1);
@@ -385,19 +421,30 @@
 						silent: true,
 						z: 0,
 					}] : []),
-					...seriesInputs.map((s, i) => {
+					...seriesInputs.flatMap((s, i) => {
 						const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
 						const dashed = isDashed(i, referenceIndex);
-						const seriesData = hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
-						if (seriesData.length > DOWNSAMPLE_THRESHOLD) {
-							console.warn(`[TimeSeriesChart] ${channel}: ${seriesData.length} points — ECharts LTTB sampling active`);
+						const fullData = hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
+						if (fullData.length > DOWNSAMPLE_THRESHOLD) {
+							console.warn(`[TimeSeriesChart] ${channel}: ${fullData.length} points — ECharts LTTB sampling active`);
 						}
 						const markAreaData = getMarkAreaData(s.activity.sport ?? sport ?? 'cycling');
-						return {
+
+						const passingSet = activeRecordIndices?.get(s.activity.id);
+						let activeData: [number, number | null][] = fullData;
+						let inactiveData: [number, number | null][] | null = null;
+
+						if (passingSet && fullData.length > 0) {
+							const mask = buildActiveMask(s.activity, passingSet, fullData.length, s.distanceOffset ?? 0);
+							activeData  = fullData.map(([x, y], j) => [x, mask[j] ? y : null] as [number, number | null]);
+							inactiveData = fullData.map(([x, y], j) => [x, mask[j] ? null : y] as [number, number | null]);
+						}
+
+						const activeSeries = {
 							type: 'line' as const,
 							name: s.label ?? s.activity.filename,
 							yAxisIndex: 0,
-							data: seriesData,
+							data: activeData,
 							sampling: 'lttb' as const,
 							lineStyle: {
 								color: colour,
@@ -422,17 +469,19 @@
 								markPoint: {
 									silent: false,
 									animation: false,
-									data: anomalies.map(a => {
-										const record = s.activity.records[a.recordIndex];
-										const raw = record ? (record as unknown as Record<string, number | undefined>)[channel] : undefined;
-										return {
-											coord: [anomalyXValue(a, s, effectiveAxisMode($xAxisMode, forceDistanceAxis)), raw ?? 0],
-											symbol: 'diamond',
-											symbolSize: 8,
-											itemStyle: { color: '#ef4444' },
-											label: { show: false },
-										};
-									}),
+									data: anomalies
+										.filter(a => !passingSet || passingSet.has(a.recordIndex))
+										.map(a => {
+											const record = s.activity.records[a.recordIndex];
+											const raw = record ? (record as unknown as Record<string, number | undefined>)[channel] : undefined;
+											return {
+												coord: [anomalyXValue(a, s, effectiveAxisMode($xAxisMode, forceDistanceAxis)), raw ?? 0],
+												symbol: 'diamond',
+												symbolSize: 8,
+												itemStyle: { color: '#ef4444' },
+												label: { show: false },
+											};
+										}),
 								},
 							} : {}),
 							...(markAreaData ? {
@@ -442,6 +491,29 @@
 								},
 							} : {}),
 						};
+
+						if (!inactiveData) return [activeSeries];
+
+						const inactiveSeries = {
+							type: 'line' as const,
+							name: `__inactive_${i}__`,
+							yAxisIndex: 0,
+							data: inactiveData,
+							sampling: 'lttb' as const,
+							lineStyle: {
+								color: colour,
+								type: dashed ? ([6, 3] as unknown as 'dashed') : 'solid',
+								width: 1.5,
+								opacity: 0.15,
+							},
+							itemStyle: { color: colour, opacity: 0.15 },
+							symbol: 'none',
+							showSymbol: false,
+							z: -1,
+							silent: true,
+						};
+
+						return [activeSeries, inactiveSeries];
 					}),
 				]) as unknown as EChartsOption['series'];
 			})(),
