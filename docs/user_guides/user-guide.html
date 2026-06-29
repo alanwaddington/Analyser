@@ -106,7 +106,7 @@
 <body>
 <h1 id="analyser--user-guide">Analyser — User Guide</h1>
 <blockquote>
-<p><strong>Version:</strong> 2.1 · <strong>Last updated:</strong> June 2026</p>
+<p><strong>Version:</strong> 2.2 · <strong>Last updated:</strong> June 2026</p>
 </blockquote>
 <p>Analyser is a browser-based tool for inspecting and comparing <code>.fit</code> activity files from Garmin devices and other ANT+ sensors. It runs entirely in your browser — no account, no upload, no server. Files are parsed locally.</p>
 <hr>
@@ -120,6 +120,7 @@
 <li>3.3 <a href="#33-summary-tab">Summary Tab</a></li>
 <li>3.4 <a href="#34-meanmax-tab">Mean/Max Tab</a></li>
 <li>3.5 <a href="#35-map-tab">Map Tab</a></li>
+<li>3.6 <a href="#36-record-filter">Record Filter</a></li>
 </ul>
 </li>
 <li><a href="#8-athlete-profile">Athlete Profile</a><ul>
@@ -135,7 +136,10 @@
 <li>4.4 <a href="#44-fine-tuning-timing">Fine-Tuning Timing</a></li>
 </ul>
 </li>
-<li><a href="#5-event-comparison">Event Comparison</a></li>
+<li><a href="#5-event-comparison">Event Comparison</a><ul>
+<li>5.1 <a href="#51-custom-segments">Custom Segments</a></li>
+</ul>
+</li>
 <li><a href="#6-exporting-data">Exporting Data</a><ul>
 <li>6.1 <a href="#61-csv-export">CSV Export</a></li>
 <li>6.2 <a href="#62-excel-export">Excel Export</a></li>
@@ -143,10 +147,6 @@
 </ul>
 </li>
 <li><a href="#7-syncing-device-labels-across-devices">Syncing Device Labels Across Devices</a><ul>
-<li>7.1 <a href="#71-how-sync-works">How Sync Works</a></li>
-<li>7.2 <a href="#72-linking-a-second-device">Linking a Second Device</a></li>
-<li>7.3 <a href="#73-sync-status-and-errors">Sync Status and Errors</a></li>
-<li>7.4 <a href="#74-resetting-your-sync-identity">Resetting Your Sync Identity</a></li>
 <li>7.1 <a href="#71-how-sync-works">How Sync Works</a></li>
 <li>7.2 <a href="#72-linking-a-second-device">Linking a Second Device</a></li>
 <li>7.3 <a href="#73-sync-status-and-errors">Sync Status and Errors</a></li>
@@ -308,7 +308,7 @@
 <ul>
 <li><strong>Heart Rate</strong> — five colour bands (Z1–Z5) are drawn based on your sport-specific maximum heart rate (or LTHR when maxHR is absent). The bands update automatically if you change the profile.</li>
 <li><strong>Power (running)</strong> — five CP zone bands are drawn when you have set a Critical Power value and the activity is a running file with Stryd power data.</li>
-<li><strong>Power (cycling)</strong> — five FTP zone bands (Coggan model) are drawn when you have set an FTP value and the activity is a cycling file.</li>
+<li><strong>Power (cycling)</strong> — seven FTP zone bands (Coggan Z1–Z7 model) are drawn when you have set an FTP value and the activity is a cycling file.</li>
 </ul>
 <p>Zone bands are drawn per-series — when multiple activities are loaded each series uses its own sport&#39;s zone model. Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.</p>
 <p><strong>Smoothing:</strong></p>
@@ -466,6 +466,89 @@
 <p><strong>Hover interaction (Charts tab):</strong></p>
 <p>Hovering over the map route also shows a crosshair on all open Charts-tab charts, letting you pinpoint exactly what your metrics were at a specific GPS location.</p>
 <hr>
+<hr>
+<h3 id="36-record-filter">3.6 Record Filter</h3>
+<p>The <strong>Filter</strong> button in the toolbar lets you highlight specific portions of an activity — threshold power efforts, climbing sections, high-cadence intervals, or any combination — while greying out everything else.</p>
+<p><strong>Opening the filter panel:</strong></p>
+<p>Click the <strong>Filter</strong> button in the toolbar (next to the Device Toggle Bar). A compact dropdown panel appears. An active filter count badge (e.g. <strong>2</strong>) appears on the button when any constraint is set.</p>
+<p><strong>Setting a filter:</strong></p>
+<p>Each row in the panel has a channel label and two numeric inputs (<strong>Min</strong> and <strong>Max</strong>). Fill in one or both to constrain that channel. You can constrain multiple channels simultaneously — records must pass all active constraints to be highlighted.</p>
+<table>
+<thead>
+<tr>
+<th>Channel</th>
+<th>Unit</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Pace / Speed</td>
+<td>min/km (running) or km/h (cycling)</td>
+<td>Label switches automatically based on activity type</td>
+</tr>
+<tr>
+<td>Power</td>
+<td>W</td>
+<td>Label shows the power source: <strong>Stryd Power</strong>, <strong>Running Power</strong>, or <strong>Power</strong></td>
+</tr>
+<tr>
+<td>Heart Rate</td>
+<td>bpm</td>
+<td></td>
+</tr>
+<tr>
+<td>Cadence</td>
+<td>spm (running) or rpm (cycling)</td>
+<td></td>
+</tr>
+<tr>
+<td>Gradient</td>
+<td>%</td>
+<td>Derived from altitude + distance. Only shown when altitude data is available.</td>
+</tr>
+</tbody></table>
+<p>Charts update in real time as you type — no apply button needed. Records that pass the filter are shown at full colour; records that fail are dimmed to grey.</p>
+<p><strong>Zone preset buttons:</strong></p>
+<p>When you have set up an <a href="#8-athlete-profile">Athlete Profile</a>, zone preset buttons (<code>Z1</code>, <code>Z2</code>, … up to <code>Z5</code> for HR/CP or <code>Z7</code> for FTP) appear below the Power and Heart Rate rows. Click a zone button to fill in the exact boundary values for that zone immediately.</p>
+<p><strong>Named presets:</strong></p>
+<p>At the top of the panel, quick-access preset pills appear based on your profile:</p>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Above CP</strong></td>
+<td>Filters to records where power ≥ your Critical Power (running)</td>
+</tr>
+<tr>
+<td><strong>Z4+ FTP</strong></td>
+<td>Filters to records where power ≥ 90% of your FTP (cycling)</td>
+</tr>
+<tr>
+<td><strong>Z4+ HR</strong></td>
+<td>Filters to records where heart rate is in zone 4 or above</td>
+</tr>
+<tr>
+<td><strong>Climbing</strong></td>
+<td>Filters to records where gradient ≥ 2%</td>
+</tr>
+<tr>
+<td><strong>Downhill</strong></td>
+<td>Filters to records where gradient ≤ −2%</td>
+</tr>
+</tbody></table>
+<p>Presets that require profile fields you haven&#39;t set are hidden automatically.</p>
+<p><strong>Invert filter:</strong></p>
+<p>Tick the <strong>Invert filter</strong> checkbox to flip the logic — records that would normally be greyed out become the highlighted ones. This is useful for viewing everything <em>except</em> a particular effort (e.g. &quot;show me everything that isn&#39;t a sprint&quot;).</p>
+<p><strong>Clearing the filter:</strong></p>
+<p>Click <strong>Clear all</strong> in the panel footer, or click the × on each constraint individually. When no constraints are set, the badge disappears and all records are shown at full colour. Closing the panel (clicking outside it) does not clear the filter — the active filter persists while you work.</p>
+<blockquote>
+<p><strong>Note:</strong> The filter applies to the Charts tab time-series only. The delta plot and segment bar chart in Event Comparison always use full-course data so that split comparisons remain meaningful.</p>
+</blockquote>
+<hr>
 <h2 id="4-device-comparison--multiple-files">4. Device Comparison — Multiple Files</h2>
 <p>Analyser supports loading up to <strong>6 files simultaneously</strong>, enabling you to compare sensor data across different activities or devices.</p>
 <h3 id="41-loading-multiple-files">4.1 Loading Multiple Files</h3>
@@ -603,10 +686,52 @@
 <ul>
 <li><strong>Time delta plot</strong> — cumulative seconds gained or lost versus distance. Positive values mean you were ahead of the reference run; negative values mean you were behind.</li>
 <li><strong>Overlaid time-series charts</strong> — pace, speed, heart rate, and power for all files on a shared distance axis.</li>
-<li><strong>Segment bar chart</strong> — per-kilometre or per-lap time difference, highlighting your best and worst segments.</li>
+<li><strong>Segment bar chart</strong> — per-kilometre or per-lap time difference, plus any custom segments you have defined.</li>
 </ul>
 <blockquote>
 <p><strong>Tip:</strong> Select a reference run using the controls in the sidebar. The time delta is calculated relative to the reference. Try different reference runs to understand where you consistently gain or lose time.</p>
+</blockquote>
+<h3 id="51-custom-segments">5.1 Custom Segments</h3>
+<p>You can define your own named course sections — a known climb, a flat finishing straight, a technical descent — and compare your performance on each across all loaded files.</p>
+<p>Custom segments are saved per course and reloaded automatically the next time you open files from the same event.</p>
+<p><strong>Creating a segment:</strong></p>
+<ol>
+<li>On any time-series chart (Pace, Heart Rate, Power, etc.), hold <strong>Shift</strong> and click-drag across the range you want.</li>
+<li>A blue selection band appears while you drag.</li>
+<li>Release the mouse. A dialog box prompts you to <strong>name</strong> the segment.</li>
+<li>Type a name and press <strong>Enter</strong> (or click <strong>Save</strong>) to confirm. Press <strong>Escape</strong> to cancel.</li>
+</ol>
+<p>The segment immediately appears in the <strong>Segment</strong> tab bar alongside auto-laps, with full per-file statistics (time, pace, power, heart rate).</p>
+<p><strong>Resizing a segment:</strong></p>
+<p>Hover near the left or right edge of a segment band on any chart. The cursor changes to a resize arrow. Click-drag to move that boundary. The segment is updated as soon as you release.</p>
+<p><strong>Managing segments:</strong></p>
+<p>Click the <strong>Segments ▾</strong> button in the toolbar to open the Segment Manager. Here you can:</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Rename a segment</td>
+<td>Click the segment name and type a new one</td>
+</tr>
+<tr>
+<td>Delete a segment</td>
+<td>Click the <strong>✕</strong> button next to the segment</td>
+</tr>
+<tr>
+<td>Export segments</td>
+<td>Click <strong>Export JSON</strong> to download all course segments</td>
+</tr>
+<tr>
+<td>Import segments</td>
+<td>Click <strong>Import JSON</strong> and choose a previously exported file</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>Note:</strong> Segments are keyed by sport and approximate distance (rounded to the nearest 100 m). A 5 km parkrun recorded as 5.01 km and one recorded as 4.98 km are treated as the same course, so segments defined in one session appear in both. If you load files from a significantly different distance (e.g. a 10 km race), a separate segment set is maintained.</p>
 </blockquote>
 <hr>
 <h2 id="6-exporting-data">6. Exporting Data</h2>
@@ -823,7 +948,7 @@
 </tr>
 <tr>
 <td><strong>Charts tab — Power chart (cycling)</strong></td>
-<td>Z1–Z5 FTP zone shading bands (Coggan model)</td>
+<td>Z1–Z7 FTP zone shading bands (Coggan 7-zone model)</td>
 </tr>
 <tr>
 <td><strong>Summary tab — Power rows</strong></td>
@@ -1014,6 +1139,31 @@
 <td>Labels on second device are out of date</td>
 <td>Sync has not triggered yet</td>
 <td>Open the Sync panel — pulling happens automatically on load; refresh the page if needed</td>
+</tr>
+<tr>
+<td>Custom segments not appearing in Event Comparison</td>
+<td>Files may be from a different course length</td>
+<td>Segments are keyed by sport + distance (±100 m). Check that the loaded files match the course the segments were created for.</td>
+</tr>
+<tr>
+<td>Segment dialog did not appear after Shift+drag</td>
+<td>Drag may have been too small</td>
+<td>Try dragging a wider range (at least a few hundred metres). The dialog appears on mouse release.</td>
+</tr>
+<tr>
+<td>Filter button has a badge but charts look unchanged</td>
+<td>Charts may still be loading or the filter is set to a range with no matching records</td>
+<td>Check that the filter values correspond to data in the loaded file (e.g. a power min above the activity&#39;s max power will grey out everything)</td>
+</tr>
+<tr>
+<td>Gradient row is missing from the Filter panel</td>
+<td>Activity has no altitude data</td>
+<td>The gradient filter is automatically hidden for files that contain no altitude readings (e.g. some indoor recordings)</td>
+</tr>
+<tr>
+<td>Closing the Filter panel cleared my filter</td>
+<td>The panel closing does not clear the filter — the badge on the button will still show the count</td>
+<td>Use <strong>Clear all</strong> inside the panel to remove all constraints</td>
 </tr>
 <tr>
 <td>Sync panel shows &quot;Setting up sync…&quot; for a long time</td>

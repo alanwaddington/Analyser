@@ -297,7 +297,7 @@ describe('cpZoneBoundaries', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ftpZone — Coggan 5-zone model
+// ftpZone — Coggan 7-zone model
 // ---------------------------------------------------------------------------
 
 describe('ftpZone', () => {
@@ -321,10 +321,22 @@ describe('ftpZone', () => {
 		expect(ftpZone(225, 250)).toBe(4); // 90%
 	});
 
-	it('ftpZone_above105pct_returnsZone5', () => {
-		// VO2Max: ≥ 105% FTP
+	it('ftpZone_105pct_returnsZone5', () => {
+		// VO2Max: 105–120% FTP
 		expect(ftpZone(263, 250)).toBe(5); // 105.2%
-		expect(ftpZone(300, 250)).toBe(5); // 120%
+		expect(ftpZone(299, 250)).toBe(5); // 119.6%
+	});
+
+	it('ftpZone_120pct_returnsZone6', () => {
+		// Anaerobic: 120–<150% FTP
+		expect(ftpZone(300, 250)).toBe(6); // 120%
+		expect(ftpZone(374, 250)).toBe(6); // 149.6%
+	});
+
+	it('ftpZone_above150pct_returnsZone7', () => {
+		// Neuromuscular: ≥ 150% FTP
+		expect(ftpZone(376, 250)).toBe(7); // 150.4%
+		expect(ftpZone(500, 250)).toBe(7); // 200%
 	});
 
 	it('ftpZone_atExactlyFtp_returnsZone4', () => {
@@ -338,9 +350,9 @@ describe('ftpZone', () => {
 // ---------------------------------------------------------------------------
 
 describe('ftpZoneBoundaries', () => {
-	it('ftpZoneBoundaries_250ftp_returns5Zones', () => {
+	it('ftpZoneBoundaries_250ftp_returns7Zones', () => {
 		const bands = ftpZoneBoundaries(250);
-		expect(bands).toHaveLength(5);
+		expect(bands).toHaveLength(7);
 	});
 
 	it('ftpZoneBoundaries_zonesAreContiguous', () => {
@@ -357,7 +369,7 @@ describe('ftpZoneBoundaries', () => {
 
 	it('ftpZoneBoundaries_lastZoneEndsAtInfinity', () => {
 		const bands = ftpZoneBoundaries(250);
-		expect(bands[4].max).toBe(Infinity);
+		expect(bands[6].max).toBe(Infinity);
 	});
 
 	it('ftpZoneBoundaries_zoneNumbersAscend', () => {
@@ -368,5 +380,15 @@ describe('ftpZoneBoundaries', () => {
 	it('ftpZoneBoundaries_zone2StartsAt55pctFtp', () => {
 		const bands = ftpZoneBoundaries(250);
 		expect(bands[1].min).toBeCloseTo(250 * 0.55, 5);
+	});
+
+	it('ftpZoneBoundaries_zone6StartsAt120pctFtp', () => {
+		const bands = ftpZoneBoundaries(250);
+		expect(bands[5].min).toBeCloseTo(250 * 1.20, 5);
+	});
+
+	it('ftpZoneBoundaries_zone7StartsAt150pctFtp', () => {
+		const bands = ftpZoneBoundaries(250);
+		expect(bands[6].min).toBeCloseTo(250 * 1.50, 5);
 	});
 });

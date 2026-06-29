@@ -106,9 +106,9 @@
 <body>
 <h1 id="analyser--api-reference">Analyser — API Reference</h1>
 <blockquote>
-<p><strong>Version:</strong> 1.0 · <strong>Last updated:</strong> May 2026</p>
+<p><strong>Version:</strong> 1.1 · <strong>Last updated:</strong> June 2026</p>
 </blockquote>
-<p>The Analyser API provides server-side endpoints for the cross-device label sync feature (PR #80). All routes are SvelteKit server endpoints located under <code>src/routes/api/</code>.</p>
+<p>The Analyser API provides server-side endpoints for the cross-device label sync feature (PR #80) and custom event segments sync (PR #156). All routes are SvelteKit server endpoints located under <code>src/routes/api/</code>.</p>
 <hr>
 <h2 id="table-of-contents">Table of Contents</h2>
 <ol>
@@ -116,6 +116,7 @@
 <li><a href="#2-endpoints">Endpoints</a><ul>
 <li><a href="#get-apilabelsuuid">GET /api/labels/[uuid]</a></li>
 <li><a href="#put-apilabelsuuid">PUT /api/labels/[uuid]</a></li>
+<li><a href="#delete-apilabelsuuid">DELETE /api/labels/[uuid]</a></li>
 <li><a href="#get-apilabelsresolvecode">GET /api/labels/resolve/[code]</a></li>
 </ul>
 </li>
@@ -152,10 +153,16 @@
   &quot;labels&quot;: {
     &quot;garmin:3151:120&quot;: &quot;Polar H10&quot;,
     &quot;garmin:3151:11&quot;:  &quot;Assioma Duo&quot;
+  },
+  &quot;segments&quot;: {
+    &quot;running:50&quot;: [
+      { &quot;id&quot;: &quot;abc-123&quot;, &quot;name&quot;: &quot;The Hill&quot;, &quot;startDist&quot;: 1200, &quot;endDist&quot;: 2400 }
+    ]
   }
 }
 </code></pre>
 <p>The <code>labels</code> object is a <code>Record&lt;string, string&gt;</code> mapping device keys (as produced by <code>deviceKey()</code> in <code>src/lib/utils/deviceChannels.ts</code>) to user-assigned label strings.</p>
+<p>The <code>segments</code> field is a <code>Record&lt;string, CustomSegment[]&gt;</code> keyed by course identity string (<code>${sport}:${Math.round(totalDistance/100)}</code>). It is <strong>omitted</strong> from the response when no segments have been stored for this identity — callers should treat its absence as an empty map.</p>
 <p><code>400 Bad Request</code> — UUID does not match the expected format.</p>
 <pre><code class="language-json">{ &quot;error&quot;: &quot;Invalid UUID format&quot; }
 </code></pre>
@@ -189,7 +196,12 @@
   &quot;labels&quot;: {
     &quot;garmin:3151:120&quot;: &quot;Polar H10&quot;
   },
-  &quot;shortCode&quot;: &quot;E6Y-NXEMF&quot;
+  &quot;shortCode&quot;: &quot;E6Y-NXEMF&quot;,
+  &quot;segments&quot;: {
+    &quot;running:50&quot;: [
+      { &quot;id&quot;: &quot;abc-123&quot;, &quot;name&quot;: &quot;The Hill&quot;, &quot;startDist&quot;: 1200, &quot;endDist&quot;: 2400 }
+    ]
+  }
 }
 </code></pre>
 <table>
@@ -197,18 +209,27 @@
 <tr>
 <th>Field</th>
 <th>Type</th>
+<th>Required</th>
 <th>Validation</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>labels</code></td>
 <td><code>Record&lt;string, string&gt;</code></td>
+<td>Yes</td>
 <td>All values must be strings</td>
 </tr>
 <tr>
 <td><code>shortCode</code></td>
 <td><code>string</code></td>
+<td>Yes</td>
 <td>Must match <code>XXX-XXXXX</code> (3 alphanumeric, dash, 5 alphanumeric)</td>
+</tr>
+<tr>
+<td><code>segments</code></td>
+<td><code>Record&lt;string, CustomSegment[]&gt;</code></td>
+<td>No</td>
+<td>Omit when no segments are stored; structure validated at write time</td>
 </tr>
 </tbody></table>
 <p><strong>Responses</strong></p>
@@ -220,10 +241,43 @@
 </code></pre>
 <p><code>500 Internal Server Error</code></p>
 <p><strong>Side effects</strong></p>
-<p>Two Redis keys are written (or refreshed) atomically:</p>
+<p>Two or three Redis keys are written (or refreshed) in parallel:</p>
 <ul>
 <li><code>labels:{uuid}</code> — the label map, with a rolling 90-day TTL</li>
 <li><code>code:{shortCode}</code> — the UUID string, with a rolling 90-day TTL</li>
+<li><code>segments:{uuid}</code> — the custom segments map (only written when <code>segments</code> is present in the request body), with a rolling 90-day TTL</li>
+</ul>
+<hr>
+<h3 id="delete-apilabelsuuid">DELETE /api/labels/[uuid]</h3>
+<p>Removes the label map and custom segments for a sync identity from the remote store. Called by <code>resetSyncIdentity()</code> in <code>sync.ts</code> to clean up the old UUID&#39;s Redis keys before switching to a new identity.</p>
+<p><strong>Path parameter</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>uuid</code></td>
+<td>UUIDv4</td>
+<td>The sync identity UUID to delete</td>
+</tr>
+</tbody></table>
+<p><strong>Responses</strong></p>
+<p><code>200 OK</code></p>
+<pre><code class="language-json">{ &quot;ok&quot;: true }
+</code></pre>
+<p><code>400 Bad Request</code> — UUID does not match the expected format.</p>
+<pre><code class="language-json">{ &quot;error&quot;: &quot;Invalid UUID format&quot; }
+</code></pre>
+<p><code>500 Internal Server Error</code></p>
+<p><strong>Behaviour notes</strong></p>
+<ul>
+<li>Deletes <code>labels:{uuid}</code> and <code>segments:{uuid}</code> keys in parallel via <code>redis.del()</code>.</li>
+<li>The <code>code:{shortCode}</code> reverse-lookup key is intentionally <strong>not</strong> deleted — it is left to expire via its 90-day TTL. A 404 on <code>GET /api/labels/{uuid}</code> is the canonical signal that an identity no longer exists.</li>
+<li>The call is fire-and-forget from the client side (errors are silently swallowed). Failure does not prevent the new identity from being established.</li>
 </ul>
 <hr>
 <h3 id="get-apilabelsresolvecode">GET /api/labels/resolve/[code]</h3>
@@ -296,7 +350,36 @@
 <p>The <code>GET /api/labels/[uuid]</code> and <code>PUT /api/labels/[uuid]</code> endpoints are not rate-limited. The UUID namespace (36^8 × 36^8 entries) makes enumeration infeasible.</p>
 <hr>
 <h2 id="5-data-expiry">5. Data Expiry</h2>
-<p>All Redis entries use a <strong>90-day rolling TTL</strong>. The TTL is refreshed on every successful PUT, so active users never lose their labels. Inactive identities expire automatically with no explicit cleanup required.</p>
+<p>All Redis entries use a <strong>90-day rolling TTL</strong>. The TTL is refreshed on every successful PUT, so active users never lose their data. Inactive identities expire automatically with no explicit cleanup required.</p>
+<p><strong>Redis key reference:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Key pattern</th>
+<th>Value</th>
+<th>TTL</th>
+<th>Written by</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>labels:{uuid}</code></td>
+<td><code>Record&lt;string, string&gt;</code> — device key → label</td>
+<td>90 days, rolling</td>
+<td>PUT</td>
+</tr>
+<tr>
+<td><code>segments:{uuid}</code></td>
+<td><code>Record&lt;string, CustomSegment[]&gt;</code> — course key → segments</td>
+<td>90 days, rolling</td>
+<td>PUT (when segments present)</td>
+</tr>
+<tr>
+<td><code>code:{shortCode}</code></td>
+<td>UUID string</td>
+<td>90 days, rolling</td>
+<td>PUT</td>
+</tr>
+</tbody></table>
 <p>After expiry:</p>
 <ul>
 <li><code>GET /api/labels/{uuid}</code> returns 404 — treated by the client as &quot;no remote data yet&quot;</li>

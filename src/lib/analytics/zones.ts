@@ -6,7 +6,7 @@ export type CpZone = 1 | 2 | 3 | 4 | 5;
 export interface ZoneBand {
 	min: number;
 	max: number;
-	zone: HrZone | CpZone;
+	zone: FtpZone;
 }
 
 // HR zone from % of maxHR (5-zone model)
@@ -99,25 +99,31 @@ export function cpZoneBoundaries(cp: number): ZoneBand[] {
 	];
 }
 
-// FTP zone — Coggan 5-zone cycling power model
+export type FtpZone = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+// FTP zone — Coggan 7-zone cycling power model
 // Z1 (Active Recovery) < 55%, Z2 (Endurance) 55–75%, Z3 (Tempo) 75–90%,
-// Z4 (Threshold) 90–105%, Z5 (VO2Max) ≥ 105%
-export function ftpZone(watts: number, ftp: number): CpZone {
+// Z4 (Threshold) 90–105%, Z5 (VO2Max) 105–120%, Z6 (Anaerobic) 120–150%, Z7 (Neuromuscular) ≥ 150%
+export function ftpZone(watts: number, ftp: number): FtpZone {
 	const pct = watts / ftp;
 	if (pct < 0.55) return 1;
 	if (pct < 0.75) return 2;
 	if (pct < 0.90) return 3;
 	if (pct < 1.05) return 4;
-	return 5;
+	if (pct < 1.20) return 5;
+	if (pct < 1.50) return 6;
+	return 7;
 }
 
-// FTP zone boundary array for markArea construction (Coggan model)
+// FTP zone boundary array for markArea construction (Coggan 7-zone model)
 export function ftpZoneBoundaries(ftp: number): ZoneBand[] {
 	return [
 		{ min: 0,           max: ftp * 0.55, zone: 1 },
 		{ min: ftp * 0.55,  max: ftp * 0.75, zone: 2 },
 		{ min: ftp * 0.75,  max: ftp * 0.90, zone: 3 },
 		{ min: ftp * 0.90,  max: ftp * 1.05, zone: 4 },
-		{ min: ftp * 1.05,  max: Infinity,   zone: 5 },
+		{ min: ftp * 1.05,  max: ftp * 1.20, zone: 5 },
+		{ min: ftp * 1.20,  max: ftp * 1.50, zone: 6 },
+		{ min: ftp * 1.50,  max: Infinity,   zone: 7 },
 	];
 }
