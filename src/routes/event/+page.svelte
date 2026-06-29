@@ -32,6 +32,9 @@
 	import { athleteProfile } from '$lib/stores/athleteProfile';
 	import { buildCellContext } from '$lib/utils/summaryContext';
 	import { computeRSS } from '$lib/analytics/rss';
+	import { recordFilter, activeFilterCount } from '$lib/stores/filterStore';
+	import { applyRecordFilter, deriveGradients, filterRecords } from '$lib/analytics/recordFilter';
+	import FilterPanel from '$lib/components/ui/FilterPanel.svelte';
 	import '../map-panel.css';
 	import '../export-btn.css';
 	import '../indoor-warning.css';
@@ -237,6 +240,32 @@
 		return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 	}
 
+	// ── Record filter ─────────────────────────────────────────────────────────
+
+	const hasAltitude = $derived($activities.some(a => a.records.some(r => r.altitude != null)));
+	const primarySport = $derived($activities[0]?.sport ?? '');
+	const primaryPowerSource = $derived($activities[0]?.powerSource);
+
+	const gradientCache = $derived.by<Map<string, (number | null)[]>>(() => {
+		if ($recordFilter.gradient?.min == null && $recordFilter.gradient?.max == null) return new Map();
+		return new Map($activities.map(a => [a.id, deriveGradients(a.records)]));
+	});
+
+	const activeRecordIndices = $derived.by<Map<string, Set<number>>>(() => {
+		void $recordFilter;
+		return new Map(
+			$activities.map(a => [
+				a.id,
+				applyRecordFilter(a.records, $recordFilter, gradientCache.get(a.id)),
+			])
+		);
+	});
+
+	function filteredRecords(activityId: string, records: typeof $activities[0]['records']) {
+		const passing = activeRecordIndices.get(activityId);
+		return passing ? filterRecords(records, passing) : records;
+	}
+
 </script>
 
 <div class="page">
@@ -344,6 +373,15 @@
 				{/if}
 			</CollapsiblePanel>
 
+			<CollapsiblePanel title="Filter{$activeFilterCount > 0 ? ` (${$activeFilterCount})` : ''}">
+				<FilterPanel
+					sport={primarySport}
+					powerSource={primaryPowerSource}
+					athleteProfile={$athleteProfile}
+					{hasAltitude}
+				/>
+			</CollapsiblePanel>
+
 			{#if indoor.hasMixedIndoorOutdoor && !indoor.mixedWarningDismissed}
 				<div class="location-warning" role="alert" aria-live="polite">
 					<span class="warning-icon" aria-hidden="true">⚠</span>
@@ -394,6 +432,7 @@
 								{customSegmentBands}
 								onSegmentCreate={handleSegmentCreate}
 								onSegmentResize={handleSegmentResize}
+								activeRecordIndices={$activeFilterCount > 0 ? activeRecordIndices : undefined}
 							/>
 						</div>
 					{/each}
@@ -450,6 +489,12 @@
 			{@const showFormPower = summaryRows.some(r => r.activity.powerSource === 'stryd')}
 			{@const showRSS = $athleteProfile.cp != null && summaryRows.some(r => r.activity.sport === 'running')}
 			<div class="summary-scroll">
+				{#if $activeFilterCount > 0}
+					<div class="filter-indicator" role="status">
+						<span class="filter-indicator-icon" aria-hidden="true">⧖</span>
+						Filtered — statistics based on {$activeFilterCount} active filter{$activeFilterCount === 1 ? '' : 's'}
+					</div>
+				{/if}
 				<table class="summary-table">
 					<thead>
 						<tr>
@@ -467,9 +512,10 @@
 					</thead>
 					<tbody>
 						{#each summaryRows as { activity, isReference }, rowIdx}
-							{@const hrStats = summarise(extractChannel(activity.records, 'heartRate'))}
-							{@const powerStats = summarise(extractChannel(activity.records, 'power'))}
-							{@const formPowerStats = summarise(extractChannel(activity.records, 'formPower'))}
+							{@const recs = filteredRecords(activity.id, activity.records)}
+							{@const hrStats = summarise(extractChannel(recs, 'heartRate'))}
+							{@const powerStats = summarise(extractChannel(recs, 'power'))}
+							{@const formPowerStats = summarise(extractChannel(recs, 'formPower'))}
 							{@const paceSecPerKm = activity.totalDistance > 0 ? activity.totalElapsedTime / activity.totalDistance * 1000 : null}
 							{@const powerCtx = powerStats ? buildCellContext('power', powerStats.avg, activity.sport, $athleteProfile) : null}
 							{@const hrCtx = hrStats ? buildCellContext('heartRate', hrStats.avg, activity.sport, $athleteProfile) : null}
@@ -717,6 +763,23 @@
 		.card--segment {
 			height: 200px;
 		}
+	}
+
+	.filter-indicator {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 10px;
+		margin-bottom: 10px;
+		font-size: 0.75rem;
+		color: #38bdf8;
+		background: rgba(56,189,248,0.08);
+		border: 1px solid rgba(56,189,248,0.25);
+		border-radius: 6px;
+	}
+
+	.filter-indicator-icon {
+		font-style: normal;
 	}
 
 	.summary-scroll {
