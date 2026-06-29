@@ -211,11 +211,12 @@
 					else if (seriesSport !== 'running' && athleteProfile?.ftp != null) bands = ftpZoneBoundaries(athleteProfile.ftp);
 				}
 				if (bands) {
-					const z5 = bands.find(b => b.zone === 5);
-					const z4 = bands.find(b => b.zone === 4);
-					if (z5 && z4) {
-						topZoneStart = Math.max(topZoneStart, z5.min);
-						z4Width = Math.max(z4Width, z4.max - z4.min);
+					const sorted = [...bands].sort((a, b) => b.zone - a.zone);
+					const topZone = sorted[0];
+					const secondZone = sorted[1];
+					if (topZone && secondZone) {
+						topZoneStart = Math.max(topZoneStart, topZone.min);
+						z4Width = Math.max(z4Width, secondZone.max - secondZone.min);
 					}
 				}
 			}
@@ -309,6 +310,8 @@
 					3: 'rgba(74,222,128,0.18)',
 					4: 'rgba(251,191,36,0.20)',
 					5: 'rgba(248,113,113,0.22)',
+					6: 'rgba(192,132,252,0.22)',
+					7: 'rgba(244,114,182,0.22)',
 				};
 
 				// Compute zone bands for a given series' sport — called per-series so
