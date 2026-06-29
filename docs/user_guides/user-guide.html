@@ -308,7 +308,11 @@
 <ul>
 <li><strong>Heart Rate</strong> — five colour bands (Z1–Z5) are drawn based on your sport-specific maximum heart rate (or LTHR when maxHR is absent). The bands update automatically if you change the profile.</li>
 <li><strong>Power (running)</strong> — five CP zone bands are drawn when you have set a Critical Power value and the activity is a running file with Stryd power data.</li>
-<li><strong>Power (cycling)</strong> — seven FTP zone bands (Coggan Z1–Z7 model) are drawn when you have set an FTP value and the activity is a cycling file.</li>
+<li><strong>Power (cycling)</strong> — FTP zone bands (Coggan model) are drawn when you have set an FTP value and the activity is a cycling file. The number of bands adapts to your data:<ul>
+<li><strong>5 bands (Z1–Z5)</strong> — shown when all power values stay below 120% FTP. The y-axis is clipped to the top of Z5, keeping the chart compact for aerobic rides.</li>
+<li><strong>7 bands (Z1–Z7)</strong> — shown when any power value exceeds 120% FTP (i.e. data reaches Z6 or Z7). The y-axis auto-scales to your data so Z6 and Z7 shading is fully visible. The open-ended Z7 band is capped at 120% of your maximum recorded power to avoid stretching the chart excessively.</li>
+</ul>
+</li>
 </ul>
 <p>Zone bands are drawn per-series — when multiple activities are loaded each series uses its own sport&#39;s zone model. Zone bands are absent until the relevant profile field is configured, so they never appear uninvited.</p>
 <p><strong>Smoothing:</strong></p>
@@ -948,7 +952,7 @@
 </tr>
 <tr>
 <td><strong>Charts tab — Power chart (cycling)</strong></td>
-<td>Z1–Z7 FTP zone shading bands (Coggan 7-zone model)</td>
+<td>Adaptive FTP zone shading: Z1–Z5 for aerobic efforts (≤120% FTP); Z1–Z7 when data reaches Z6/Z7 (&gt;120% FTP)</td>
 </tr>
 <tr>
 <td><strong>Summary tab — Power rows</strong></td>

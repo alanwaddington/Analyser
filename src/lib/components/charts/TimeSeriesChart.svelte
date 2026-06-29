@@ -27,7 +27,7 @@
 	import { smoothing, xAxisMode } from '$lib/stores/session';
 	import { isDark } from '$lib/stores/theme';
 	import { smooth } from '$lib/analytics/smooth';
-	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue } from './TimeSeriesChart.utils.ts';
+	import { extractChannel, buildXValues, isDashed, paceFormat, effectiveAxisMode, computeSeriesStats, anomalyXValue, selectFtpBands, computeZoneAxisCap } from './TimeSeriesChart.utils.ts';
 	import type { SeriesInput, SeriesStats } from './TimeSeriesChart.utils.ts';
 	import { interpolateToDistanceAxis, distanceStep } from '$lib/align/distance';
 	import { lowerBound } from '$lib/utils/binarySearch';
@@ -219,6 +219,14 @@
 		const altFill = $isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.2)';
 		const altLine = $isDark ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.35)';
 
+		// Pre-compute data for all visible series once — reused for zone decision and series rendering.
+		const dataCache = new Map<number, [number, number | null][]>();
+		for (let i = 0; i < seriesInputs.length; i++) {
+			if (hiddenSeries.has(i)) continue;
+			const s = seriesInputs[i];
+			dataCache.set(i, buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0));
+		}
+
 		// Compute fixed zone axis extents so ALL zones are visible regardless of the data range.
 		// yAxis.min = 0 (Z1 visible from the bottom).
 		// yAxis.max = Z5_start + Z4_width (Z5 partially visible at the top, clipped to one Z4-width).
@@ -263,7 +271,25 @@
 			}
 			if (topZoneStart > 0) zoneAxisMax = Math.ceil(topZoneStart + z4Width);
 		}
-		const hasZoneBands = zoneAxisMax !== undefined;
+
+		// Adaptive FTP zone mode: if any cycling power series exceeds 120% FTP, show all 7 zones.
+		// ftpDataMax stays 0 when no cycling series exist — safe because useFullFtpZones is then
+		// false, so computeZoneAxisCap never uses the 7-zone branch (which would ceil(0 * 1.2) = 0).
+		let useFullFtpZones = false;
+		let ftpDataMax = 0;
+		if (channel === 'power' && athleteProfile?.ftp != null) {
+			const ftp = athleteProfile.ftp;
+			for (const [i, data] of dataCache) {
+				const seriesSport = seriesInputs[i].activity.sport ?? sport ?? 'cycling';
+				if (seriesSport === 'running') continue;
+				for (const [, y] of data) {
+					if (y != null && y > ftpDataMax) ftpDataMax = y;
+				}
+			}
+			useFullFtpZones = ftpDataMax > ftp * 1.20;
+			if (useFullFtpZones) zoneAxisMax = undefined;
+		}
+		const hasZoneBands = zoneAxisMax !== undefined || useFullFtpZones;
 
 		return {
 			grid: { top: 20, right: 16, bottom: 30, left: 55 },
@@ -281,7 +307,7 @@
 					inverse: channel === 'pace',
 					name: meta.unit,
 					nameTextStyle: { color: tc },
-					...(hasZoneBands ? { min: 0, max: zoneAxisMax } : {}),
+					...(hasZoneBands ? { min: 0, ...(useFullFtpZones ? {} : { max: zoneAxisMax }) } : {}),
 					axisLabel: {
 						color: tc,
 						fontSize: 11,
@@ -381,11 +407,11 @@
 					} else if (channel === 'power' && seriesSport === 'running' && athleteProfile?.cp != null) {
 						zoneBands = cpZoneBoundaries(athleteProfile.cp);
 					} else if (channel === 'power' && seriesSport !== 'running' && athleteProfile?.ftp != null) {
-						zoneBands = ftpZoneBoundaries(athleteProfile.ftp);
+						zoneBands = selectFtpBands(ftpZoneBoundaries(athleteProfile.ftp), useFullFtpZones);
 					}
-					// Cap the top zone at zoneAxisMax — ECharts cannot handle yAxis: Infinity
-					// and will silently drop the entire markArea.data array if it encounters it.
-					const axisCap = zoneAxisMax ?? 9999;
+					// Cap the top zone to avoid ECharts silently dropping markArea data on Infinity.
+					// 7-zone mode: ceil(dataMax × 1.2); 5-zone / HR / CP: fixed zone ceiling.
+					const axisCap = computeZoneAxisCap(useFullFtpZones, ftpDataMax, zoneAxisMax);
 					return zoneBands
 						? zoneBands.map(b => [
 							{ yAxis: b.min, itemStyle: { color: ZONE_COLOURS[b.zone] } },
@@ -442,7 +468,7 @@
 					...seriesInputs.flatMap((s, i) => {
 						const colour = s.colour ?? FILE_COLOURS[s.colourIndex % FILE_COLOURS.length];
 						const dashed = isDashed(i, referenceIndex);
-						const fullData = hiddenSeries.has(i) ? [] : buildData(s.activity, s.timeOffset ?? 0, s.distanceOffset ?? 0);
+						const fullData = hiddenSeries.has(i) ? [] : (dataCache.get(i) ?? []);
 						if (fullData.length > DOWNSAMPLE_THRESHOLD) {
 							console.warn(`[TimeSeriesChart] ${channel}: ${fullData.length} points — ECharts LTTB sampling active`);
 						}
