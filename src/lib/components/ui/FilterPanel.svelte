@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { recordFilter, clearAllFilters } from '$lib/stores/filterStore';
+	import { recordFilter, clearAllFilters, activeFilterCount } from '$lib/stores/filterStore';
 	import type { RecordFilter, ChannelRange } from '$lib/stores/filterStore';
 	import { cpZoneBoundaries, ftpZoneBoundaries, hrZoneBoundaries, lthrToEstimatedMaxHR } from '$lib/analytics/zones';
 	import type { AthleteProfile } from '$lib/types';
@@ -19,24 +19,20 @@
 	const isRunning = $derived(sport === 'running');
 	const isCycling = $derived(sport === 'cycling' || (!isRunning && powerSource === 'cycling'));
 
-	// Power label based on source
 	const powerLabel = $derived(() => {
 		if (powerSource === 'stryd') return 'Stryd Power';
 		if (powerSource === 'native') return 'Running Power';
 		return 'Power';
 	});
 
-	// Speed label based on sport
 	const speedLabel = $derived(isRunning ? 'Pace (min/km)' : 'Speed (km/h)');
 
-	// Zone preset bands for power
 	const powerZones = $derived(() => {
 		if (isRunning && athleteProfile.cp != null) return cpZoneBoundaries(athleteProfile.cp);
 		if (!isRunning && athleteProfile.ftp != null) return ftpZoneBoundaries(athleteProfile.ftp);
 		return null;
 	});
 
-	// Zone preset bands for HR
 	const hrZones = $derived(() => {
 		const maxHR = isRunning
 			? (athleteProfile.maxHrRunning ?? athleteProfile.maxHrCycling)
@@ -46,7 +42,6 @@
 		return null;
 	});
 
-	// Named presets — each sets one or more filter fields
 	const namedPresets = $derived(() => {
 		const presets: { label: string; apply: () => void }[] = [];
 
@@ -73,7 +68,6 @@
 		return presets;
 	});
 
-	// Local string state for each field (to avoid NaN on partial input)
 	let speedMin = $state('');
 	let speedMax = $state('');
 	let powerMin = $state('');
@@ -85,6 +79,7 @@
 	let gradientMin = $state('');
 	let gradientMax = $state('');
 	let inverted = $state(false);
+	let expanded = $state(false);
 
 	function parseNum(s: string): number | undefined {
 		const n = parseFloat(s);
@@ -93,7 +88,6 @@
 
 	function setRange(channel: keyof Omit<RecordFilter, 'inverted'>, range: ChannelRange) {
 		recordFilter.update(f => ({ ...f, [channel]: range }));
-		// Sync local state
 		if (channel === 'speed') { speedMin = range.min != null ? String(range.min) : ''; speedMax = range.max != null ? String(range.max) : ''; }
 		if (channel === 'power') { powerMin = range.min != null ? String(range.min) : ''; powerMax = range.max != null ? String(range.max) : ''; }
 		if (channel === 'heartRate') { hrMin = range.min != null ? String(range.min) : ''; hrMax = range.max != null ? String(range.max) : ''; }
@@ -136,201 +130,292 @@
 	const hasGradient = $derived(gradientMin !== '' || gradientMax !== '');
 </script>
 
-<div class="filter-panel">
-	<!-- Named presets row -->
-	{#if namedPresets().length > 0}
-		<div class="preset-row">
-			{#each namedPresets() as preset}
-				<button class="preset-btn" onclick={() => { preset.apply(); commit(); }}>
-					{preset.label}
-				</button>
-			{/each}
+<div class="filter-wrap">
+	<button
+		class="filter-toggle"
+		class:filter-toggle--active={$activeFilterCount > 0}
+		onclick={() => (expanded = !expanded)}
+		aria-expanded={expanded}
+		aria-controls="filter-body"
+	>
+		<span class="filter-toggle-label">Filter</span>
+		{#if $activeFilterCount > 0}
+			<span class="filter-badge" aria-label="{$activeFilterCount} active filters">{$activeFilterCount}</span>
+		{/if}
+		<span class="filter-chevron" class:filter-chevron--open={expanded} aria-hidden="true">›</span>
+	</button>
+
+	{#if expanded}
+		<div class="filter-body" id="filter-body" role="region" aria-label="Record filter controls">
+			<!-- Named presets row -->
+			{#if namedPresets().length > 0}
+				<div class="preset-row">
+					{#each namedPresets() as preset}
+						<button class="preset-btn" onclick={() => { preset.apply(); commit(); }}>
+							{preset.label}
+						</button>
+					{/each}
+				</div>
+			{/if}
+
+			<!-- Speed -->
+			<div class="filter-row" class:filter-row--active={hasSpeed}>
+				<span class="filter-label">
+					{#if hasSpeed}<span class="active-dot" aria-hidden="true"></span>{/if}
+					{speedLabel}
+				</span>
+				<div class="filter-inputs">
+					<input
+						type="number"
+						placeholder="Min"
+						class="filter-input"
+						bind:value={speedMin}
+						oninput={commit}
+						aria-label="Speed minimum"
+					/>
+					<span class="filter-sep">–</span>
+					<input
+						type="number"
+						placeholder="Max"
+						class="filter-input"
+						bind:value={speedMax}
+						oninput={commit}
+						aria-label="Speed maximum"
+					/>
+				</div>
+			</div>
+
+			<!-- Power -->
+			<div class="filter-row" class:filter-row--active={hasPower}>
+				<span class="filter-label">
+					{#if hasPower}<span class="active-dot" aria-hidden="true"></span>{/if}
+					{powerLabel()} <span class="filter-unit">W</span>
+				</span>
+				<div class="filter-inputs">
+					<input
+						type="number"
+						placeholder="Min"
+						class="filter-input"
+						bind:value={powerMin}
+						oninput={commit}
+						aria-label="Power minimum watts"
+					/>
+					<span class="filter-sep">–</span>
+					<input
+						type="number"
+						placeholder="Max"
+						class="filter-input"
+						bind:value={powerMax}
+						oninput={commit}
+						aria-label="Power maximum watts"
+					/>
+				</div>
+				{#if powerZones()}
+					<div class="zone-presets" role="group" aria-label="Power zone presets">
+						{#each powerZones() as band, zi}
+							<button
+								class="zone-btn"
+								onclick={() => { applyZonePreset('power', band); commit(); }}
+								aria-label={`Power zone ${zi + 1}`}
+							>Z{zi + 1}</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+
+			<!-- Heart Rate -->
+			<div class="filter-row" class:filter-row--active={hasHr}>
+				<span class="filter-label">
+					{#if hasHr}<span class="active-dot" aria-hidden="true"></span>{/if}
+					Heart Rate <span class="filter-unit">bpm</span>
+				</span>
+				<div class="filter-inputs">
+					<input
+						type="number"
+						placeholder="Min"
+						class="filter-input"
+						bind:value={hrMin}
+						oninput={commit}
+						aria-label="Heart rate minimum bpm"
+					/>
+					<span class="filter-sep">–</span>
+					<input
+						type="number"
+						placeholder="Max"
+						class="filter-input"
+						bind:value={hrMax}
+						oninput={commit}
+						aria-label="Heart rate maximum bpm"
+					/>
+				</div>
+				{#if hrZones()}
+					<div class="zone-presets" role="group" aria-label="HR zone presets">
+						{#each hrZones() as band, zi}
+							<button
+								class="zone-btn"
+								onclick={() => { applyZonePreset('heartRate', band); commit(); }}
+								aria-label={`HR zone ${zi + 1}`}
+							>Z{zi + 1}</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+
+			<!-- Cadence -->
+			<div class="filter-row" class:filter-row--active={hasCadence}>
+				<span class="filter-label">
+					{#if hasCadence}<span class="active-dot" aria-hidden="true"></span>{/if}
+					Cadence <span class="filter-unit">{isRunning ? 'spm' : 'rpm'}</span>
+				</span>
+				<div class="filter-inputs">
+					<input
+						type="number"
+						placeholder="Min"
+						class="filter-input"
+						bind:value={cadenceMin}
+						oninput={commit}
+						aria-label="Cadence minimum"
+					/>
+					<span class="filter-sep">–</span>
+					<input
+						type="number"
+						placeholder="Max"
+						class="filter-input"
+						bind:value={cadenceMax}
+						oninput={commit}
+						aria-label="Cadence maximum"
+					/>
+				</div>
+			</div>
+
+			<!-- Gradient -->
+			{#if hasAltitude}
+				<div class="filter-row" class:filter-row--active={hasGradient}>
+					<span class="filter-label">
+						{#if hasGradient}<span class="active-dot" aria-hidden="true"></span>{/if}
+						Gradient <span class="filter-unit">%</span>
+					</span>
+					<div class="filter-inputs">
+						<input
+							type="number"
+							placeholder="Min"
+							class="filter-input"
+							step="0.5"
+							bind:value={gradientMin}
+							oninput={commit}
+							aria-label="Gradient minimum percent"
+						/>
+						<span class="filter-sep">–</span>
+						<input
+							type="number"
+							placeholder="Max"
+							class="filter-input"
+							step="0.5"
+							bind:value={gradientMax}
+							oninput={commit}
+							aria-label="Gradient maximum percent"
+						/>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Footer -->
+			<div class="filter-footer">
+				<label class="invert-label">
+					<input
+						type="checkbox"
+						class="invert-check"
+						bind:checked={inverted}
+						onchange={handleInvert}
+					/>
+					Invert filter
+				</label>
+				<button class="clear-btn" onclick={handleClear}>Clear all</button>
+			</div>
 		</div>
 	{/if}
-
-	<!-- Speed -->
-	<div class="filter-row" class:filter-row--active={hasSpeed}>
-		<span class="filter-label">
-			{#if hasSpeed}<span class="active-dot" aria-hidden="true"></span>{/if}
-			{speedLabel}
-		</span>
-		<div class="filter-inputs">
-			<input
-				type="number"
-				placeholder="Min"
-				class="filter-input"
-				bind:value={speedMin}
-				onchange={commit}
-				aria-label="Speed minimum"
-			/>
-			<span class="filter-sep">–</span>
-			<input
-				type="number"
-				placeholder="Max"
-				class="filter-input"
-				bind:value={speedMax}
-				onchange={commit}
-				aria-label="Speed maximum"
-			/>
-		</div>
-	</div>
-
-	<!-- Power -->
-	<div class="filter-row" class:filter-row--active={hasPower}>
-		<span class="filter-label">
-			{#if hasPower}<span class="active-dot" aria-hidden="true"></span>{/if}
-			{powerLabel()} <span class="filter-unit">W</span>
-		</span>
-		<div class="filter-inputs">
-			<input
-				type="number"
-				placeholder="Min"
-				class="filter-input"
-				bind:value={powerMin}
-				onchange={commit}
-				aria-label="Power minimum watts"
-			/>
-			<span class="filter-sep">–</span>
-			<input
-				type="number"
-				placeholder="Max"
-				class="filter-input"
-				bind:value={powerMax}
-				onchange={commit}
-				aria-label="Power maximum watts"
-			/>
-		</div>
-		{#if powerZones()}
-			<div class="zone-presets" role="group" aria-label="Power zone presets">
-				{#each powerZones() as band, zi}
-					<button
-						class="zone-btn"
-						onclick={() => { applyZonePreset('power', band); commit(); }}
-						aria-label={`Power zone ${zi + 1}`}
-					>Z{zi + 1}</button>
-				{/each}
-			</div>
-		{/if}
-	</div>
-
-	<!-- Heart Rate -->
-	<div class="filter-row" class:filter-row--active={hasHr}>
-		<span class="filter-label">
-			{#if hasHr}<span class="active-dot" aria-hidden="true"></span>{/if}
-			Heart Rate <span class="filter-unit">bpm</span>
-		</span>
-		<div class="filter-inputs">
-			<input
-				type="number"
-				placeholder="Min"
-				class="filter-input"
-				bind:value={hrMin}
-				onchange={commit}
-				aria-label="Heart rate minimum bpm"
-			/>
-			<span class="filter-sep">–</span>
-			<input
-				type="number"
-				placeholder="Max"
-				class="filter-input"
-				bind:value={hrMax}
-				onchange={commit}
-				aria-label="Heart rate maximum bpm"
-			/>
-		</div>
-		{#if hrZones()}
-			<div class="zone-presets" role="group" aria-label="HR zone presets">
-				{#each hrZones() as band, zi}
-					<button
-						class="zone-btn"
-						onclick={() => { applyZonePreset('heartRate', band); commit(); }}
-						aria-label={`HR zone ${zi + 1}`}
-					>Z{zi + 1}</button>
-				{/each}
-			</div>
-		{/if}
-	</div>
-
-	<!-- Cadence -->
-	<div class="filter-row" class:filter-row--active={hasCadence}>
-		<span class="filter-label">
-			{#if hasCadence}<span class="active-dot" aria-hidden="true"></span>{/if}
-			Cadence <span class="filter-unit">{isRunning ? 'spm' : 'rpm'}</span>
-		</span>
-		<div class="filter-inputs">
-			<input
-				type="number"
-				placeholder="Min"
-				class="filter-input"
-				bind:value={cadenceMin}
-				onchange={commit}
-				aria-label="Cadence minimum"
-			/>
-			<span class="filter-sep">–</span>
-			<input
-				type="number"
-				placeholder="Max"
-				class="filter-input"
-				bind:value={cadenceMax}
-				onchange={commit}
-				aria-label="Cadence maximum"
-			/>
-		</div>
-	</div>
-
-	<!-- Gradient (hidden when no altitude data) -->
-	{#if hasAltitude}
-		<div class="filter-row" class:filter-row--active={hasGradient}>
-			<span class="filter-label">
-				{#if hasGradient}<span class="active-dot" aria-hidden="true"></span>{/if}
-				Gradient <span class="filter-unit">%</span>
-			</span>
-			<div class="filter-inputs">
-				<input
-					type="number"
-					placeholder="Min"
-					class="filter-input"
-					step="0.5"
-					bind:value={gradientMin}
-					onchange={commit}
-					aria-label="Gradient minimum percent"
-				/>
-				<span class="filter-sep">–</span>
-				<input
-					type="number"
-					placeholder="Max"
-					class="filter-input"
-					step="0.5"
-					bind:value={gradientMax}
-					onchange={commit}
-					aria-label="Gradient maximum percent"
-				/>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Bottom controls row -->
-	<div class="filter-footer">
-		<label class="invert-label">
-			<input
-				type="checkbox"
-				class="invert-check"
-				bind:checked={inverted}
-				onchange={handleInvert}
-			/>
-			Invert filter
-		</label>
-		<button class="clear-btn" onclick={handleClear}>Clear all</button>
-	</div>
 </div>
 
 <style>
-	.filter-panel {
+	.filter-wrap {
+		position: relative;
+		display: inline-block;
+	}
+
+	.filter-toggle {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		padding: 4px 10px;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		border: 1px solid var(--color-border);
+		border-radius: 4px;
+		background: transparent;
+		color: var(--color-muted);
+		cursor: pointer;
+		transition: background 0.12s, border-color 0.12s, color 0.12s;
+		white-space: nowrap;
+		height: 28px;
+	}
+
+	.filter-toggle:hover {
+		background: color-mix(in srgb, var(--color-border) 40%, transparent);
+		color: var(--color-text);
+	}
+
+	.filter-toggle--active {
+		border-color: #38bdf8;
+		color: #38bdf8;
+	}
+
+	.filter-toggle-label {
+		font-size: 0.6875rem;
+	}
+
+	.filter-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 4px;
+		font-size: 0.625rem;
+		font-weight: 700;
+		border-radius: 9999px;
+		background: #38bdf8;
+		color: #000;
+		line-height: 1;
+	}
+
+	.filter-chevron {
+		font-size: 0.75rem;
+		line-height: 1;
+		transform: rotate(90deg);
+		transition: transform 0.15s ease;
+		opacity: 0.7;
+	}
+
+	.filter-chevron--open {
+		transform: rotate(-90deg);
+	}
+
+	.filter-body {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 200;
+		min-width: 260px;
+		max-height: 340px;
+		overflow-y: auto;
+		background: var(--color-card, var(--color-sidebar));
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
 		padding: 8px 12px;
-		min-width: 260px;
 	}
 
 	.preset-row {

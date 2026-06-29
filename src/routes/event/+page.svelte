@@ -373,14 +373,12 @@
 				{/if}
 			</CollapsiblePanel>
 
-			<CollapsiblePanel title="Filter{$activeFilterCount > 0 ? ` (${$activeFilterCount})` : ''}">
-				<FilterPanel
-					sport={primarySport}
-					powerSource={primaryPowerSource}
-					athleteProfile={$athleteProfile}
-					{hasAltitude}
-				/>
-			</CollapsiblePanel>
+			<FilterPanel
+				sport={primarySport}
+				powerSource={primaryPowerSource}
+				athleteProfile={$athleteProfile}
+				{hasAltitude}
+			/>
 
 			{#if indoor.hasMixedIndoorOutdoor && !indoor.mixedWarningDismissed}
 				<div class="location-warning" role="alert" aria-live="polite">
