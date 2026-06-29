@@ -3,6 +3,17 @@ import { addToast } from './toast';
 import { deviceKey } from '../utils/deviceKey';
 
 const STORAGE_KEY = 'analyser-device-labels';
+const MAX_HISTORY = 20;
+
+export interface LabelEdit {
+	deviceKey: string;
+	from: string;
+	to: string;
+	timestamp: number;
+}
+
+let _editHistory: LabelEdit[] = [];
+let _redoStack: LabelEdit[]   = [];
 
 // In-memory cache; populated lazily on first access and kept in sync with
 // every write so repeated reads within a session never hit localStorage again.
@@ -129,4 +140,59 @@ export function applyLabels(devices: Device[]): Device[] {
 		const label = resolveLabel(d);
 		return label ? { ...d, label } : d;
 	});
+}
+
+/**
+ * Record a label edit in the undo history.
+ * Must be called by the UI before (or after) calling setDeviceLabel/removeDeviceLabel.
+ * Clears the redo stack — any pending redo is invalidated by a new action.
+ */
+export function recordEdit(key: string, from: string, to: string): void {
+	_editHistory.push({ deviceKey: key, from, to, timestamp: Date.now() });
+	if (_editHistory.length > MAX_HISTORY) _editHistory.shift();
+	_redoStack = [];
+}
+
+/** Undo the most recent label edit. Fires a toast and moves the edit to the redo stack. */
+export function undoLabelEdit(): void {
+	const edit = _editHistory.pop();
+	if (!edit) return;
+	_redoStack.push(edit);
+	if (edit.from) {
+		setDeviceLabel(edit.deviceKey, edit.from);
+	} else {
+		removeDeviceLabel(edit.deviceKey);
+	}
+	addToast('Label change undone', 'info');
+}
+
+/** Redo the most recently undone label edit. Moves the edit back onto the history stack. */
+export function redoLabelEdit(): void {
+	const edit = _redoStack.pop();
+	if (!edit) return;
+	_editHistory.push(edit);
+	if (edit.to) {
+		setDeviceLabel(edit.deviceKey, edit.to);
+	} else {
+		removeDeviceLabel(edit.deviceKey);
+	}
+}
+
+/**
+ * Returns the edit history for a specific device key (newest-first, limited to 5),
+ * or the full history (all devices, chronological) when no key is supplied.
+ */
+export function getEditHistory(key?: string): LabelEdit[] {
+	if (!key) return [..._editHistory];
+	const filtered = _editHistory.filter(e => e.deviceKey === key);
+	return filtered.slice(-5).reverse();
+}
+
+export function canUndo(): boolean { return _editHistory.length > 0; }
+export function canRedo(): boolean { return _redoStack.length > 0; }
+
+/** Reset history and redo stack. Intended for tests and session teardown. */
+export function clearEditHistory(): void {
+	_editHistory = [];
+	_redoStack   = [];
 }
