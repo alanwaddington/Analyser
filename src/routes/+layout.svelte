@@ -79,29 +79,34 @@
 		initTheme();
 		initAthleteProfile(); // same lazy-load-from-localStorage pattern as initSync / initTheme
 
+		// Extract both special params from the original URL before any async operations.
+		const syncParam = page.url.searchParams.get('sync');
+		const vParam = page.url.searchParams.get('v');
+
+		// Handle ?v={base64url} FIRST (synchronously, before any await) so sessionLinkState
+		// is set before child component effects run. If we await adoptSyncIdentity first,
+		// the compare/event page redirect effect fires during that await (no files loaded →
+		// goto('/')) and the page navigates away before ?v= is ever processed.
+		if (vParam) {
+			const decoded = decodeSessionLink(vParam);
+			if (decoded) sessionLinkState.set(decoded);
+		}
+
 		// Handle ?sync={uuid} linking URL (from QR scan, pasted link, or typed code).
 		// adoptSyncIdentity stores the UUID and pulls labels from the remote store.
-		const syncParam = page.url.searchParams.get('sync');
 		if (syncParam) {
 			try {
 				await adoptSyncIdentity(syncParam);
 			} catch (e) {
 				console.warn('[layout] adoptSyncIdentity failed:', e);
 			}
-			// Clean the param from the URL without triggering a navigation
-			const cleanUrl = new URL(page.url);
-			cleanUrl.searchParams.delete('sync');
-			history.replaceState(null, '', cleanUrl.pathname + (cleanUrl.search || ''));
 		}
 
-		// Handle ?v={base64url} session link — restores device/channel/view state.
-		// Processed after ?sync= so sync identity is already established.
-		const vParam = page.url.searchParams.get('v');
-		if (vParam) {
-			const decoded = decodeSessionLink(vParam);
-			if (decoded) sessionLinkState.set(decoded);
+		// Clean both special params in a single replaceState call.
+		if (syncParam || vParam) {
 			const cleanUrl = new URL(page.url);
-			cleanUrl.searchParams.delete('v');
+			if (syncParam) cleanUrl.searchParams.delete('sync');
+			if (vParam) cleanUrl.searchParams.delete('v');
 			history.replaceState(null, '', cleanUrl.pathname + (cleanUrl.search || ''));
 		}
 
