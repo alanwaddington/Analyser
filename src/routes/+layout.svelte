@@ -11,6 +11,7 @@
 	import { viewport } from '$lib/stores/viewport';
 	import { initSync, adoptSyncIdentity } from '$lib/stores/sync';
 	import { initAthleteProfile } from '$lib/stores/athleteProfile';
+	import { decodeSessionLink, sessionLinkState } from '$lib/session/sessionLink';
 	import Sidebar from '$lib/components/ui/Sidebar.svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 
@@ -86,6 +87,17 @@
 			// Clean the param from the URL without triggering a navigation
 			const cleanUrl = new URL(page.url);
 			cleanUrl.searchParams.delete('sync');
+			history.replaceState(null, '', cleanUrl.pathname + (cleanUrl.search || ''));
+		}
+
+		// Handle ?v={base64url} session link — restores device/channel/view state.
+		// Processed after ?sync= so sync identity is already established.
+		const vParam = page.url.searchParams.get('v');
+		if (vParam) {
+			const decoded = decodeSessionLink(vParam);
+			if (decoded) sessionLinkState.set(decoded);
+			const cleanUrl = new URL(page.url);
+			cleanUrl.searchParams.delete('v');
 			history.replaceState(null, '', cleanUrl.pathname + (cleanUrl.search || ''));
 		}
 
