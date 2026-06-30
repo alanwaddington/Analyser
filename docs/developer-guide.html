@@ -846,10 +846,38 @@ interface Toast {
 <li><code>initTheme()</code> — applies the persisted theme preference.</li>
 <li><code>initAthleteProfile()</code> — loads athlete profile from localStorage into the <code>athleteProfile</code> store. SSR-safe; a no-op when <code>typeof localStorage === &#39;undefined&#39;</code>.</li>
 <li><code>initSync()</code> — idempotent; safe if called more than once (e.g. during HMR). Stores the returned cleanup function in <code>cleanupSync</code>.</li>
-<li>URL parameter handling: if the page loads with <code>?sync={uuid}</code>, <code>adoptSyncIdentity(uuid)</code> is called and the param is stripped from the URL using <code>history.replaceState</code> to avoid sharing it inadvertently via browser history.</li>
+<li>URL parameter handling — two params are processed synchronously before any <code>await</code> to prevent a race with the compare/event pages&#39; &quot;no files → goto(&#39;/&#39;)&quot; redirect effects:<ul>
+<li><code>?v={base64url}</code> — session link payload. Decoded via <code>decodeSessionLink()</code>, validated, and written into <code>sessionLinkState</code>. Also primes <code>lastMode</code> from the payload&#39;s <code>m</code> field so that the landing page routes to the correct view when files are loaded. Cleaned from the URL via <code>history.replaceState</code>.</li>
+<li><code>?sync={uuid}</code> — sync identity adoption. <code>adoptSyncIdentity(uuid)</code> is called and the param is stripped. Both params are cleaned in a single <code>replaceState</code> call.</li>
+</ul>
+</li>
 </ol>
 <p><code>onDestroy</code> calls <code>cleanupSync?.()</code> — deregisters the label-change hook and resets the initialised flag, enabling a clean reinit if the layout remounts (HMR).</p>
-<h3 id="310-validation">3.10 Validation</h3>
+<h3 id="310-session-link-sessionlinkts">3.10 Session Link (`sessionLink.ts`)</h3>
+<p><strong><code>src/lib/session/sessionLink.ts</code></strong></p>
+<p>Encodes and decodes the view configuration carried by the <code>?v=</code> URL parameter. Entirely pure — no store imports, no side effects. Three exports:</p>
+<p><strong><code>SessionLinkPayload</code> type</strong></p>
+<pre><code class="language-ts">interface SessionLinkPayload {
+  d?: string[];    // stable device keys (deviceStorageKey output)
+  c?: string[];    // active channel keys (Event Comparison)
+  s?: number;      // smoothing [1, 60]
+  x?: string;      // xAxisMode: &#39;time&#39; | &#39;distance&#39;
+  m?: string;      // mode: &#39;compare&#39; | &#39;event&#39;
+  t?: string;      // active tab id
+  zs?: boolean;    // zone shading enabled (reserved — no consumer yet)
+  wkg?: boolean;   // w/kg axis enabled (reserved — no consumer yet)
+  mc?: string;     // map colour mode (reserved — no consumer yet)
+}
+</code></pre>
+<p><strong><code>encodeSessionLink(payload)</code></strong> — JSON-stringifies the payload and base64url-encodes it (URL-safe, no padding). Returns a string suitable for <code>?v=</code>.</p>
+<p><strong><code>decodeSessionLink(raw)</code></strong> — base64url-decodes and JSON-parses. Passes the result through <code>sanitisePayload()</code>, which validates each field individually and enforces bounds (e.g. <code>s</code> must be <code>[1, 60]</code>). Returns a <code>SessionLinkPayload</code> or <code>null</code> if the input is malformed at any stage. Unknown keys are silently dropped (forward-compatible).</p>
+<p><strong><code>sessionLinkState</code> writable store</strong> — a one-shot store set by <code>+layout.svelte</code> when a valid <code>?v=</code> param is decoded on page load. Compare and event pages each have two <code>$effect</code> calls that consume it:</p>
+<ul>
+<li><strong>Effect 1</strong> (runs immediately) — reads <code>sessionLinkState</code>, applies file-independent fields (smoothing, xAxisMode, tab), stashes device/channel keys in a local <code>pendingDeviceKeys</code> / <code>pendingChannelKeys</code> variable, then sets the store to <code>null</code>.</li>
+<li><strong>Effect 2</strong> (runs when data is ready) — watches <code>pendingDeviceKeys</code> / <code>pendingChannelKeys</code>. Once <code>crossFileStreams</code> / <code>activities</code> are populated, maps stable device keys back to composite <code>activityId:deviceIndex</code> keys and updates <code>activeDeviceIndices</code> / <code>activeChannels</code>.</li>
+</ul>
+<p>This split prevents Effect 2 from running before files are loaded, and ensures the store is cleared immediately so navigation between pages does not re-apply stale state.</p>
+<h3 id="311-validation">3.11 Validation</h3>
 <p><strong><code>src/lib/validation.ts</code></strong></p>
 <p>Shared between API routes (server) and <code>SyncPanel</code> (client) to avoid duplication:</p>
 <pre><code class="language-ts">UUID_REGEX      = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

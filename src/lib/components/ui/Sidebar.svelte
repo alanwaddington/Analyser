@@ -2,9 +2,13 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { activities, lastMode } from '$lib/stores/session';
+	import { activities, lastMode, activeDeviceIndices, activeChannels, smoothing, xAxisMode } from '$lib/stores/session';
 	import { syncStatus } from '$lib/stores/sync';
 	import { formatAge } from '$lib/utils/formatAge';
+	import { browser } from '$app/environment';
+	import { encodeSessionLink } from '$lib/session/sessionLink';
+	import { deviceKey as stableDeviceKey } from '$lib/utils/deviceKey';
+	import { addToast } from '$lib/stores/toast';
 	import FileList from '$lib/components/ui/FileList.svelte';
 	import DropZone from '$lib/components/ui/DropZone.svelte';
 	import XAxisToggle from '$lib/components/ui/XAxisToggle.svelte';
@@ -12,6 +16,7 @@
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
 	import SyncPanel from '$lib/components/ui/SyncPanel.svelte';
 	import AthleteProfilePanel from '$lib/components/ui/AthleteProfilePanel.svelte';
+	import SessionLinkButton from '$lib/components/ui/SessionLinkButton.svelte';
 
 	let mounted = $state(false);
 	onMount(() => { mounted = true; });
@@ -56,6 +61,40 @@
 		onclose?.();
 		lastMode.set('compare');
 		goto('/compare');
+	}
+
+	async function copySessionLink(): Promise<void> {
+		if (!browser) return;
+
+		// Resolve stable device storage keys for all active composite keys
+		const activeStableKeys: string[] = [];
+		for (const compositeKey of $activeDeviceIndices) {
+			const [activityId, rawIdx] = compositeKey.split(':');
+			const deviceIndex = Number(rawIdx);
+			const activity = $activities.find(a => a.id === activityId);
+			if (!activity) continue;
+			const device = activity.devices.find(d => d.deviceIndex === deviceIndex);
+			if (!device) continue;
+			const sk = stableDeviceKey(device);
+			if (sk) activeStableKeys.push(sk);
+		}
+
+		const mode = $lastMode;
+		const encoded = encodeSessionLink({
+			d: activeStableKeys.length > 0 ? activeStableKeys : undefined,
+			c: $activeChannels.length > 0 ? $activeChannels : undefined,
+			s: $smoothing,
+			x: $xAxisMode,
+			m: mode,
+		});
+
+		const url = `${window.location.origin}/${mode}?v=${encoded}`;
+
+		try {
+			await navigator.clipboard.writeText(url);
+		} catch {
+			addToast('Could not copy to clipboard — copy this URL manually: ' + url, 'warning');
+		}
 	}
 
 	function goToEvent() {
@@ -107,6 +146,9 @@
 			<XAxisToggle eventMode={isEvent} />
 			<ThemeToggle />
 			<SmoothingSlider />
+			{#if $activities.length > 0}
+				<SessionLinkButton onCopy={copySessionLink} />
+			{/if}
 			<div
 				class="sync-indicator sync-indicator--{indicatorState}"
 				aria-live="polite"

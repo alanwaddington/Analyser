@@ -37,6 +37,7 @@ Analyser is a browser-based tool for inspecting and comparing `.fit` activity fi
    - 7.2 [Linking a Second Device](#72-linking-a-second-device)
    - 7.3 [Sync Status and Errors](#73-sync-status-and-errors)
    - 7.4 [Resetting Your Sync Identity](#74-resetting-your-sync-identity)
+8. [Sharing a Session View](#8-sharing-a-session-view)
 9. [Reference](#9-reference)
 
 ---
@@ -655,6 +656,38 @@ If you want to **break the link** between devices (e.g. after lending your lapto
 A new UUID is generated and your current labels are pushed under the new identity. Devices still using the old identity will no longer receive your label updates.
 
 > **Note:** Resetting does not delete the old identity from the cloud — it simply stops being used. The old data will expire after 90 days of inactivity.
+
+---
+
+## 8. Sharing a Session View
+
+The **Copy session link** button in the sidebar footer lets you capture your current view configuration as a URL and share it with anyone. When the recipient opens the link and loads the same (or equivalent) activity files, they see the same setup you had — no manual configuration needed.
+
+**What travels in the link:**
+- Which devices are active (matched by physical sensor identity, not file-specific IDs)
+- Active channels (Event Comparison mode)
+- Smoothing level
+- X-axis mode (time or distance)
+- Active tab (Charts, Summary, Mean/Max, or Map)
+- Which mode was open (Device Comparison or Event Comparison)
+
+**What does not travel in the link:**
+- Athlete profile values (weight, FTP, CP, HR thresholds) — these are personal data and stay local
+- Device labels — use the Sync feature (section 7) to share those separately
+
+**To share your session view:**
+
+1. Load your files and configure the view (select devices, set smoothing, switch to the tab you want the recipient to land on).
+2. Click **Copy session link** in the sidebar footer (a small link icon below the Sync panel). The button briefly changes to **✓ Copied!** to confirm the link is on your clipboard.
+3. Paste and send the URL to the recipient.
+
+**When the recipient opens the link:**
+
+The link encodes the full view configuration as a compact `?v=` parameter in the URL. When the recipient opens the link, Analyser reads the parameter and stores the configuration. As soon as they load their own files, the stored configuration is applied automatically — active devices are matched to their files by sensor identity (ANT+ number, serial, or manufacturer/product), and all other settings (smoothing, tab, mode) are applied immediately.
+
+If a device key from the link doesn't match any loaded sensor, it is silently skipped — the rest of the configuration still applies. If the `?v=` parameter is missing, malformed, or from a future version of Analyser, it is ignored and the app loads with its defaults.
+
+> **Note:** The session link encodes view state only — it does not include the activity data itself. The recipient must load their own copy of the `.fit` files to see any charts.
 
 ---
 
