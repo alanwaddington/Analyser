@@ -89,7 +89,12 @@
 		// goto('/')) and the page navigates away before ?v= is ever processed.
 		if (vParam) {
 			const decoded = decodeSessionLink(vParam);
-			if (decoded) sessionLinkState.set(decoded);
+			if (decoded) {
+				sessionLinkState.set(decoded);
+				// If the link encodes the target mode, prime lastMode so the landing page
+				// redirects the user to the correct route when they load files.
+				if (decoded.m) lastMode.set(decoded.m);
+			}
 		}
 
 		// Handle ?sync={uuid} linking URL (from QR scan, pasted link, or typed code).

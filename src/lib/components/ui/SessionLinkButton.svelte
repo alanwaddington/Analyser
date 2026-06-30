@@ -1,15 +1,19 @@
 <script lang="ts">
-	let { onclick }: { onclick: () => void } = $props();
+	import { onDestroy } from 'svelte';
+
+	let { onclick }: { onclick: () => Promise<void> } = $props();
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
-	function handleClick() {
-		onclick();
+	async function handleClick() {
+		await onclick();
 		copied = true;
 		clearTimeout(timer);
 		timer = setTimeout(() => { copied = false; }, 2000);
 	}
+
+	onDestroy(() => clearTimeout(timer));
 </script>
 
 <button

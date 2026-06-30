@@ -44,7 +44,7 @@ function sanitisePayload(raw: Record<string, unknown>): SessionLinkPayload {
 	if (Array.isArray(raw.c) && raw.c.every((x): x is string => typeof x === 'string')) {
 		out.c = raw.c as ChannelKey[];
 	}
-	if (typeof raw.s === 'number' && isFinite(raw.s)) out.s = raw.s;
+	if (typeof raw.s === 'number' && isFinite(raw.s) && raw.s >= 1 && raw.s <= 60) out.s = raw.s;
 	if (raw.x === 'time' || raw.x === 'distance') out.x = raw.x;
 	if (raw.m === 'compare' || raw.m === 'event') out.m = raw.m;
 	if (typeof raw.t === 'string') out.t = raw.t;

@@ -54,7 +54,9 @@
 	);
 
 	function setTab(id: TabId) {
-		goto(`?tab=${id}`, { replaceState: true });
+		const params = new URLSearchParams(page.url.searchParams);
+		params.set('tab', id);
+		goto(`?${params}`, { replaceState: true });
 	}
 
 	// Scroll the active tab button into view when the active tab changes (AC15).
@@ -127,29 +129,36 @@
 		}
 	});
 
-	// Apply decoded session-link state. File-independent state (smoothing, xAxisMode, tab)
-	// applies immediately; channel selection waits until activities are loaded.
+	// Channel keys pending application from a decoded session link.
+	// Stored separately so sessionLinkState can be consumed immediately while
+	// channel matching waits for activities to load.
+	let pendingChannelKeys = $state<string[] | null>(null);
+
+	// Effect 1: consume sessionLinkState immediately. Apply file-independent fields
+	// (smoothing, xAxisMode, tab) right away and stash channel keys for Effect 2.
 	// Declared after the auto-select effect so channel overrides run after defaults are set.
 	$effect(() => {
 		const linkState = $sessionLinkState;
 		if (!linkState) return;
 
-		// Apply immediately — no files needed
 		if (linkState.s != null) smoothing.set(linkState.s);
 		if (linkState.x) xAxisMode.set(linkState.x);
 		if (linkState.t) {
 			const validTabs = TABS.map(tab => tab.id) as string[];
 			if (validTabs.includes(linkState.t)) setTab(linkState.t as TabId);
 		}
+		if (linkState.c) pendingChannelKeys = linkState.c;
 
-		// Channel selection requires loaded activities — defer until files are loaded
-		if (linkState.c) {
-			if ($activities.length === 0) return; // re-runs when files load
-			const validChannels = linkState.c.filter(ch => availableChannels.includes(ch as typeof availableChannels[number]));
-			if (validChannels.length > 0) activeChannels.set(validChannels as typeof availableChannels);
-		}
+		sessionLinkState.set(null); // always consume immediately
+	});
 
-		sessionLinkState.set(null); // consume — prevent re-application on navigation
+	// Effect 2: apply pending channel selection once activities are loaded.
+	$effect(() => {
+		if (!pendingChannelKeys || $activities.length === 0) return;
+		const keys = pendingChannelKeys;
+		const validChannels = keys.filter(ch => availableChannels.includes(ch as typeof availableChannels[number]));
+		if (validChannels.length > 0) activeChannels.set(validChannels as typeof availableChannels);
+		pendingChannelKeys = null;
 	});
 
 	const locationMismatch = $derived($activities.length > 1 && anchorsAreDistant($activities));

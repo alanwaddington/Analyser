@@ -54,7 +54,9 @@
 	);
 
 	function setTab(id: TabId) {
-		goto(`?tab=${id}`, { replaceState: true });
+		const params = new URLSearchParams(page.url.searchParams);
+		params.set('tab', id);
+		goto(`?${params}`, { replaceState: true });
 	}
 
 	// Scroll the active tab button into view when the active tab changes (AC15).
@@ -129,33 +131,40 @@
 		activeDeviceIndices.set(new Set(selectableKeys));
 	});
 
-	// Apply decoded session-link state. File-independent state (smoothing, xAxisMode, tab)
-	// applies immediately; device selection waits until crossFileStreams are populated.
+	// Device keys pending application from a decoded session link.
+	// Stored separately so sessionLinkState can be consumed immediately while
+	// device matching waits for crossFileStreams to populate.
+	let pendingDeviceKeys = $state<string[] | null>(null);
+
+	// Effect 1: consume sessionLinkState immediately. Apply file-independent fields
+	// (smoothing, xAxisMode, tab) right away and stash device keys for Effect 2.
 	// Declared after the auto-select effect so device overrides run after defaults are set.
 	$effect(() => {
 		const linkState = $sessionLinkState;
 		if (!linkState) return;
 
-		// Apply immediately — no files needed
 		if (linkState.s != null) smoothing.set(linkState.s);
 		if (linkState.x) xAxisMode.set(linkState.x);
 		if (linkState.t) {
 			const validTabs = TABS.map(tab => tab.id) as string[];
 			if (validTabs.includes(linkState.t)) setTab(linkState.t as TabId);
 		}
+		if (linkState.d) pendingDeviceKeys = linkState.d;
 
-		// Device selection requires crossFileStreams — defer until files are loaded
-		if (linkState.d) {
-			if (crossFileStreams.length === 0) return; // re-runs when files load
-			const matchedKeys = new Set<string>();
-			for (const cfs of crossFileStreams) {
-				const sk = stableDeviceKey(cfs.stream.device);
-				if (sk && linkState.d.includes(sk)) matchedKeys.add(cfs.key);
-			}
-			if (matchedKeys.size > 0) activeDeviceIndices.set(matchedKeys);
+		sessionLinkState.set(null); // always consume immediately
+	});
+
+	// Effect 2: apply pending device selection once crossFileStreams are populated.
+	$effect(() => {
+		if (!pendingDeviceKeys || crossFileStreams.length === 0) return;
+		const keys = pendingDeviceKeys;
+		const matchedKeys = new Set<string>();
+		for (const cfs of crossFileStreams) {
+			const sk = stableDeviceKey(cfs.stream.device);
+			if (sk && keys.includes(sk)) matchedKeys.add(cfs.key);
 		}
-
-		sessionLinkState.set(null); // consume — prevent re-application on navigation
+		if (matchedKeys.size > 0) activeDeviceIndices.set(matchedKeys);
+		pendingDeviceKeys = null;
 	});
 
 	// Lap markers from first activity (used for chart annotations)

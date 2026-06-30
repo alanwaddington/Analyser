@@ -143,4 +143,29 @@ describe('decodeSessionLink', () => {
 		const result = decodeSessionLink(encoded);
 		expect(result).toEqual({ s: 15, x: 'time' });
 	});
+
+	it('decodeSessionLink_smoothingBelowMin_fieldDropped', () => {
+		const raw = { s: 0 };
+		const encoded = btoa(JSON.stringify(raw)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		expect(decodeSessionLink(encoded)?.s).toBeUndefined();
+	});
+
+	it('decodeSessionLink_smoothingAboveMax_fieldDropped', () => {
+		const raw = { s: 61 };
+		const encoded = btoa(JSON.stringify(raw)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		expect(decodeSessionLink(encoded)?.s).toBeUndefined();
+	});
+
+	it('decodeSessionLink_smoothingNegative_fieldDropped', () => {
+		const raw = { s: -5 };
+		const encoded = btoa(JSON.stringify(raw)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		expect(decodeSessionLink(encoded)?.s).toBeUndefined();
+	});
+
+	it('decodeSessionLink_smoothingAtBoundaries_accepted', () => {
+		const min = btoa(JSON.stringify({ s: 1 })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		const max = btoa(JSON.stringify({ s: 60 })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		expect(decodeSessionLink(min)?.s).toBe(1);
+		expect(decodeSessionLink(max)?.s).toBe(60);
+	});
 });
