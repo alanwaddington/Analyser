@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
-	import { activities, activeChannels, xAxisMode, referenceIndex, activityColourMap } from '$lib/stores/session';
+	import { activities, activeChannels, xAxisMode, smoothing, referenceIndex, activityColourMap } from '$lib/stores/session';
+	import { sessionLinkState } from '$lib/session/sessionLink';
 	import { anchorsAreDistant } from '$lib/align';
 	import { deriveAvailableChannels } from '$lib/utils/channels';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
@@ -124,6 +125,26 @@
 		if (availableChannels.length > 0 && $activeChannels.length === 0) {
 			activeChannels.set(availableChannels);
 		}
+	});
+
+	// Apply decoded session-link state once activities are loaded.
+	// Runs after the auto-select effect (declared below it) so it overrides defaults.
+	$effect(() => {
+		const linkState = $sessionLinkState;
+		if (!linkState) return;
+		if ($activities.length === 0) return; // wait for files to load
+
+		if (linkState.c) {
+			const validChannels = linkState.c.filter(ch => availableChannels.includes(ch as typeof availableChannels[number]));
+			if (validChannels.length > 0) activeChannels.set(validChannels as typeof availableChannels);
+		}
+		if (linkState.s != null) smoothing.set(linkState.s);
+		if (linkState.x) xAxisMode.set(linkState.x);
+		if (linkState.t) {
+			const validTabs = TABS.map(tab => tab.id) as string[];
+			if (validTabs.includes(linkState.t)) setTab(linkState.t as TabId);
+		}
+		sessionLinkState.set(null); // consume — prevent re-application on navigation
 	});
 
 	const locationMismatch = $derived($activities.length > 1 && anchorsAreDistant($activities));
