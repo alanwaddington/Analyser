@@ -2,7 +2,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
-	import { activities, activeDeviceIndices, xAxisMode, timeOffsets, activityColourMap } from '$lib/stores/session';
+	import { activities, activeDeviceIndices, xAxisMode, smoothing, timeOffsets, activityColourMap } from '$lib/stores/session';
+	import { sessionLinkState } from '$lib/session/sessionLink';
+	import { deviceKey as stableDeviceKey } from '$lib/utils/deviceKey';
 	import { CHANNEL_META, FILE_COLOURS } from '$lib/types';
 	import type { ChannelKey, CrossFileStream } from '$lib/types';
 	import { buildLapMarkers } from '$lib/utils/lapMarkers';
@@ -125,6 +127,30 @@
 			.filter(cfs => cfs.stream.channels.length > 0)
 			.map(cfs => cfs.key);
 		activeDeviceIndices.set(new Set(selectableKeys));
+	});
+
+	// Apply decoded session-link state once crossFileStreams are populated.
+	// Runs after the auto-select effect (declared below it) so it overrides defaults.
+	$effect(() => {
+		const linkState = $sessionLinkState;
+		if (!linkState) return;
+		if (crossFileStreams.length === 0) return; // wait for files to load
+
+		if (linkState.d) {
+			const matchedKeys = new Set<string>();
+			for (const cfs of crossFileStreams) {
+				const sk = stableDeviceKey(cfs.stream.device);
+				if (sk && linkState.d.includes(sk)) matchedKeys.add(cfs.key);
+			}
+			if (matchedKeys.size > 0) activeDeviceIndices.set(matchedKeys);
+		}
+		if (linkState.s != null) smoothing.set(linkState.s);
+		if (linkState.x) xAxisMode.set(linkState.x);
+		if (linkState.t) {
+			const validTabs = TABS.map(tab => tab.id) as string[];
+			if (validTabs.includes(linkState.t)) setTab(linkState.t as TabId);
+		}
+		sessionLinkState.set(null); // consume — prevent re-application on navigation
 	});
 
 	// Lap markers from first activity (used for chart annotations)
