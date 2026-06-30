@@ -147,7 +147,7 @@
 			<ThemeToggle />
 			<SmoothingSlider />
 			{#if $activities.length > 0}
-				<SessionLinkButton onclick={copySessionLink} />
+				<SessionLinkButton onCopy={copySessionLink} />
 			{/if}
 			<div
 				class="sync-indicator sync-indicator--{indicatorState}"
