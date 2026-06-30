@@ -582,11 +582,46 @@ Four wiring points in `onMount`:
 1. `initTheme()` — applies the persisted theme preference.
 2. `initAthleteProfile()` — loads athlete profile from localStorage into the `athleteProfile` store. SSR-safe; a no-op when `typeof localStorage === 'undefined'`.
 3. `initSync()` — idempotent; safe if called more than once (e.g. during HMR). Stores the returned cleanup function in `cleanupSync`.
-4. URL parameter handling: if the page loads with `?sync={uuid}`, `adoptSyncIdentity(uuid)` is called and the param is stripped from the URL using `history.replaceState` to avoid sharing it inadvertently via browser history.
+4. URL parameter handling — two params are processed synchronously before any `await` to prevent a race with the compare/event pages' "no files → goto('/')" redirect effects:
+   - `?v={base64url}` — session link payload. Decoded via `decodeSessionLink()`, validated, and written into `sessionLinkState`. Also primes `lastMode` from the payload's `m` field so that the landing page routes to the correct view when files are loaded. Cleaned from the URL via `history.replaceState`.
+   - `?sync={uuid}` — sync identity adoption. `adoptSyncIdentity(uuid)` is called and the param is stripped. Both params are cleaned in a single `replaceState` call.
 
 `onDestroy` calls `cleanupSync?.()` — deregisters the label-change hook and resets the initialised flag, enabling a clean reinit if the layout remounts (HMR).
 
-### 3.10 Validation
+### 3.10 Session Link (`sessionLink.ts`)
+
+**`src/lib/session/sessionLink.ts`**
+
+Encodes and decodes the view configuration carried by the `?v=` URL parameter. Entirely pure — no store imports, no side effects. Three exports:
+
+**`SessionLinkPayload` type**
+
+```ts
+interface SessionLinkPayload {
+  d?: string[];    // stable device keys (deviceStorageKey output)
+  c?: string[];    // active channel keys (Event Comparison)
+  s?: number;      // smoothing [1, 60]
+  x?: string;      // xAxisMode: 'time' | 'distance'
+  m?: string;      // mode: 'compare' | 'event'
+  t?: string;      // active tab id
+  zs?: boolean;    // zone shading enabled (reserved — no consumer yet)
+  wkg?: boolean;   // w/kg axis enabled (reserved — no consumer yet)
+  mc?: string;     // map colour mode (reserved — no consumer yet)
+}
+```
+
+**`encodeSessionLink(payload)`** — JSON-stringifies the payload and base64url-encodes it (URL-safe, no padding). Returns a string suitable for `?v=`.
+
+**`decodeSessionLink(raw)`** — base64url-decodes and JSON-parses. Passes the result through `sanitisePayload()`, which validates each field individually and enforces bounds (e.g. `s` must be `[1, 60]`). Returns a `SessionLinkPayload` or `null` if the input is malformed at any stage. Unknown keys are silently dropped (forward-compatible).
+
+**`sessionLinkState` writable store** — a one-shot store set by `+layout.svelte` when a valid `?v=` param is decoded on page load. Compare and event pages each have two `$effect` calls that consume it:
+
+- **Effect 1** (runs immediately) — reads `sessionLinkState`, applies file-independent fields (smoothing, xAxisMode, tab), stashes device/channel keys in a local `pendingDeviceKeys` / `pendingChannelKeys` variable, then sets the store to `null`.
+- **Effect 2** (runs when data is ready) — watches `pendingDeviceKeys` / `pendingChannelKeys`. Once `crossFileStreams` / `activities` are populated, maps stable device keys back to composite `activityId:deviceIndex` keys and updates `activeDeviceIndices` / `activeChannels`.
+
+This split prevents Effect 2 from running before files are loaded, and ensures the store is cleared immediately so navigation between pages does not re-apply stale state.
+
+### 3.11 Validation
 
 **`src/lib/validation.ts`**
 

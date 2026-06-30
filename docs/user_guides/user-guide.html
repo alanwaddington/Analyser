@@ -153,6 +153,7 @@
 <li>7.4 <a href="#74-resetting-your-sync-identity">Resetting Your Sync Identity</a></li>
 </ul>
 </li>
+<li><a href="#8-sharing-a-session-view">Sharing a Session View</a></li>
 <li><a href="#9-reference">Reference</a></li>
 </ol>
 <hr>
@@ -895,6 +896,35 @@
 <p>A new UUID is generated and your current labels are pushed under the new identity. Devices still using the old identity will no longer receive your label updates.</p>
 <blockquote>
 <p><strong>Note:</strong> Resetting does not delete the old identity from the cloud — it simply stops being used. The old data will expire after 90 days of inactivity.</p>
+</blockquote>
+<hr>
+<h2 id="8-sharing-a-session-view">8. Sharing a Session View</h2>
+<p>The <strong>Copy session link</strong> button in the sidebar footer lets you capture your current view configuration as a URL and share it with anyone. When the recipient opens the link and loads the same (or equivalent) activity files, they see the same setup you had — no manual configuration needed.</p>
+<p><strong>What travels in the link:</strong></p>
+<ul>
+<li>Which devices are active (matched by physical sensor identity, not file-specific IDs)</li>
+<li>Active channels (Event Comparison mode)</li>
+<li>Smoothing level</li>
+<li>X-axis mode (time or distance)</li>
+<li>Active tab (Charts, Summary, Mean/Max, or Map)</li>
+<li>Which mode was open (Device Comparison or Event Comparison)</li>
+</ul>
+<p><strong>What does not travel in the link:</strong></p>
+<ul>
+<li>Athlete profile values (weight, FTP, CP, HR thresholds) — these are personal data and stay local</li>
+<li>Device labels — use the Sync feature (section 7) to share those separately</li>
+</ul>
+<p><strong>To share your session view:</strong></p>
+<ol>
+<li>Load your files and configure the view (select devices, set smoothing, switch to the tab you want the recipient to land on).</li>
+<li>Click <strong>Copy session link</strong> in the sidebar footer (a small link icon below the Sync panel). The button briefly changes to <strong>✓ Copied!</strong> to confirm the link is on your clipboard.</li>
+<li>Paste and send the URL to the recipient.</li>
+</ol>
+<p><strong>When the recipient opens the link:</strong></p>
+<p>The link encodes the full view configuration as a compact <code>?v=</code> parameter in the URL. When the recipient opens the link, Analyser reads the parameter and stores the configuration. As soon as they load their own files, the stored configuration is applied automatically — active devices are matched to their files by sensor identity (ANT+ number, serial, or manufacturer/product), and all other settings (smoothing, tab, mode) are applied immediately.</p>
+<p>If a device key from the link doesn&#39;t match any loaded sensor, it is silently skipped — the rest of the configuration still applies. If the <code>?v=</code> parameter is missing, malformed, or from a future version of Analyser, it is ignored and the app loads with its defaults.</p>
+<blockquote>
+<p><strong>Note:</strong> The session link encodes view state only — it does not include the activity data itself. The recipient must load their own copy of the <code>.fit</code> files to see any charts.</p>
 </blockquote>
 <hr>
 <h2 id="8-athlete-profile">8. Athlete Profile</h2>
