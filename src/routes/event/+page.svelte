@@ -127,23 +127,28 @@
 		}
 	});
 
-	// Apply decoded session-link state once activities are loaded.
-	// Runs after the auto-select effect (declared below it) so it overrides defaults.
+	// Apply decoded session-link state. File-independent state (smoothing, xAxisMode, tab)
+	// applies immediately; channel selection waits until activities are loaded.
+	// Declared after the auto-select effect so channel overrides run after defaults are set.
 	$effect(() => {
 		const linkState = $sessionLinkState;
 		if (!linkState) return;
-		if ($activities.length === 0) return; // wait for files to load
 
-		if (linkState.c) {
-			const validChannels = linkState.c.filter(ch => availableChannels.includes(ch as typeof availableChannels[number]));
-			if (validChannels.length > 0) activeChannels.set(validChannels as typeof availableChannels);
-		}
+		// Apply immediately — no files needed
 		if (linkState.s != null) smoothing.set(linkState.s);
 		if (linkState.x) xAxisMode.set(linkState.x);
 		if (linkState.t) {
 			const validTabs = TABS.map(tab => tab.id) as string[];
 			if (validTabs.includes(linkState.t)) setTab(linkState.t as TabId);
 		}
+
+		// Channel selection requires loaded activities — defer until files are loaded
+		if (linkState.c) {
+			if ($activities.length === 0) return; // re-runs when files load
+			const validChannels = linkState.c.filter(ch => availableChannels.includes(ch as typeof availableChannels[number]));
+			if (validChannels.length > 0) activeChannels.set(validChannels as typeof availableChannels);
+		}
+
 		sessionLinkState.set(null); // consume — prevent re-application on navigation
 	});
 

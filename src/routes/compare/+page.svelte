@@ -129,14 +129,24 @@
 		activeDeviceIndices.set(new Set(selectableKeys));
 	});
 
-	// Apply decoded session-link state once crossFileStreams are populated.
-	// Runs after the auto-select effect (declared below it) so it overrides defaults.
+	// Apply decoded session-link state. File-independent state (smoothing, xAxisMode, tab)
+	// applies immediately; device selection waits until crossFileStreams are populated.
+	// Declared after the auto-select effect so device overrides run after defaults are set.
 	$effect(() => {
 		const linkState = $sessionLinkState;
 		if (!linkState) return;
-		if (crossFileStreams.length === 0) return; // wait for files to load
 
+		// Apply immediately — no files needed
+		if (linkState.s != null) smoothing.set(linkState.s);
+		if (linkState.x) xAxisMode.set(linkState.x);
+		if (linkState.t) {
+			const validTabs = TABS.map(tab => tab.id) as string[];
+			if (validTabs.includes(linkState.t)) setTab(linkState.t as TabId);
+		}
+
+		// Device selection requires crossFileStreams — defer until files are loaded
 		if (linkState.d) {
+			if (crossFileStreams.length === 0) return; // re-runs when files load
 			const matchedKeys = new Set<string>();
 			for (const cfs of crossFileStreams) {
 				const sk = stableDeviceKey(cfs.stream.device);
@@ -144,12 +154,7 @@
 			}
 			if (matchedKeys.size > 0) activeDeviceIndices.set(matchedKeys);
 		}
-		if (linkState.s != null) smoothing.set(linkState.s);
-		if (linkState.x) xAxisMode.set(linkState.x);
-		if (linkState.t) {
-			const validTabs = TABS.map(tab => tab.id) as string[];
-			if (validTabs.includes(linkState.t)) setTab(linkState.t as TabId);
-		}
+
 		sessionLinkState.set(null); // consume — prevent re-application on navigation
 	});
 
