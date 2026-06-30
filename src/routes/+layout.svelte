@@ -83,7 +83,11 @@
 		// adoptSyncIdentity stores the UUID and pulls labels from the remote store.
 		const syncParam = page.url.searchParams.get('sync');
 		if (syncParam) {
-			await adoptSyncIdentity(syncParam);
+			try {
+				await adoptSyncIdentity(syncParam);
+			} catch (e) {
+				console.warn('[layout] adoptSyncIdentity failed:', e);
+			}
 			// Clean the param from the URL without triggering a navigation
 			const cleanUrl = new URL(page.url);
 			cleanUrl.searchParams.delete('sync');
